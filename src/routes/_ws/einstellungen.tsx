@@ -16,6 +16,7 @@ import { signOut } from "./route";
 import { LanguageSelect } from "@/components/app/LanguageSelect";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { OcrSettingsPanel } from "@/components/app/OcrSettingsPanel";
+import { AppearancePanel } from "@/components/app/AppearanceControls";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
   head: () => ({
@@ -47,6 +48,7 @@ function SettingsPage() {
           <LanguageSelect />
           <p className="mt-2 text-xs text-muted-foreground">{tr("Die Sprache wird in diesem Browser gespeichert.")}</p>
         </Panel>
+        <AppearancePanel />
         <Panel title={tr("Datenspeicher")}>
           <div className="flex gap-3 rounded-lg border border-primary bg-accent/40 p-3">
             <Database className="h-5 w-5 text-primary" />

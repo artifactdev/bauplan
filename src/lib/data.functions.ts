@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cleanRow, TABLE_NAMES, type TableName } from "./schema";
 import { buildSeed } from "./seed";
 import { ocrDraftSchema, type OcrSettingsView, type OcrErrorCode } from "./ocr";
+import { appearanceSchema } from "./appearance";
 
 /**
  * Requires a signed-in member (admin or member; pending accounts see nothing)
@@ -23,6 +24,18 @@ export const adminDataContext = createMiddleware({ type: "function" })
   .server(async ({ next, context }) => {
     if (context.user.role !== "admin") throw new Error("Unauthorized");
     return next();
+  });
+
+export const getAppearance = createServerFn()
+  .middleware([dataContext])
+  .handler(({ context }) => context.repo.readAppearance(context.user.id));
+
+export const saveAppearance = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => appearanceSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    await context.repo.writeAppearance(context.user.id, data);
+    return data;
   });
 
 type OcrAdminResult<T> = { data: T; error: null } | { data: null; error: OcrErrorCode };

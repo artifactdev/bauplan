@@ -40,6 +40,10 @@ The single source of truth for tables and columns. The SQLite schema is generate
 
 Authentication and app settings use the local `app_users`, `app_sessions`, and `app_settings` tables.
 
+Private appearance preferences live in `app_user_appearance`, keyed by authenticated user ID, with its DDL defined in `src/lib/schema.ts`. This table is deliberately outside the shared Workspace registry. Approved-user server functions in `data.functions.ts` read/write validated palette and mode values through the repository; account deletion removes the associated preferences. Existing accounts without a row use Current + System.
+
+The root appearance provider applies semantic CSS tokens using `data-theme` and `.dark` on the document element, including dialogs and notifications. A small pre-paint script applies the validated `bauplan.appearance` browser cache to prevent a light-mode flash. This cache intentionally survives sign-out for login/setup; an approved account's preferences load before workspace content and override it. User-scoped React Query state refreshes on window focus and visibility changes, with in-flight saves protected against stale refreshes. Other devices do not receive live pushes: last successful write wins. System mode tracks the local OS without writing the resolved light/dark value back to the account.
+
 OCR configuration is private `app_settings` data, never included in the Workspace. Admin-only server functions in `data.functions.ts` access it through repository methods. Optional API keys use AES-256-GCM and a separate `OCR_SETTINGS_KEY`. Server-only adapters under `src/server/ocr/` normalize self-hosted Tesseract and Docling Serve responses before the existing rule-based extractor runs. Saved configuration overrides `OCR_URL`; explicit disable is preserved. Local Docling models are permitted, but cloud/remote AI services are not. See [OCR](ocr.md) for destination-policy trade-offs and limits.
 
 `cleanRow()` only lets known columns through and normalizes numbers/booleans.

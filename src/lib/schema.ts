@@ -1,5 +1,11 @@
 // Shared data model; SQLite creates and updates these tables at startup.
 
+// Private account metadata must not be included in TABLES or Workspace.
+export const USER_APPEARANCE_TABLE = "app_user_appearance";
+export const USER_APPEARANCE_DDL = `CREATE TABLE IF NOT EXISTS ${USER_APPEARANCE_TABLE} (
+  user_id TEXT PRIMARY KEY, palette TEXT NOT NULL, mode TEXT NOT NULL
+)`;
+
 export const TABLES = {
   projects: ["name", "address", "total_budget", "start_date", "end_date"],
   trades: ["name", "budget", "color"],

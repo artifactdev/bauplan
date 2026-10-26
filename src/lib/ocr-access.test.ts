@@ -10,6 +10,8 @@ const harness = vi.hoisted(() => {
   const state = {
     user: null as { id: string; role: string } | null,
     repo: {
+      readAppearance: vi.fn(async () => ({ palette: "current", mode: "system" })),
+      writeAppearance: vi.fn(async () => {}),
       readOcrSettings: vi.fn(async (): Promise<string | null> => null),
       writeOcrSettings: vi.fn(async () => {}),
       getAll: vi.fn(async () => ({
@@ -96,6 +98,8 @@ import {
   saveOcrSettings,
   testOcrSettings,
   resetOcrSettings,
+  getAppearance,
+  saveAppearance,
 } from "./data.functions";
 import { analyzeDocument } from "./ocr.functions";
 import { processDocument } from "@/server/ocr";
@@ -114,6 +118,35 @@ beforeEach(() => {
   vi.clearAllMocks();
   harness.state.user = null;
   harness.state.repo.readOcrSettings.mockResolvedValue(null);
+});
+
+describe("Private account appearance server functions", () => {
+  it.each([null, "pending"])("rejects appearance reads and writes for %s", async (role) => {
+    harness.state.user = role ? { id: "blocked", role } : null;
+    await expect(getAppearance()).rejects.toThrow("Unauthorized");
+    await expect(saveAppearance({ data: { palette: "blue", mode: "dark" } })).rejects.toThrow("Unauthorized");
+    expect(harness.state.repo.readAppearance).not.toHaveBeenCalled();
+    expect(harness.state.repo.writeAppearance).not.toHaveBeenCalled();
+  });
+  it.each(["admin", "member"])("uses only the authenticated %s identity", async (role) => {
+    harness.state.user = { id: "self", role };
+    expect(await getAppearance()).toEqual({ palette: "current", mode: "system" });
+    expect(harness.state.repo.readAppearance).toHaveBeenCalledWith("self");
+    await saveAppearance({ data: { palette: "violet", mode: "light" } });
+    expect(harness.state.repo.writeAppearance).toHaveBeenCalledWith("self", { palette: "violet", mode: "light" });
+  });
+  it("rejects unknown values and identity overrides before writing", async () => {
+    harness.state.user = { id: "self", role: "member" };
+    for (const data of [
+      { palette: "invalid", mode: "dark" },
+      { palette: "blue", mode: "invalid" },
+      { palette: "blue", mode: "dark", userId: "other" },
+    ]) {
+      // Exercise runtime input validation, including untyped HTTP callers.
+      await expect(saveAppearance({ data: data as { palette: "blue"; mode: "dark" } })).rejects.toThrow();
+    }
+    expect(harness.state.repo.writeAppearance).not.toHaveBeenCalled();
+  });
 });
 
 describe("OCR server-function authorization and orchestration", () => {

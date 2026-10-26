@@ -31,7 +31,7 @@ export function Panel({ title, action, children, className }: { title?: string; 
 const tones = {
   neutral: "bg-muted text-muted-foreground",
   success: "bg-success/15 text-success",
-  warning: "bg-warning/25 text-warning-foreground",
+  warning: "bg-warning/25 text-warning-foreground dark:text-warning",
   danger: "bg-destructive/12 text-destructive",
   info: "bg-info/12 text-info",
   primary: "bg-accent text-accent-foreground",

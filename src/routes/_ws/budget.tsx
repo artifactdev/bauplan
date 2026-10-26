@@ -71,10 +71,13 @@ function BudgetPage() {
               <ResponsiveContainer>
                 <BarChart data={chart} margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                  <Tooltip formatter={(v: number) => eur(v)} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} interval={0} />
+                  <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                  <Tooltip formatter={(v: number) => eur(v)}
+                    contentStyle={{ backgroundColor: "var(--popover)", borderColor: "var(--border)", color: "var(--popover-foreground)" }}
+                    itemStyle={{ color: "var(--popover-foreground)" }}
+                    cursor={{ fill: "var(--muted)" }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} formatter={(value) => <span className="text-foreground">{value}</span>} />
                   <RBar dataKey="Budget" fill="var(--chart-5)" radius={[4, 4, 0, 0]} />
                   <RBar dataKey="Voraussichtlich" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
                   <RBar dataKey="Bezahlt" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />

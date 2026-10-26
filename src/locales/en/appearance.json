@@ -1,0 +1,19 @@
+{
+  "title": "Appearance",
+  "palette": "Color theme",
+  "mode": "Display mode",
+  "current": "Current",
+  "blue": "Blue",
+  "green": "Green",
+  "violet": "Violet",
+  "light": "Light",
+  "dark": "Dark",
+  "system": "System",
+  "quickMode": "Display mode: {{mode}}",
+  "accountHint": "Saved automatically to your account. Other devices update on sign-in, reload or window focus. System follows each device's settings. This browser remembers the last appearance, including on the sign-in screen.",
+  "saving": "Saving appearance…",
+  "loading": "Loading your appearance…",
+  "loadError": "Your appearance could not be loaded. Please try again.",
+  "saveError": "Appearance could not be saved. Your previous settings have been restored.",
+  "retry": "Try again"
+}

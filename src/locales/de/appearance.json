@@ -1,0 +1,19 @@
+{
+  "title": "Darstellung",
+  "palette": "Farbschema",
+  "mode": "Anzeigemodus",
+  "current": "Original",
+  "blue": "Blau",
+  "green": "Grün",
+  "violet": "Violett",
+  "light": "Hell",
+  "dark": "Dunkel",
+  "system": "System",
+  "quickMode": "Anzeigemodus: {{mode}}",
+  "accountHint": "Wird automatisch in deinem Konto gespeichert. Andere Geräte aktualisieren sich bei Anmeldung, Neuladen oder Fensterfokus. System folgt den Einstellungen des jeweiligen Geräts. Dieser Browser merkt sich die letzte Darstellung, auch auf der Anmeldeseite.",
+  "saving": "Darstellung wird gespeichert…",
+  "loading": "Deine Darstellung wird geladen…",
+  "loadError": "Deine Darstellung konnte nicht geladen werden. Bitte versuche es erneut.",
+  "saveError": "Die Darstellung konnte nicht gespeichert werden. Deine vorherigen Einstellungen wurden wiederhergestellt.",
+  "retry": "Erneut versuchen"
+}

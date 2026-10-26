@@ -68,5 +68,6 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 ## Settings
 - Account and sign-out; storage mode display.
 - **Language:** German or English, chosen during setup or in Settings; saved per browser.
+- **Appearance:** Current, Blue, Green, or Violet palette, independently combined with Light, Dark, or System mode (default: Current + System). Settings has palette previews and mode controls; the desktop/mobile header has a quick mode menu. Changes save automatically per approved user account and synchronize on sign-in, reload, and window focus. System follows each device's own OS preference. The browser remembers the last appearance for the sign-in/setup screens; the signed-in account always takes precedence. Failed saves restore the previous choice and display an error.
 - Admins only: user management, calendar subscription, OIDC sign-in, and shared OCR settings.
 - **OCR:** select self-hosted Tesseract or Docling Serve, service URL, optional encrypted API key, recognition language, and a synthetic processing test. See [OCR configuration and destination policy](ocr.md).

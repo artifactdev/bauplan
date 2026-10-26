@@ -1,6 +1,6 @@
 // Self-hosted (SQLite) login: users, sessions, settings, OIDC. Server-only;
 // import via dynamic import() inside handlers.
-import { getSqliteDb } from "./repo";
+import { getSqliteDb, sqliteRepo } from "./repo";
 import { decideOidcLogin, hashPassword, randomToken, sha256, verifyPassword, type Role } from "./auth-core";
 
 export const SESSION_COOKIE = "bp_session";
@@ -39,6 +39,7 @@ export async function updateUser(id: string, patch: { role?: Role; password?: st
 
 export async function deleteUser(id: string) {
   const db = await getSqliteDb();
+  await sqliteRepo().deleteAppearance(id);
   db.prepare("DELETE FROM app_sessions WHERE user_id = ?").run(id);
   db.prepare("DELETE FROM app_users WHERE id = ?").run(id);
 }

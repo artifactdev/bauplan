@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { AccountAppearance } from "@/components/app/AppearanceProvider";
+import { AppearanceModeMenu } from "@/components/app/AppearanceControls";
 
 export const Route = createFileRoute("/_ws")({
   ssr: false,
@@ -42,7 +44,7 @@ export async function signOut() {
 function Layout() {
   const { auth } = Route.useRouteContext();
   if (auth.user?.role === "pending") return <Pending email={auth.user.email} />;
-  return <Shell />;
+  return <AccountAppearance key={auth.user!.id} userId={auth.user!.id}><Shell /></AccountAppearance>;
 }
 
 function Pending({ email }: { email: string }) {
@@ -93,11 +95,15 @@ function Shell() {
         <div className="flex items-center gap-2 font-display font-semibold">
           <Hammer className="h-5 w-5 text-primary" /> {tr("Bauplan")}
         </div>
-        <Link to="/einstellungen" aria-label={tr("Einstellungen")}><Settings className="h-5 w-5 text-muted-foreground" /></Link>
+        <div className="flex items-center gap-2">
+          <AppearanceModeMenu />
+          <Link to="/einstellungen" aria-label={tr("Einstellungen")}><Settings className="h-5 w-5 text-muted-foreground" /></Link>
+        </div>
       </header>
 
       <main className="min-w-0 flex-1 px-4 pb-24 pt-5 md:px-8 md:pb-10 md:pt-8">
         <div className="mx-auto max-w-6xl">
+          <div className="mb-2 hidden justify-end md:flex"><AppearanceModeMenu /></div>
           {isLoading ? <p className="text-sm text-muted-foreground">{tr("Lädt…")}</p> : project ? <Outlet /> : <ProjectSetup />}
         </div>
       </main>

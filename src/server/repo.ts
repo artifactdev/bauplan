@@ -1,6 +1,7 @@
 // Server-only storage adapters. Import this module only via dynamic import()
 // inside server function handlers.
-import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, type TableName, type Workspace } from "@/lib/schema";
+import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, USER_APPEARANCE_DDL, USER_APPEARANCE_TABLE, type TableName, type Workspace } from "@/lib/schema";
+import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 
 export interface Repo {
   getAll(): Promise<Workspace>;
@@ -13,6 +14,9 @@ export interface Repo {
   readFile(path: string): Promise<Uint8Array | null>;
   readOcrSettings(): Promise<string | null>;
   writeOcrSettings(value: string | null): Promise<void>;
+  readAppearance(userId: string): Promise<Appearance>;
+  writeAppearance(userId: string, value: Appearance): Promise<void>;
+  deleteAppearance(userId: string): Promise<void>;
 }
 
 // Uses Node's built-in node:sqlite (Node >= 22.5). Computed dynamic imports
@@ -58,6 +62,7 @@ async function openDb(): Promise<SqliteDb> {
   db.exec(`CREATE TABLE IF NOT EXISTS app_users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, password_hash TEXT, role TEXT NOT NULL, oidc_sub TEXT UNIQUE, created_at TEXT NOT NULL)`);
   db.exec(`CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL)`);
   db.exec(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)`);
+  db.exec(USER_APPEARANCE_DDL);
   return db;
 }
 
@@ -69,6 +74,18 @@ export function getSqliteDb(): Promise<SqliteDb> {
 export function sqliteRepo(): Repo {
   const db = () => (dbPromise ??= openDb());
   return {
+    async readAppearance(userId) {
+      const row = (await db()).prepare(`SELECT palette, mode FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).get(userId);
+      return row ? appearanceSchema.parse(row) : { ...DEFAULT_APPEARANCE };
+    },
+    async writeAppearance(userId, value) {
+      const valid = appearanceSchema.parse(value);
+      (await db()).prepare(`INSERT INTO ${USER_APPEARANCE_TABLE} (user_id, palette, mode) VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET palette = excluded.palette, mode = excluded.mode`).run(userId, valid.palette, valid.mode);
+    },
+    async deleteAppearance(userId) {
+      (await db()).prepare(`DELETE FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).run(userId);
+    },
     async getAll() {
       const d = await db();
       const out = {} as Record<string, unknown[]>;

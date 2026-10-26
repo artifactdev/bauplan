@@ -16,6 +16,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { AppearanceProvider, useAppearance } from "@/components/app/AppearanceProvider";
+import { appearanceBootstrap } from "@/lib/appearance";
 
 function NotFoundComponent() {
   return (
@@ -99,8 +101,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="de">
+    <html lang="de" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
         <HeadContent />
       </head>
       <body>
@@ -119,8 +122,15 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet key={i18nInst.language} />
-      <Toaster richColors position="top-center" />
+      <AppearanceProvider>
+        <Outlet key={i18nInst.language} />
+        <AppearanceToaster />
+      </AppearanceProvider>
     </QueryClientProvider>
   );
+}
+
+function AppearanceToaster() {
+  const { resolvedMode } = useAppearance();
+  return <Toaster theme={resolvedMode} richColors position="top-center" />;
 }
