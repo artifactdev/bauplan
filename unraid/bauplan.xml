@@ -13,9 +13,7 @@
   <Category>Productivity:</Category>
   <WebUI>http://[IP]:[PORT:3000]</WebUI>
   <Config Name="Web UI Port (host)" Target="3000" Default="3000" Mode="tcp" Description="Host port for the Bauplan web interface. The container listens internally on port 3000." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
-  <Config Name="Database appdata" Target="/data" Default="/mnt/user/appdata/bauplan" Mode="rw" Description="Persistent directory for the SQLite database." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/bauplan</Config>
+  <Config Name="Database and OCR models" Target="/data" Default="/mnt/user/appdata/bauplan" Mode="rw" Description="Persistent directory for the SQLite database and locally downloaded OCR language models." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/bauplan</Config>
   <Config Name="Documents" Target="/uploads" Default="/mnt/user/appdata/bauplan-documents" Mode="rw" Description="Separate persistent directory for uploaded documents. Can be on another Unraid share or disk." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/bauplan-documents</Config>
   <Config Name="Uploads directory" Target="UPLOADS_DIR" Default="/uploads" Mode="" Description="Container path for uploaded documents." Type="Variable" Display="always" Required="true" Mask="false">/uploads</Config>
-  <Config Name="OCR_URL" Target="OCR_URL" Default="" Mode="" Description="Legacy Tesseract default, e.g. http://bauplan-ocr:8000. Admin OCR settings override this value; leave blank if configuring OCR in the app." Type="Variable" Display="always" Required="false" Mask="false"></Config>
-  <Config Name="OCR settings encryption key" Target="OCR_SETTINGS_KEY" Default="" Mode="" Description="Optional 64-character hexadecimal encryption key, required to store OCR API keys. Generate with openssl rand -hex 32. Preserve separately from database backups." Type="Variable" Display="always" Required="false" Mask="true"></Config>
 </Container>

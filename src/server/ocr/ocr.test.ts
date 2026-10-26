@@ -1,330 +1,290 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment node
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
-import {
-  OCR_MAX_BYTES,
-  OCR_MAX_RESPONSE_BYTES,
-  OCR_ERROR_CODES,
-  ocrBaseUrl,
-  ocrDraftSchema,
-} from "@/lib/ocr";
-import {
-  decryptSecret,
-  encryptSecret,
-  prepareDraft,
-  resolveSettings,
-  settingsView,
-  type OcrSettingsStore,
-  type StoredOcrSettings,
-} from "./config";
-import { normalizeDocling, recognize } from "./providers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OCR_ERROR_CODES, OCR_MAX_BYTES, ocrDraftSchema } from "@/lib/ocr";
+import { prepareDraft, resolveSettings, settingsView, type OcrSettingsStore } from "./config";
+import { downloadModel, getModelStatuses, hasModels, deleteModel, modelPath } from "./models";
 import { processDocument, validateDocument } from "./index";
 import { connectionSample } from "./sample";
 import de from "@/locales/de/ocr.json";
 import en from "@/locales/en/ocr.json";
 
-const settings = {
-  enabled: true,
-  provider: "tesseract" as const,
-  baseUrl: "http://127.0.0.1:8000/proxy",
-  language: "de+en" as const,
-};
-const config: StoredOcrSettings = { version: 1, settings, secret: null };
+const tesseract = vi.hoisted(() => ({
+  createWorker: vi.fn(),
+  recognize: vi.fn(),
+  setParameters: vi.fn(),
+  terminate: vi.fn(),
+}));
+vi.mock("tesseract.js", () => ({
+  createWorker: tesseract.createWorker,
+  OEM: { LSTM_ONLY: 1 },
+  PSM: { AUTO: "3" },
+}));
+
+const enabledSettings = { enabled: true, language: "de+en" as const };
+const config = { version: 2 as const, settings: enabledSettings };
 const sample = { bytes: connectionSample(), mime: "image/png", name: "test.png" };
-const connection = () => ({ settings, apiKey: "private-key", signal: AbortSignal.timeout(1000) });
+let root = "";
+
 function store(value: string | null = null): OcrSettingsStore {
   return {
     readOcrSettings: vi.fn(async () => value),
-    writeOcrSettings: vi.fn(async (next) => {
-      value = next;
-    }),
+    writeOcrSettings: vi.fn(async () => {}),
   };
 }
-const wire = () => ({
-  status: "success",
-  errors: [],
-  document: {
-    text_content: "BAUPLAN 12345\nGesamtbetrag 12,50",
-    json_content: {
-      pages: { "1": { page_no: 1 } },
-      texts: [{ text: "BAUPLAN 12345", prov: [{ page_no: 1 }] }],
-      tables: [
-        {
-          prov: [{ page_no: 1 }],
-          data: {
-            num_rows: 1,
-            num_cols: 1,
-            table_cells: [
-              {
-                text: "12,50",
-                start_row_offset_idx: 0,
-                start_col_offset_idx: 0,
-                row_span: 1,
-                col_span: 1,
-              },
-            ],
-          },
-        },
-      ],
-    },
-  },
-});
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllEnvs();
+
+async function installModels() {
+  const directory = join(root, "ocr-models");
+  await mkdir(directory, { recursive: true });
+  await Promise.all([
+    writeFile(join(directory, "deu.traineddata.gz"), gzipSync("deu test model")),
+    writeFile(join(directory, "eng.traineddata.gz"), gzipSync("eng test model")),
+  ]);
+}
+
+async function textPdf(): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  pdf.addPage().drawText("BAUPLAN 12345 invoice total 123.45 euro", { x: 40, y: 700 });
+  return pdf.save();
+}
+
+async function scanPdf(): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([600, 130]);
+  const image = await pdf.embedPng(connectionSample());
+  page.drawImage(image, { x: 0, y: 0, width: 600, height: 130 });
+  return pdf.save();
+}
+
+async function mixedPdf(): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  pdf.addPage().drawText("Readable embedded invoice text with a sufficient number of characters", {
+    x: 40,
+    y: 700,
+  });
+  const page = pdf.addPage([600, 130]);
+  const image = await pdf.embedPng(connectionSample());
+  page.drawImage(image, { x: 0, y: 0, width: 600, height: 130 });
+  return pdf.save();
+}
+
+beforeEach(async () => {
+  vi.clearAllMocks();
+  root = await mkdtemp(join(tmpdir(), "bauplan-ocr-test-"));
+  vi.stubEnv("DATA_DIR", root);
+  vi.stubEnv("OCR_URL", "http://legacy-service.invalid");
+  tesseract.createWorker.mockResolvedValue({
+    recognize: tesseract.recognize,
+    setParameters: tesseract.setParameters,
+    terminate: tesseract.terminate,
+  });
+  tesseract.recognize.mockResolvedValue({ data: { text: "BAUPLAN 12345" } });
+  tesseract.setParameters.mockResolvedValue({});
+  tesseract.terminate.mockResolvedValue({});
 });
 
-describe("OCR configuration and credentials", () => {
-  it.each([
-    "http://localhost:8000",
-    "http://127.0.0.1",
-    "http://[::1]",
-    "http://169.254.169.254",
-    "http://192.168.1.2",
-    "http://ocr:8000",
-    "https://example.org",
-    "http://example.org",
-  ])("allows the explicitly requested destination %s", (url) => {
-    expect(ocrBaseUrl.safeParse(url).success).toBe(true);
-  });
-  it.each([
-    "file:///tmp/file",
-    "ftp://host",
-    "https://a:b@host",
-    "https://host/?key=secret",
-    "https://host/#fragment",
-    "relative",
-  ])("rejects invalid base URL %s", (url) => {
-    expect(ocrBaseUrl.safeParse(url).success).toBe(false);
-  });
-  it("normalizes URL and preserves proxy base paths", () => {
-    expect(ocrBaseUrl.parse(" HTTPS://EXAMPLE.ORG/proxy/// ")).toBe("https://example.org/proxy");
-  });
-  it("uses environment defaults only without saved configuration", async () => {
-    vi.stubEnv("OCR_URL", "http://ocr:8000/");
-    const repo = store();
-    expect(await settingsView(repo)).toMatchObject({
-      enabled: true,
-      baseUrl: "http://ocr:8000",
-      source: "environment",
-      hasApiKey: false,
+afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  if (root) await rm(root, { recursive: true, force: true });
+});
+
+describe("local OCR settings and model lifecycle", () => {
+  it("ignores legacy external destinations and safely migrates settings without credentials", async () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      settings: {
+        enabled: true,
+        provider: "docling",
+        baseUrl: "https://old-provider.example",
+        language: "de",
+      },
+      secret: { ciphertext: "never-used" },
     });
-    await repo.writeOcrSettings(
-      JSON.stringify({ ...config, settings: { ...settings, enabled: false } }),
-    );
-    expect(await settingsView(repo)).toMatchObject({ enabled: false, source: "saved" });
-    await repo.writeOcrSettings(null);
-    expect((await settingsView(repo)).source).toBe("environment");
-    vi.stubEnv("OCR_URL", "");
-    expect(await settingsView(repo)).toMatchObject({ enabled: false, source: "unconfigured" });
+    const view = await settingsView(store(legacy));
+    expect(view).toEqual({
+      enabled: true,
+      language: "de",
+      source: "saved",
+      legacySettings: true,
+    });
+    expect(await settingsView(store())).toEqual({
+      enabled: false,
+      language: "de+en",
+      source: "unconfigured",
+      legacySettings: false,
+    });
+    expect((await resolveSettings(store(legacy))).settings).toEqual({
+      enabled: true,
+      language: "de",
+    });
+    expect(await prepareDraft({ settings: enabledSettings })).toEqual(config);
+    expect(
+      ocrDraftSchema.safeParse({
+        settings: { ...enabledSettings, baseUrl: "https://not-allowed.example" },
+      }).success,
+    ).toBe(false);
   });
-  it("does not silently fall back from invalid saved configuration", async () => {
-    vi.stubEnv("OCR_URL", "http://ocr:8000");
-    await expect(resolveSettings(store("{}"))).rejects.toMatchObject({ code: "invalidSettings" });
-    await expect(resolveSettings(store("invalid-json"))).rejects.toMatchObject({
+
+  it("fails explicitly for corrupt persisted settings rather than falling back to OCR_URL", async () => {
+    await expect(resolveSettings(store("{broken"))).rejects.toMatchObject({
+      code: "invalidSettings",
+    });
+    await expect(resolveSettings(store("{}"))).rejects.toMatchObject({
       code: "invalidSettings",
     });
   });
-  it("encrypts with random authenticated nonces and never exposes ciphertext or keys in the admin DTO", async () => {
-    vi.stubEnv("OCR_SETTINGS_KEY", "01".repeat(32));
-    const first = encryptSecret("secret-api-key");
-    const second = encryptSecret("secret-api-key");
-    expect(first).not.toEqual(second);
-    expect(decryptSecret(first)).toBe("secret-api-key");
-    expect(JSON.stringify(first)).not.toContain("secret-api-key");
-    const view = await settingsView(store(JSON.stringify({ ...config, secret: first })));
-    expect(view.hasApiKey).toBe(true);
-    expect(Object.keys(view).sort()).toEqual([
-      "baseUrl",
-      "enabled",
-      "hasApiKey",
-      "language",
-      "provider",
-      "source",
-    ]);
-    expect(() => decryptSecret({ ...first, tag: Buffer.alloc(16).toString("base64") })).toThrow(
-      "secretKey",
+
+  it("downloads only a fixed language package, validates gzip data and persists atomically", async () => {
+    const model = gzipSync("test traineddata");
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(model, { headers: { "content-type": "application/gzip" } }));
+    await downloadModel("de");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://cdn.jsdelivr.net/npm/@tesseract.js-data/deu@1.0.0/4.0.0_best_int/deu.traineddata.gz",
+      expect.objectContaining({ redirect: "error" }),
     );
-    vi.stubEnv("OCR_SETTINGS_KEY", "02".repeat(32));
-    expect(() => decryptSecret(first)).toThrow("secretKey");
-    vi.stubEnv("OCR_SETTINGS_KEY", "");
-    expect(() => encryptSecret("x")).toThrow("secretKey");
-    expect(() => decryptSecret(first)).toThrow("secretKey");
+    expect(await getModelStatuses()).toEqual([
+      { language: "de", installed: true, size: model.byteLength },
+      { language: "en", installed: false, size: null },
+    ]);
+    expect(await hasModels("de")).toBe(true);
+    expect(await hasModels("de+en")).toBe(false);
+    expect(await readFile(modelPath("de"))).toEqual(model);
   });
-  it("supports explicit keep/replace/delete and prevents cross-destination credential reuse", async () => {
-    vi.stubEnv("OCR_SETTINGS_KEY", "03".repeat(32));
-    const repo = store(JSON.stringify({ ...config, secret: encryptSecret("old-secret") }));
-    expect((await prepareDraft(repo, { settings, secretAction: "keep" })).secret).not.toBeNull();
-    await expect(
-      prepareDraft(repo, {
-        settings: { ...settings, baseUrl: "http://other" },
-        secretAction: "keep",
-      }),
-    ).rejects.toMatchObject({ code: "secretDestination" });
-    await expect(
-      prepareDraft(repo, { settings: { ...settings, provider: "docling" }, secretAction: "keep" }),
-    ).rejects.toMatchObject({ code: "secretDestination" });
-    expect((await prepareDraft(repo, { settings, secretAction: "delete" })).secret).toBeNull();
-    const next = await prepareDraft(repo, {
-      settings,
-      secretAction: "replace",
-      apiKey: "new-secret",
+
+  it("rejects invalid or oversized model responses without installing them", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("not a model"));
+    await expect(downloadModel("en")).rejects.toMatchObject({ code: "modelDownloadFailed" });
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(new Uint8Array(10 * 1024 * 1024 + 1)),
+    );
+    await expect(downloadModel("en")).rejects.toMatchObject({ code: "modelDownloadFailed" });
+    expect((await getModelStatuses())[1]?.installed).toBe(false);
+  });
+
+  it("prevents removing a model required by active settings and permits removing an unused one", async () => {
+    await installModels();
+    await expect(deleteModel("de", store(JSON.stringify(config)), false)).rejects.toMatchObject({
+      code: "modelInUse",
     });
-    expect(decryptSecret(next.secret!)).toBe("new-secret");
-    await expect(
-      prepareDraft(repo, { settings, secretAction: "replace", apiKey: "" }),
-    ).rejects.toMatchObject({ code: "secretMissing" });
-    expect(repo.writeOcrSettings).not.toHaveBeenCalled();
-    vi.stubEnv("OCR_SETTINGS_KEY", "");
-    expect((await prepareDraft(repo, { settings, secretAction: "delete" })).secret).toBeNull();
+    await deleteModel(
+      "de",
+      store(JSON.stringify({ ...config, settings: { enabled: false, language: "de+en" } })),
+      false,
+    );
+    expect((await getModelStatuses())[0]?.installed).toBe(false);
+    await expect(deleteModel("en", store(), true)).rejects.toMatchObject({ code: "busy" });
   });
 });
 
-describe("OCR limits and provider responses", () => {
-  it("checks exact byte boundaries and content signatures", async () => {
-    const bytes = new Uint8Array(OCR_MAX_BYTES);
-    bytes.set([66, 77]);
-    await expect(validateDocument({ ...sample, mime: "image/bmp", bytes })).resolves.toBeNull();
+describe("local image and PDF recognition", () => {
+  it("validates image signatures, upload limits and the complete PDF page count", async () => {
+    await expect(validateDocument(sample)).resolves.toBeNull();
     await expect(
-      validateDocument({ ...sample, bytes: new Uint8Array(OCR_MAX_BYTES + 1) }),
-    ).rejects.toMatchObject({ code: "tooLarge" });
-    await expect(validateDocument({ ...sample, mime: "image/jpeg" })).rejects.toMatchObject({
-      code: "unsupported",
-    });
+      validateDocument({ ...sample, mime: "image/jpeg", bytes: new Uint8Array([255, 216, 255]) }),
+    ).resolves.toBeNull();
     await expect(validateDocument({ ...sample, mime: "image/svg+xml" })).rejects.toMatchObject({
       code: "unsupported",
     });
-  });
-  it("accepts 10 PDF pages and rejects 11 before any network call", async () => {
+    await expect(
+      validateDocument({ ...sample, bytes: new Uint8Array(OCR_MAX_BYTES + 1) }),
+    ).rejects.toMatchObject({ code: "tooLarge" });
     const pdf = await PDFDocument.create();
     for (let i = 0; i < 10; i++) pdf.addPage();
-    const input = { mime: "application/pdf", name: "test.pdf", bytes: await pdf.save() };
-    await expect(validateDocument(input)).resolves.toBe(10);
+    const ten = { bytes: await pdf.save(), mime: "application/pdf" };
+    await expect(validateDocument(ten)).resolves.toBe(10);
     pdf.addPage();
-    const fetch = vi.spyOn(globalThis, "fetch");
-    await expect(
-      processDocument(config, { ...input, bytes: await pdf.save() }),
-    ).rejects.toMatchObject({ code: "tooManyPages" });
-    expect(fetch).not.toHaveBeenCalled();
-    await expect(
-      validateDocument({ ...input, bytes: Buffer.from("%PDF-invalid") }),
-    ).rejects.toMatchObject({ code: "invalidPdf" });
-  });
-  it("normalizes real Docling field shapes without inventing capabilities", () => {
-    const result = normalizeDocling(wire());
-    expect(result.pages).toEqual([{ page: 1, text: "BAUPLAN 12345" }]);
-    expect(result.tables?.[0]).toEqual({
-      pages: [1],
-      rows: 1,
-      columns: 1,
-      cells: [{ text: "12,50", row: 0, column: 0, rowSpan: 1, columnSpan: 1 }],
+    await expect(validateDocument({ ...ten, bytes: await pdf.save() })).rejects.toMatchObject({
+      code: "tooManyPages",
     });
-    expect(() => normalizeDocling({ status: "partial_success" })).toThrow("partial");
-    expect(() => normalizeDocling({ status: "failure" })).toThrow("providerFailure");
-    expect(() => normalizeDocling({ status: "success", document: {} })).toThrow("invalidResponse");
-    const broken = wire();
-    broken.document.json_content.tables[0]!.data.table_cells[0]!.row_span = 2;
-    expect(() => normalizeDocling(broken)).toThrow("invalidResponse");
+    await expect(
+      validateDocument({ ...ten, bytes: Buffer.from("%PDF-invalid") }),
+    ).rejects.toMatchObject({
+      code: "invalidPdf",
+    });
   });
-  it("uses fixed proxy-prefixed endpoints, secret header and requested language for modern Tesseract", async () => {
-    const fetch = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json({ protocol: 1, languages: ["de", "en", "de+en"] }))
-      .mockResolvedValueOnce(Response.json({ text: "BAUPLAN 12345" }));
-    const result = await recognize(
-      { ...connection(), settings: { ...settings, language: "en" } },
-      sample,
-    );
+
+  it("requires downloaded models and recognizes a local image without HTTP OCR", async () => {
+    await expect(processDocument(config, sample)).rejects.toMatchObject({ code: "modelMissing" });
+    await installModels();
+    const fetch = vi.spyOn(globalThis, "fetch");
+    const result = await processDocument(config, sample);
     expect(result).toMatchObject({
+      provider: "tesseract",
       text: "BAUPLAN 12345",
       pages: null,
       tables: null,
-      warnings: [],
     });
-    expect(fetch.mock.calls[1]?.[0]).toBe("http://127.0.0.1:8000/proxy/ocr");
-    const init = fetch.mock.calls[1]?.[1];
-    expect(init?.redirect).toBe("manual");
-    const headers = new Headers(init?.headers);
-    expect(headers.get("X-Api-Key")).toBe("private-key");
-    expect(headers.get("X-OCR-Language")).toBe("en");
-  });
-  it("preserves legacy Tesseract with an explicit language warning; rejects unsupported overrides", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json({ ok: true }))
-      .mockResolvedValueOnce(Response.json({ text: "legacy text" }))
-      .mockResolvedValueOnce(Response.json({ ok: true }));
-    expect(await recognize(connection(), sample)).toMatchObject({
-      warnings: ["legacyLanguage"],
-      pages: null,
-    });
-    await expect(
-      recognize({ ...connection(), settings: { ...settings, language: "de" } }, sample),
-    ).rejects.toMatchObject({ code: "languageUnsupported" });
-  });
-  it("uploads files to Docling with local standard pipeline and no remote source URLs", async () => {
-    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(wire()));
-    await recognize({ ...connection(), settings: { ...settings, provider: "docling" } }, sample);
-    expect(fetch.mock.calls[0]?.[0]).toBe(`${settings.baseUrl}/v1/convert/file`);
-    const form = fetch.mock.calls[0]?.[1]?.body;
-    expect(form).toBeInstanceOf(FormData);
-    if (!(form instanceof FormData)) throw new Error("Missing multipart body");
-    expect(form.getAll("to_formats")).toEqual(["text", "json"]);
-    expect(form.getAll("ocr_lang")).toEqual(["de", "en"]);
-    expect(form.get("pipeline")).toBe("standard");
-    expect(form.get("ocr_preset")).toBe("easyocr");
-    expect(form.get("include_images")).toBe("false");
-    expect(form.get("sources")).toBeNull();
-  });
-  it.each([
-    [401, "authentication"],
-    [403, "authentication"],
-    [302, "redirect"],
-    [500, "providerFailure"],
-  ] as const)("reports HTTP %s explicitly", async (status, code) => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status }));
-    await expect(recognize(connection(), sample)).rejects.toMatchObject({ code });
-  });
-  it("rejects malformed, oversized and empty responses", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response("not-json"))
-      .mockResolvedValueOnce(new Response("x".repeat(OCR_MAX_RESPONSE_BYTES + 1)))
-      .mockResolvedValueOnce(Response.json({ protocol: 1, languages: ["de+en"] }))
-      .mockResolvedValueOnce(Response.json({ text: "  " }));
-    await expect(recognize(connection(), sample)).rejects.toMatchObject({
-      code: "invalidResponse",
-    });
-    await expect(recognize(connection(), sample)).rejects.toMatchObject({
-      code: "responseTooLarge",
-    });
-    await expect(recognize(connection(), sample)).rejects.toMatchObject({ code: "emptyText" });
-  });
-  it("reports timeouts and connection errors without leaking transport details", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("secret destination detail"));
-    await expect(recognize(connection(), sample)).rejects.toMatchObject({
-      code: "unreachable",
-      message: "unreachable",
-    });
-    await expect(
-      recognize({ ...connection(), signal: AbortSignal.abort() }, sample),
-    ).rejects.toMatchObject({ code: "timeout" });
-  });
-  it("bounds concurrency and releases slots on completion", async () => {
-    const resolvers: ((value: Response) => void)[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      () => new Promise((resolve) => resolvers.push(resolve)),
+    expect(tesseract.createWorker).toHaveBeenCalledWith(
+      "deu+eng",
+      1,
+      expect.objectContaining({
+        langPath: join(root, "ocr-models"),
+        gzip: true,
+        cacheMethod: "none",
+      }),
     );
-    const one = processDocument(config, sample);
-    const two = processDocument(config, sample);
-    await expect(processDocument(config, sample)).rejects.toMatchObject({ code: "busy" });
-    await vi.waitFor(() => expect(resolvers.length).toBe(2));
-    resolvers.forEach((resolve) => resolve(new Response("{}", { status: 401 })));
-    await expect(one).rejects.toMatchObject({ code: "authentication" });
-    await expect(two).rejects.toMatchObject({ code: "authentication" });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 403 }));
-    await expect(processDocument(config, sample)).rejects.toMatchObject({ code: "authentication" });
+    expect(fetch).not.toHaveBeenCalled();
   });
-  it("has complete German and English OCR/error translations", () => {
+
+  it("prefers embedded PDF text and OCRs only scan pages in mixed PDFs", async () => {
+    await installModels();
+    const result = await processDocument(config, {
+      bytes: await mixedPdf(),
+      mime: "application/pdf",
+      name: "mixed.pdf",
+    });
+    expect(result.pages).toHaveLength(2);
+    expect(result.pages?.[0]?.text).toMatch(/Readable embedded invoice text/);
+    expect(result.pages?.[1]?.text).toBe("BAUPLAN 12345");
+    expect(tesseract.recognize).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders and OCRs scanned PDF pages in-process", async () => {
+    await installModels();
+    const result = await processDocument(config, {
+      bytes: await scanPdf(),
+      mime: "application/pdf",
+      name: "scan.pdf",
+    });
+    expect(result.pages).toEqual([{ page: 1, text: "BAUPLAN 12345" }]);
+    expect(result.text).toBe("BAUPLAN 12345");
+  });
+
+  it("limits concurrent recognition and releases slots when jobs finish", async () => {
+    await installModels();
+    const finish: ((value: { data: { text: string } }) => void)[] = [];
+    tesseract.recognize.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish.push(resolve);
+        }),
+    );
+    const first = processDocument(config, sample);
+    const second = processDocument(config, sample);
+    await vi.waitFor(() => expect(tesseract.recognize).toHaveBeenCalledTimes(2));
+    await expect(processDocument(config, sample)).rejects.toMatchObject({ code: "busy" });
+    finish.forEach((resolve) => resolve({ data: { text: "BAUPLAN 12345" } }));
+    await expect(first).resolves.toMatchObject({ text: "BAUPLAN 12345" });
+    await expect(second).resolves.toMatchObject({ text: "BAUPLAN 12345" });
+    const next = processDocument(config, sample);
+    await vi.waitFor(() => expect(tesseract.recognize).toHaveBeenCalledTimes(3));
+    finish[2]?.({ data: { text: "BAUPLAN 12345" } });
+    await expect(next).resolves.toMatchObject({ text: "BAUPLAN 12345" });
+  });
+
+  it("rejects disabled settings and localized error catalogues remain complete", async () => {
+    await expect(
+      processDocument({ ...config, settings: { enabled: false, language: "de+en" } }, sample),
+    ).rejects.toMatchObject({ code: "unconfigured" });
     for (const code of OCR_ERROR_CODES) expect(de[code] && en[code]).toBeTruthy();
     expect(Object.keys(de).sort()).toEqual(Object.keys(en).sort());
-    expect(ocrDraftSchema.safeParse({ settings, secretAction: "delete" }).success).toBe(true);
+    expect(ocrDraftSchema.safeParse({ settings: enabledSettings }).success).toBe(true);
   });
 });

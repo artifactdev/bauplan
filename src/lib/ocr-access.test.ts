@@ -91,9 +91,22 @@ vi.mock("@/server/ocr", () => ({
     tables: null,
     warnings: [],
   })),
+  ocrIsActive: () => false,
+}));
+vi.mock("@/server/ocr/models", () => ({
+  hasModels: vi.fn(async () => true),
+  getModelStatuses: vi.fn(async () => [
+    { language: "de", installed: true, size: 100 },
+    { language: "en", installed: true, size: 100 },
+  ]),
+  downloadModel: vi.fn(async () => {}),
+  deleteModel: vi.fn(async () => {}),
 }));
 
 import {
+  deleteOcrModel,
+  downloadOcrModel,
+  getOcrModels,
   getOcrSettings,
   saveOcrSettings,
   testOcrSettings,
@@ -103,15 +116,13 @@ import {
 } from "./data.functions";
 import { analyzeDocument } from "./ocr.functions";
 import { processDocument } from "@/server/ocr";
+import { hasModels } from "@/server/ocr/models";
 
 const draft = {
   settings: {
     enabled: true,
-    provider: "tesseract" as const,
-    baseUrl: "http://localhost:8000",
     language: "de+en" as const,
   },
-  secretAction: "delete" as const,
 };
 
 beforeEach(() => {
@@ -124,7 +135,9 @@ describe("Private account appearance server functions", () => {
   it.each([null, "pending"])("rejects appearance reads and writes for %s", async (role) => {
     harness.state.user = role ? { id: "blocked", role } : null;
     await expect(getAppearance()).rejects.toThrow("Unauthorized");
-    await expect(saveAppearance({ data: { palette: "blue", mode: "dark" } })).rejects.toThrow("Unauthorized");
+    await expect(saveAppearance({ data: { palette: "blue", mode: "dark" } })).rejects.toThrow(
+      "Unauthorized",
+    );
     expect(harness.state.repo.readAppearance).not.toHaveBeenCalled();
     expect(harness.state.repo.writeAppearance).not.toHaveBeenCalled();
   });
@@ -133,7 +146,10 @@ describe("Private account appearance server functions", () => {
     expect(await getAppearance()).toEqual({ palette: "current", mode: "system" });
     expect(harness.state.repo.readAppearance).toHaveBeenCalledWith("self");
     await saveAppearance({ data: { palette: "violet", mode: "light" } });
-    expect(harness.state.repo.writeAppearance).toHaveBeenCalledWith("self", { palette: "violet", mode: "light" });
+    expect(harness.state.repo.writeAppearance).toHaveBeenCalledWith("self", {
+      palette: "violet",
+      mode: "light",
+    });
   });
   it("rejects unknown values and identity overrides before writing", async () => {
     harness.state.user = { id: "self", role: "member" };
@@ -143,7 +159,9 @@ describe("Private account appearance server functions", () => {
       { palette: "blue", mode: "dark", userId: "other" },
     ]) {
       // Exercise runtime input validation, including untyped HTTP callers.
-      await expect(saveAppearance({ data: data as { palette: "blue"; mode: "dark" } })).rejects.toThrow();
+      await expect(
+        saveAppearance({ data: data as { palette: "blue"; mode: "dark" } }),
+      ).rejects.toThrow();
     }
     expect(harness.state.repo.writeAppearance).not.toHaveBeenCalled();
   });
@@ -154,8 +172,11 @@ describe("OCR server-function authorization and orchestration", () => {
     harness.state.user = role ? { id: "user", role } : null;
     for (const operation of [
       () => getOcrSettings(),
+      () => getOcrModels(),
       () => saveOcrSettings({ data: draft }),
       () => testOcrSettings({ data: draft }),
+      () => downloadOcrModel({ data: { language: "de" } }),
+      () => deleteOcrModel({ data: { language: "de" } }),
       () => resetOcrSettings(),
     ])
       await expect(operation()).rejects.toThrow("Unauthorized");
@@ -167,16 +188,40 @@ describe("OCR server-function authorization and orchestration", () => {
     harness.state.user = { id: "admin", role: "admin" };
     expect(await saveOcrSettings({ data: draft })).toEqual({ data: true, error: null });
     expect(harness.state.repo.writeOcrSettings).toHaveBeenCalledWith(
-      expect.stringContaining('"version":1'),
+      expect.stringContaining('"version":2'),
     );
+    expect(await getOcrModels()).toMatchObject({
+      data: [
+        { language: "de", installed: true },
+        { language: "en", installed: true },
+      ],
+      error: null,
+    });
+    expect(await downloadOcrModel({ data: { language: "de" } })).toEqual({
+      data: true,
+      error: null,
+    });
+    expect(await deleteOcrModel({ data: { language: "de" } })).toEqual({
+      data: true,
+      error: null,
+    });
     await resetOcrSettings();
     expect(harness.state.repo.writeOcrSettings).toHaveBeenLastCalledWith(null);
+  });
+  it("refuses to enable OCR when the selected language models are missing", async () => {
+    harness.state.user = { id: "admin", role: "admin" };
+    vi.mocked(hasModels).mockResolvedValueOnce(false);
+    expect(await saveOcrSettings({ data: draft })).toEqual({
+      data: null,
+      error: "modelMissing",
+    });
+    expect(harness.state.repo.writeOcrSettings).not.toHaveBeenCalled();
   });
   it("tests a draft by actual conversion without saving or reading a private upload", async () => {
     harness.state.user = { id: "admin", role: "admin" };
     expect(await testOcrSettings({ data: draft })).toEqual({ data: { warnings: [] }, error: null });
     expect(processDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ settings: draft.settings }),
+      expect.objectContaining({ settings: draft.settings, version: 2 }),
       expect.objectContaining({ name: "bauplan-test.png", mime: "image/png" }),
     );
     expect(harness.state.repo.writeOcrSettings).not.toHaveBeenCalled();
@@ -206,14 +251,18 @@ describe("OCR server-function authorization and orchestration", () => {
   it("lets members analyze using only the saved destination and existing extraction rules", async () => {
     harness.state.user = { id: "member", role: "member" };
     harness.state.repo.readOcrSettings.mockResolvedValue(
-      JSON.stringify({ version: 1, settings: draft.settings, secret: null }),
+      JSON.stringify({
+        version: 1,
+        settings: { ...draft.settings, provider: "tesseract", baseUrl: "http://old-service" },
+        secret: null,
+      }),
     );
     const result = await analyzeDocument({
       data: { documentId: "11111111-1111-4111-8111-111111111111" },
     });
     expect(result).toMatchObject({ error: null, result: { amount: 12.5 } });
     expect(processDocument).toHaveBeenCalledWith(
-      expect.objectContaining({ settings: draft.settings }),
+      expect.objectContaining({ settings: draft.settings, version: 2 }),
       expect.objectContaining({ name: "test.bmp" }),
     );
   });

@@ -1,130 +1,31 @@
-# Documents & text recognition (OCR)
+# Documents and local text recognition
 
-## Goal and flow
+## Processing
 
-Photograph or upload receipts, invoices, and quotes, recognize their text with a **self-hosted** service, and prefill forms for review. Tesseract is the lightweight default; optional Docling Serve adds local layout/table models. Cloud OCR, remote AI APIs, and LLM-based field extraction are not used.
+OCR runs in-process on the Bauplan server with `tesseract.js`; no OCR service, hosted OCR provider, external process, or AI service receives a document. The source file remains in `UPLOADS_DIR`. Recognized text is transient and is not saved. `src/lib/ocr-parse.ts` continues to extract business fields using fixed rules, which users review before saving.
 
-1. Upload a supported image/PDF or take a camera photo. The original is stored in `UPLOADS_DIR`.
-2. The member-only `analyzeDocument` server function loads the project's document and effective server-side OCR settings.
-3. Preflight checks actual bytes (maximum **25 MiB**), MIME signatures, and PDF readability/page count (**1–10 pages**, no encrypted PDFs). Larger PDFs are rejected, never silently truncated.
-4. A server-only adapter sends bytes to the configured service and validates/normalizes its response.
-5. `src/lib/ocr-parse.ts` extracts business fields with fixed rules; `src/lib/scan-map.ts` maps recognized values to forms. Recognition languages do not change the currently German-focused parsing rules.
-6. The user reviews and saves. OCR failure never deletes the upload; manual completion remains available.
+- Supported inputs: PDF, PNG, JPEG, TIFF, and BMP; maximum **25 MiB** and **10 PDF pages**.
+- For PDFs, PDF.js first extracts text page by page. A page with fewer than 20 non-whitespace text characters is rasterized locally with PDF.js and `@napi-rs/canvas`, then OCRed with Tesseract.js. This supports text-only, scanned, and mixed PDFs.
+- Images and rendered PDF pages use German, English, or both. The server allows two simultaneous OCR jobs and a maximum processing time of 180 seconds.
+- PDF page text is returned to the existing extraction flow. Table structure and searchable PDF output are not generated.
+- Invalid, encrypted, oversized, too-large-page-count, timed-out, or incomplete documents produce explicit errors. Uploads remain available for manual processing.
 
-The normalized internal result contains `provider`, `text`, `pages`, `tables`, and `warnings`. Unavailable pages/tables are `null`, not invented. Docling cells retain row/column positions, spans, and source-page references. The existing consumer result remains an `Extraction`; OCR text, pages, tables, and raw provider responses are **not persisted**. There is no table editor, automatic line-item import, searchable PDF output, provider fallback, or durable job queue.
+## Language models
 
-## Settings → Text recognition (admins only)
+An administrator downloads German and/or English language models from **Settings → Text recognition (OCR)**. Downloads are an explicit action; neither setup nor document processing downloads model data automatically. The app retrieves only the pinned `@tesseract.js-data/deu@1.0.0` or `@tesseract.js-data/eng@1.0.0` `4.0.0_best_int` model from jsDelivr, validates the gzip data and size, and atomically stores it under `DATA_DIR/ocr-models/`.
 
-One shared configuration applies to all approved project members:
+Keep the `/data` volume persistent and include it in backups; it contains both SQLite data and installed models. Once downloaded, the models are read locally and OCR works without outbound network access. If a model is missing, the app reports that condition instead of falling back to the network. To recover disk space, remove an installed model after disabling OCR or choosing a different active language.
 
-- Enable/disable recognition, choose **Tesseract** or **Docling Serve**, and enter the service **base URL** (including an optional reverse-proxy path).
-- Choose German, English, or both (default). Supported inputs: PDF, PNG, JPEG, TIFF, BMP. Other uploads may still be stored but are not OCR inputs.
-- Set an optional API key using explicit keep/replace/delete actions. Keys are never returned to the browser. A changed URL/provider requires key replacement or deletion to prevent accidental credential forwarding.
-- **Test document processing** processes an application-owned synthetic PNG and checks its recognized marker. This tests actual conversion rather than just HTTP availability and never saves the draft or sends a private upload.
-- **Reset to environment configuration** deletes saved settings and the stored key.
+An active language can be selected only when all of its required models are installed. The built-in processing test uses an application-owned synthetic image and does not send a user's document.
 
-Resolution order: saved settings (including explicit disable) → legacy `OCR_URL` Tesseract default → unconfigured. Reading settings does not migrate them. Invalid saved settings fail explicitly and can be reset; they never silently switch providers.
+## Settings and migration
 
-Only admins can read/save/reset/test configuration, enforced server-side. Members can analyze documents using saved configuration but cannot override the target. Pending and anonymous users cannot analyze documents.
+Only admins can inspect and change OCR settings or download/remove models. The shared settings contain only the enable switch and selected language. There are no provider choices, service URLs, API keys, network destination controls, or OCR-related encryption secrets.
 
-### Credentials and backups
+Older saved service settings are read only to preserve the enable switch and language; the provider, URL, and encrypted credential are ignored. Saving migrates them to the local settings format and removes the old credential. Reset deletes saved OCR settings and disables recognition. Legacy `OCR_URL`, `OCR_SETTINGS_KEY`, and companion-service environment variables are ignored.
 
-Set a stable `OCR_SETTINGS_KEY` on the **app** before storing an API key:
+## Deployment
 
-```sh
-openssl rand -hex 32
-```
+The app needs no OCR companion container. Docker Compose runs only the app and persists `/data` and `/uploads`. Admin-initiated model downloads require the app server to reach jsDelivr; deployments without outbound network can transfer the two model files into `DATA_DIR/ocr-models/` from a trusted source.
 
-Use the resulting 64 hexadecimal characters as the environment value (Compose reads it from the shell or an uncommitted `.env`). Store it securely and back it up **separately** from SQLite. Do not commit it. API keys are encrypted in private `app_settings.ocr_config` with AES-256-GCM, random nonces, and purpose/version-bound authenticated data. They are not part of the Workspace or generic project CRUD.
-
-No encryption key is needed for unauthenticated services. A missing/wrong encryption key produces an explicit error for encrypted credentials; recover by restoring the original key or replacing/deleting the stored API key. Do not simply rotate the environment key without re-entering credentials.
-
-### Destination policy — trusted admins required
-
-**All HTTP(S) network destinations are intentionally allowed**, including loopback, Docker, LAN, link-local, and public addresses. There is no IP approval, network allowlist, DNS pinning, or SSRF protection. A trusted admin can cause the server to contact arbitrary reachable HTTP(S) services. Do not offer OCR administration to untrusted users.
-
-URLs cannot contain embedded credentials, query parameters, or fragments. Adapters derive fixed endpoint paths; redirects are rejected and keys are scoped to the selected service. These checks do **not** provide network isolation or protection against DNS rebinding. HTTP is allowed but exposes documents/API keys in transit; use HTTPS on public or untrusted networks. The UI warns about this.
-
-## Tesseract companion (`ocr/`)
-
-- Debian slim, Python 3, Tesseract with German/English, poppler.
-- `POST /ocr`: raw PDF/image body with its MIME type; returns `{"text":"..."}`.
-- Optional `X-OCR-Language`: `de`, `en`, `de+en`. Without the header, `OCR_LANG` applies (default `deu+eng`).
-- Optional `OCR_API_KEY` on the service requires matching `X-Api-Key` on capabilities and conversion requests. No key preserves legacy unauthenticated behavior.
-- `GET /capabilities`: protocol version 1 and supported language choices; `/` and `/health` remain simple public health checks.
-- PDFs: check the complete page count first, then try embedded text; otherwise rasterize at 300 dpi and OCR every permitted page. Subprocess failure is an error, not empty success. A shared 170-second service budget covers all commands/pages.
-- Images: Tesseract `--psm 4`. No internet needed at runtime; no host port is needed on a shared Docker network.
-
-Older companion containers returning only text and generic health JSON remain usable at their own `OCR_LANG` default. The app warns that the requested combined language cannot be verified; explicit single-language overrides are rejected until the companion is upgraded. Tesseract does not claim normalized pages/tables.
-
-## Optional Docling Serve
-
-Adapter target: **Docling Serve 1.38.1**, CPU image `quay.io/docling-project/docling-serve-cpu:v1.38.1` (Docling 2.142.1). The app uses multipart `POST /v1/convert/file`, `X-Api-Key` when configured, and the standard local pipeline with EasyOCR plus table structure. EasyOCR's bundled Latin models support German/English; the stock image's Tesseract installation only bundles English data, so it is not used by this adapter. It requests text and Docling JSON without embedded images. Partial conversions are rejected. Merely installing the Docling Python library does not provide an HTTP endpoint.
-
-Start the optional Compose profile:
-
-```sh
-docker compose --profile docling up -d --build
-```
-
-In app settings select Docling Serve, base URL `http://docling:5001`, and run the processing test. Saving this configuration overrides `OCR_URL`; switching does not require rebuilding the app. The lightweight Tesseract service remains available as a manually selected alternative.
-
-The pinned upstream image bundles model assets under `/opt/app-root/src/.cache/docling/models`; Compose uses a named volume, which Docker initially populates from those assets. **Do not mount an empty host directory over bundled models.** The Compose service sets `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, remote services/UI off, 10 pages, a 170-second conversion budget, and 175-second synchronous wait. It publishes no port.
-
-For Unraid, use `unraid/bauplan-docling.xml`, place it on the app's private Docker network, and prepopulate its model bind mount from the pinned image before startup. For example (adjust the destination):
-
-```sh
-docker create --name bauplan-docling-model-copy quay.io/docling-project/docling-serve-cpu:v1.38.1
-mkdir -p /mnt/user/appdata/bauplan-docling/models
-docker cp bauplan-docling-model-copy:/opt/app-root/src/.cache/docling/models/. /mnt/user/appdata/bauplan-docling/models/
-docker rm bauplan-docling-model-copy
-chown -R 1001:0 /mnt/user/appdata/bauplan-docling/models
-```
-
-Set the app's base URL to `http://bauplan-docling:5001`. Optional service authentication uses `DOCLING_SERVE_API_KEY`; the same value goes in the app's encrypted OCR settings. Keep the separate app `OCR_SETTINGS_KEY`.
-
-Docling uses more CPU/RAM/disk than Tesseract; its CPU image is several GB. Start with a multi-core host and several GB of available RAM, then measure representative documents before imposing container limits. No GPU is required. Image/model provisioning requires downloads, but document conversion should work offline with preloaded models; disable network egress at the deployment layer for enforcement. Offline flags are not a network firewall.
-
-## Errors and operational limits
-
-- Two in-flight recognition/test operations per app instance; additional calls get an explicit busy error rather than an unbounded queue.
-- Maximum 180 seconds for preflight/transport/response reading, 8 MiB provider response limit, and runtime validation.
-- Distinct localized errors for missing configuration, authentication, invalid PDFs/formats, limits, timeout, invalid provider responses, redirects, empty text, and incomplete conversion.
-- Logs include sanitized OCR error codes only, not document text, credentials, or provider error bodies.
-- Set reverse-proxy upload/body limits high enough for a 25 MiB multipart upload and timeouts longer than the 180-second OCR deadline.
-- Poor lighting, crumpled receipts, and ambiguous totals still require human review.
-
-## Recognition rules
-
-| Field | Rule |
-| --- | --- |
-| Amount | Prioritized total keywords; exclude VAT, net amounts, and change |
-| Date / due date | German date formats and payment-deadline keywords |
-| Type | Quote, invoice, receipt, contract, plan, datasheet keywords |
-| Category / merchant | Merchant/keyword lists, meaningful lines, legal forms |
-| Trade | Match against existing project trades |
-
-No new invoice-number or currency field is inferred by the provider change.
-
-## Verification
-
-```sh
-npm test -- src/server/ocr/ocr.test.ts src/lib/ocr-access.test.ts src/components/app/OcrSettingsPanel.test.tsx src/lib/ocr-parse.test.ts src/lib/scan-map.test.ts
-python3 -m unittest discover -s ocr -p 'test_*.py'
-```
-
-Opt-in live integration tests (synthetic documents only) against already running services:
-
-```sh
-OCR_TEST_TESSERACT_URL=http://127.0.0.1:8000 \
-OCR_TEST_DOCLING_URL=http://127.0.0.1:5001 \
-OCR_TEST_API_KEY=your-test-service-key \
-OCR_SETTINGS_KEY=your-64-character-hexadecimal-encryption-key \
-npm test -- src/server/ocr/live.test.ts
-```
-
-Omit `OCR_TEST_API_KEY` for unauthenticated test services. Unset provider URLs skip their live tests. Tests cover each language, raster OCR, text/scanned PDFs, Docling table normalization, and authentication; they never run against an implicit default target.
-
-Run real-service checks with the default Tesseract container and the pinned Docling image, including the synthetic test, PDF/image conversion, both languages, authentication failures, and offline conversion after provisioning. Fixture/unit tests validate contracts but do not replace these deployment checks.
-
-Upstream API references: [Docling Serve 1.38.1](https://github.com/docling-project/docling-serve/tree/v1.38.1), [conversion options](https://github.com/docling-project/docling/blob/v2.142.1/docling/datamodel/service/options.py), [response schemas](https://github.com/docling-project/docling/blob/v2.142.1/docling/datamodel/service/responses.py).
+The normal build-time network requirements are unchanged. OCR runtime processing is local and offline once language models are present. See [operations](operations.md) and [Docker/Unraid setup](docker-unraid.md).

@@ -3,7 +3,13 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { cleanRow, TABLE_NAMES, type TableName } from "./schema";
 import { buildSeed } from "./seed";
-import { ocrDraftSchema, type OcrSettingsView, type OcrErrorCode } from "./ocr";
+import {
+  OCR_LANGUAGES,
+  ocrDraftSchema,
+  type OcrModelStatus,
+  type OcrSettingsView,
+  type OcrErrorCode,
+} from "./ocr";
 import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
 
@@ -15,7 +21,9 @@ export const dataContext = createMiddleware({ type: "function" }).server(async (
   const repoMod = await import("@/server/repo");
   const { canAccessData } = await import("@/server/auth-core");
   const la = await import("@/server/local-auth");
-  const u = await la.userFromToken(la.cookieFrom(getRequest()?.headers.get("cookie"), la.SESSION_COOKIE));
+  const u = await la.userFromToken(
+    la.cookieFrom(getRequest()?.headers.get("cookie"), la.SESSION_COOKIE),
+  );
   if (!u || !canAccessData(u.role)) throw new Error("Unauthorized");
   return next({ context: { repo: repoMod.sqliteRepo(), user: u } });
 });
@@ -58,8 +66,11 @@ export const getOcrSettings = createServerFn()
   .handler(async ({ context }): Promise<OcrAdminResult<OcrSettingsView>> => {
     const { settingsView } = await import("@/server/ocr/config");
     const { ocrErrorCode } = await import("@/server/ocr/errors");
-    try { return { data: await settingsView(context.repo), error: null }; }
-    catch (error) { return { data: null, error: ocrErrorCode(error) }; }
+    try {
+      return { data: await settingsView(context.repo), error: null };
+    } catch (error) {
+      return { data: null, error: ocrErrorCode(error) };
+    }
   });
 
 export const saveOcrSettings = createServerFn({ method: "POST" })
@@ -67,12 +78,17 @@ export const saveOcrSettings = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => ocrDraftSchema.parse(d))
   .handler(async ({ context, data }): Promise<OcrAdminResult<true>> => {
     const { prepareDraft } = await import("@/server/ocr/config");
-    const { ocrErrorCode } = await import("@/server/ocr/errors");
+    const { hasModels } = await import("@/server/ocr/models");
+    const { OcrError, ocrErrorCode } = await import("@/server/ocr/errors");
     try {
-      const settings = await prepareDraft(context.repo, data);
+      const settings = await prepareDraft(data);
+      if (settings.settings.enabled && !(await hasModels(settings.settings.language)))
+        throw new OcrError("modelMissing");
       await context.repo.writeOcrSettings(JSON.stringify(settings));
       return { data: true, error: null };
-    } catch (error) { return { data: null, error: ocrErrorCode(error) }; }
+    } catch (error) {
+      return { data: null, error: ocrErrorCode(error) };
+    }
   });
 
 export const resetOcrSettings = createServerFn({ method: "POST" })
@@ -91,11 +107,59 @@ export const testOcrSettings = createServerFn({ method: "POST" })
     const { connectionSample } = await import("@/server/ocr/sample");
     const { OcrError, ocrErrorCode } = await import("@/server/ocr/errors");
     try {
-      const config = await prepareDraft(context.repo, data);
-      const result = await processDocument(config, { bytes: connectionSample(), mime: "image/png", name: "bauplan-test.png" });
-      if (!/BAUPLAN/i.test(result.text) || !/12345/.test(result.text)) throw new OcrError("testFailed");
+      const config = await prepareDraft(data);
+      const result = await processDocument(config, {
+        bytes: connectionSample(),
+        mime: "image/png",
+        name: "bauplan-test.png",
+      });
+      if (!/BAUPLAN/i.test(result.text) || !/12345/.test(result.text))
+        throw new OcrError("testFailed");
       return { data: { warnings: result.warnings }, error: null };
-    } catch (error) { return { data: null, error: ocrErrorCode(error) }; }
+    } catch (error) {
+      return { data: null, error: ocrErrorCode(error) };
+    }
+  });
+
+export const getOcrModels = createServerFn()
+  .middleware([adminDataContext])
+  .handler(async (): Promise<OcrAdminResult<OcrModelStatus[]>> => {
+    const { getModelStatuses } = await import("@/server/ocr/models");
+    const { ocrErrorCode } = await import("@/server/ocr/errors");
+    try {
+      return { data: await getModelStatuses(), error: null };
+    } catch (error) {
+      return { data: null, error: ocrErrorCode(error) };
+    }
+  });
+
+export const downloadOcrModel = createServerFn({ method: "POST" })
+  .middleware([adminDataContext])
+  .inputValidator((d: unknown) => z.object({ language: z.enum(OCR_LANGUAGES) }).parse(d))
+  .handler(async ({ data }): Promise<OcrAdminResult<true>> => {
+    const { downloadModel } = await import("@/server/ocr/models");
+    const { ocrErrorCode } = await import("@/server/ocr/errors");
+    try {
+      await downloadModel(data.language);
+      return { data: true, error: null };
+    } catch (error) {
+      return { data: null, error: ocrErrorCode(error) };
+    }
+  });
+
+export const deleteOcrModel = createServerFn({ method: "POST" })
+  .middleware([adminDataContext])
+  .inputValidator((d: unknown) => z.object({ language: z.enum(OCR_LANGUAGES) }).parse(d))
+  .handler(async ({ context, data }): Promise<OcrAdminResult<true>> => {
+    const { deleteModel } = await import("@/server/ocr/models");
+    const { ocrIsActive } = await import("@/server/ocr");
+    const { ocrErrorCode } = await import("@/server/ocr/errors");
+    try {
+      await deleteModel(data.language, context.repo, ocrIsActive());
+      return { data: true, error: null };
+    } catch (error) {
+      return { data: null, error: ocrErrorCode(error) };
+    }
   });
 
 export const getBackendInfo = createServerFn().handler(async () => {
@@ -114,7 +178,9 @@ const tableSchema = z.enum(TABLE_NAMES as [TableName, ...TableName[]]);
 
 export const createRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
-  .inputValidator((d: unknown) => z.object({ table: tableSchema, row: z.record(z.unknown()) }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ table: tableSchema, row: z.record(z.unknown()) }).parse(d),
+  )
   .handler(async ({ context, data }) => {
     const row = await context.repo.insert(data.table, cleanRow(data.table, data.row));
     return { id: String(row["id"]) };
@@ -122,7 +188,9 @@ export const createRow = createServerFn({ method: "POST" })
 
 export const updateRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
-  .inputValidator((d: unknown) => z.object({ table: tableSchema, id: z.string(), patch: z.record(z.unknown()) }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ table: tableSchema, id: z.string(), patch: z.record(z.unknown()) }).parse(d),
+  )
   .handler(async ({ context, data }) => {
     await context.repo.update(data.table, data.id, cleanRow(data.table, data.patch));
     return { ok: true };
@@ -157,7 +225,14 @@ export const uploadDocument = createServerFn({ method: "POST" })
     const storage_path = await context.repo.putFile(data.file.name, mime, bytes);
     const row = await context.repo.insert(
       "documents",
-      cleanRow("documents", { name: data.file.name, category: "Sonstiges", ...data.meta, storage_path, mime_type: mime, size: data.file.size }),
+      cleanRow("documents", {
+        name: data.file.name,
+        category: "Sonstiges",
+        ...data.meta,
+        storage_path,
+        mime_type: mime,
+        size: data.file.size,
+      }),
     );
     return { id: String(row["id"]) };
   });
@@ -177,7 +252,11 @@ export const loadDemoData = createServerFn({ method: "POST" })
       for (const row of seed[t]) await context.repo.insert(t, { id: row.id, ...cleanRow(t, row) });
     }
     if (ws.projects[0]) {
-      await context.repo.update("projects", ws.projects[0].id, cleanRow("projects", seed.projects[0]!));
+      await context.repo.update(
+        "projects",
+        ws.projects[0].id,
+        cleanRow("projects", seed.projects[0]!),
+      );
       await context.repo.remove("projects", seed.projects[0]!.id);
     }
     return { ok: true };

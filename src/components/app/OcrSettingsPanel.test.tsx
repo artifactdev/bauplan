@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  deleteOcrModel,
+  downloadOcrModel,
+  getOcrModels,
   getOcrSettings,
   resetOcrSettings,
   saveOcrSettings,
@@ -11,6 +14,9 @@ import i18n from "@/i18n";
 import { OcrSettingsPanel } from "./OcrSettingsPanel";
 
 vi.mock("@/lib/data.functions", () => ({
+  deleteOcrModel: vi.fn(),
+  downloadOcrModel: vi.fn(),
+  getOcrModels: vi.fn(),
   getOcrSettings: vi.fn(),
   resetOcrSettings: vi.fn(),
   saveOcrSettings: vi.fn(),
@@ -19,12 +25,14 @@ vi.mock("@/lib/data.functions", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 const initial = {
   enabled: true,
-  provider: "tesseract" as const,
-  baseUrl: "http://ocr:8000",
   language: "de+en" as const,
-  hasApiKey: true,
+  legacySettings: false,
   source: "saved" as const,
 };
+const installed = [
+  { language: "de" as const, installed: true, size: 1_300_000 },
+  { language: "en" as const, installed: true, size: 2_900_000 },
+];
 
 function mount() {
   const client = new QueryClient({
@@ -40,82 +48,88 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage("en");
   vi.mocked(getOcrSettings).mockResolvedValue({ data: initial, error: null });
+  vi.mocked(getOcrModels).mockResolvedValue({ data: installed, error: null });
   vi.mocked(testOcrSettings).mockResolvedValue({ data: { warnings: [] }, error: null });
   vi.mocked(saveOcrSettings).mockResolvedValue({ data: true, error: null });
+  vi.mocked(downloadOcrModel).mockResolvedValue({ data: true, error: null });
+  vi.mocked(deleteOcrModel).mockResolvedValue({ data: true, error: null });
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
-describe("OCR settings panel", () => {
-  it("displays capabilities and unrestricted HTTP warnings without revealing the existing key", async () => {
+describe("local OCR settings panel", () => {
+  it("explains local processing and displays installed model status and capabilities", async () => {
     mount();
-    expect(await screen.findByLabelText("Service base URL")).toHaveValue("http://ocr:8000");
-    expect(screen.getByText(/There is no network allowlist or SSRF protection/)).toBeVisible();
-    expect(screen.getByText(/HTTP is not encrypted/)).toBeVisible();
+    expect(await screen.findByText(/runs locally inside Bauplan with Tesseract.js/)).toBeVisible();
+    expect(await screen.findByText(/German\s+installed/)).toBeVisible();
+    expect(screen.getByText(/per-page text for PDFs/)).toBeVisible();
     expect(screen.getByText(/no table structure/)).toBeVisible();
-    expect(screen.queryByLabelText("New API key")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("OCR provider"), { target: { value: "docling" } });
-    expect(screen.getByText(/Capabilities: text, page information, table structure/)).toBeVisible();
+    expect(
+      screen.queryByLabelText(/Service base URL|API key|OCR provider/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Models are downloaded only when you choose Download/)).toBeVisible();
   });
-  it("tests current draft without saving", async () => {
+
+  it("tests the current draft without saving or sending a user document", async () => {
     mount();
-    await screen.findByLabelText("Service base URL");
-    fireEvent.change(screen.getByLabelText("Recognition language"), { target: { value: "en" } });
+    fireEvent.change(await screen.findByLabelText("Recognition language"), {
+      target: { value: "en" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Test document processing" }));
     expect(await screen.findByText(/synthetic test image was successfully read/)).toBeVisible();
     expect(testOcrSettings).toHaveBeenCalledWith({
-      data: {
-        settings: {
-          enabled: true,
-          provider: "tesseract",
-          baseUrl: initial.baseUrl,
-          language: "en",
-        },
-        secretAction: "keep",
-      },
+      data: { settings: { enabled: true, language: "en" } },
     });
     expect(saveOcrSettings).not.toHaveBeenCalled();
   });
-  it("only sends a replacement key when explicitly requested and clears the input after save", async () => {
+
+  it("downloads an explicitly selected language model", async () => {
+    vi.mocked(getOcrModels).mockResolvedValue({
+      data: [
+        { language: "de", installed: false, size: null },
+        { language: "en", installed: true, size: 2_900_000 },
+      ],
+      error: null,
+    });
     mount();
-    await screen.findByLabelText("Service base URL");
-    fireEvent.change(screen.getByLabelText(/API key \(optional\)/), {
-      target: { value: "replace" },
-    });
-    fireEvent.change(screen.getByLabelText("New API key"), {
-      target: { value: "new-private-secret" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save OCR settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Download" }));
     await waitFor(() =>
-      expect(saveOcrSettings).toHaveBeenCalledWith({
-        data: {
-          settings: {
-            enabled: true,
-            provider: "tesseract",
-            baseUrl: initial.baseUrl,
-            language: "de+en",
-          },
-          secretAction: "replace",
-          apiKey: "new-private-secret",
-        },
-      }),
+      expect(downloadOcrModel).toHaveBeenCalledWith({ data: { language: "de" } }),
     );
-    await waitFor(() => expect(screen.queryByLabelText("New API key")).not.toBeInTheDocument());
   });
-  it("provides recovery reset and localized German errors for invalid stored configuration", async () => {
+
+  it("only offers installed languages and surfaces migration notice for old service settings", async () => {
+    vi.mocked(getOcrSettings).mockResolvedValue({
+      data: { ...initial, language: "de", legacySettings: true },
+      error: null,
+    });
+    vi.mocked(getOcrModels).mockResolvedValue({
+      data: [
+        { language: "de", installed: true, size: 1_300_000 },
+        { language: "en", installed: false, size: null },
+      ],
+      error: null,
+    });
+    mount();
+    expect(await screen.findByText(/Previous service settings are no longer used/)).toBeVisible();
+    const language = screen.getByLabelText("Recognition language") as HTMLSelectElement;
+    expect(language.options[0]?.disabled).toBe(false);
+    expect(language.options[1]?.disabled).toBe(true);
+    expect(language.options[2]?.disabled).toBe(true);
+  });
+
+  it("provides a localized reset action when persisted settings are invalid", async () => {
     await i18n.changeLanguage("de");
     vi.mocked(getOcrSettings).mockResolvedValue({ data: null, error: "invalidSettings" });
     vi.mocked(resetOcrSettings).mockResolvedValue({ ok: true });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     mount();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Die OCR-Konfiguration ist ungültig",
+      "Die OCR-Einstellungen sind ungültig",
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Auf Umgebungskonfiguration zurücksetzen" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "OCR-Einstellungen zurücksetzen" }));
     await waitFor(() => expect(resetOcrSettings).toHaveBeenCalled());
   });
 });

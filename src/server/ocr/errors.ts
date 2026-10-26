@@ -7,7 +7,7 @@ export class OcrError extends Error {
 }
 
 export function ocrErrorCode(error: unknown): OcrErrorCode {
-  const code = error instanceof OcrError ? error.code : "providerFailure";
+  const code = error instanceof OcrError ? error.code : "processingFailed";
   console.error("OCR failed", { code });
   return code;
 }

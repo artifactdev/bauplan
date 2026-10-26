@@ -32,8 +32,8 @@ bunx vitest run
 docker compose up -d --build
 ```
 
-Open <http://localhost:3000>. The SQLite database persists in `./daten`; uploaded documents persist separately in `./dokumente`. The app and OCR container work locally without hosted services; optional OIDC sign-in requires an identity provider only when configured.
+Open <http://localhost:3000>. The SQLite database and OCR language models persist in `./daten`; uploaded documents persist separately in `./dokumente`. OCR runs locally in the app; optional OIDC sign-in requires an identity provider only when configured.
 
 ## Built with
 
-TanStack Start · React · TypeScript · Tailwind CSS · i18next · SQLite · Tesseract / optional Docling Serve (self-hosted OCR)
+TanStack Start · React · TypeScript · Tailwind CSS · i18next · SQLite · Tesseract.js (local OCR)

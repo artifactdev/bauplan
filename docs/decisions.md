@@ -6,13 +6,13 @@ Short ADRs: context → decision → consequences.
 Private use in Germany. Amounts are always in euros; German is the default interface language (see #16 for English).
 
 ### 2. Local storage with SQLite
-Project data, uploaded files, accounts, and settings stay on the user's own machine or server. SQLite is the only application database; Docker Compose runs the app and OCR locally. No hosted database, auth, or storage is required.
+Project data, uploaded files, accounts, settings, and local OCR models stay on the user's own machine or server. SQLite is the only application database; Docker Compose runs only the app. No hosted database, auth, OCR, or storage service is required.
 
 ### 3. Self-hosted recognition with rule-based field extraction
-Originally an AI service was replaced with Tesseract + poppler so receipts stay on user-controlled infrastructure. OCR now has interchangeable self-hosted Tesseract and Docling Serve adapters. Optional local Docling layout/table models are explicitly permitted; cloud OCR, external AI APIs, and LLM-based business-field extraction remain excluded. Business fields still come from fixed, tested rules, independently of the recognition provider. Local vision LLMs (Ollama) remain out of scope.
+Recognition runs in-process with Tesseract.js. PDF.js extracts existing text and renders scanned pages locally; `@napi-rs/canvas` supplies the render target. Admins explicitly download pinned German/English models into persistent local storage; normal processing is offline. No OCR services, subprocesses, cloud OCR, external AI APIs, or LLM-based business-field extraction are used. Business fields come from fixed, tested rules.
 
-### 18. Private shared OCR settings and unrestricted admin destinations
-One active OCR configuration serves all project members; only admins can inspect/change/test it. Saved settings override the legacy `OCR_URL`, including explicit disable. API keys are encrypted with a separate environment key and never sent to React. At the user's explicit request all HTTP(S) destinations are allowed, including internal and public addresses; there is no network allowlist, DNS pinning, or SSRF isolation. Configuration therefore requires trusted admins. Redirects are rejected; HTTP exposes document bytes and credentials in transit. Processing tests use a synthetic raster rather than private documents. OCR text/tables are transient, not additional business records.
+### 18. Private shared OCR settings and local models
+Only admins can inspect/change shared OCR settings, test recognition, or manage language models. Legacy provider URLs and encrypted API keys are ignored and removed on save. Model downloads use a fixed, version-pinned source and are explicit; OCR processing itself is local. Tests use a synthetic raster, never private documents. OCR text is transient, not an additional business record.
 
 ### 4. Recognition only fills fields; it never overwrites them
 Recognized values are set only when present; users always review before saving.
