@@ -1,9 +1,25 @@
 // Server-only storage adapters. Import this module only via dynamic import()
 // inside server function handlers.
-import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, USER_APPEARANCE_DDL, USER_APPEARANCE_TABLE, type TableName, type Workspace } from "@/lib/schema";
+import {
+  BOOL_COLS,
+  cleanRow,
+  NUMERIC_COLS,
+  TABLE_NAMES,
+  TABLES,
+  SYNC_OPERATIONS_DDL,
+  USER_APPEARANCE_DDL,
+  USER_APPEARANCE_TABLE,
+  type TableName,
+  type Workspace,
+} from "@/lib/schema";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_DDL, USER_NAVIGATION_TABLE } from "@/lib/schema";
-import { parseNavigation, navigationSchema, DEFAULT_NAVIGATION, type NavigationPreferences } from "@/lib/navigation";
+import {
+  parseNavigation,
+  navigationSchema,
+  DEFAULT_NAVIGATION,
+  type NavigationPreferences,
+} from "@/lib/navigation";
 
 export interface Repo {
   readNavigation(userId: string): Promise<NavigationPreferences>;
@@ -22,14 +38,35 @@ export interface Repo {
   readAppearance(userId: string): Promise<Appearance>;
   writeAppearance(userId: string, value: Appearance): Promise<void>;
   deleteAppearance(userId: string): Promise<void>;
+  applySyncChange(
+    userId: string,
+    change: SyncChange,
+  ): Promise<{
+    applied: boolean;
+    current: Record<string, string | number | boolean | null> | null;
+  }>;
+  deleteSyncOperations(userId: string): Promise<void>;
 }
+
+export type SyncChange = {
+  id: string;
+  table: TableName;
+  action: "create" | "update" | "delete";
+  rowId: string;
+  base: Record<string, unknown> | null;
+  row: Record<string, unknown> | null;
+};
 
 // Uses Node's built-in node:sqlite (Node >= 22.5). Computed dynamic imports
 // keep Node-only modules out of browser-side module graphs.
 
 export type SqliteDb = {
   exec(sql: string): void;
-  prepare(sql: string): { all(...p: unknown[]): Record<string, unknown>[]; run(...p: unknown[]): unknown; get(...p: unknown[]): Record<string, unknown> | undefined };
+  prepare(sql: string): {
+    all(...p: unknown[]): Record<string, unknown>[];
+    run(...p: unknown[]): unknown;
+    get(...p: unknown[]): Record<string, unknown> | undefined;
+  };
 };
 
 let dbPromise: Promise<SqliteDb> | null = null;
@@ -49,7 +86,9 @@ function uploadsDir(path: typeof import("node:path")) {
 async function openDb(): Promise<SqliteDb> {
   const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
   const path = await nodeImport<typeof import("node:path")>("node:" + "path");
-  const { DatabaseSync } = await nodeImport<{ DatabaseSync: new (f: string) => SqliteDb }>("node:" + "sqlite");
+  const { DatabaseSync } = await nodeImport<{ DatabaseSync: new (f: string) => SqliteDb }>(
+    "node:" + "sqlite",
+  );
   fs.mkdirSync(dataDir(), { recursive: true });
   fs.mkdirSync(uploadsDir(path), { recursive: true });
   const db = new DatabaseSync(path.join(dataDir(), "renovierung.db"));
@@ -57,18 +96,33 @@ async function openDb(): Promise<SqliteDb> {
     const cols = (TABLES[t] as readonly string[])
       .map((c) => `${c} ${NUMERIC_COLS.has(c) ? "REAL" : BOOL_COLS.has(c) ? "INTEGER" : "TEXT"}`)
       .join(", ");
-    db.exec(`CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, ${cols})`);
+    db.exec(
+      `CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, ${cols})`,
+    );
     // Add columns introduced after the table was first created.
-    const have = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((r) => String(r["name"])));
+    const have = new Set(
+      db
+        .prepare(`PRAGMA table_info(${t})`)
+        .all()
+        .map((r) => String(r["name"])),
+    );
     for (const c of TABLES[t] as readonly string[]) {
-      if (!have.has(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${NUMERIC_COLS.has(c) ? "REAL" : BOOL_COLS.has(c) ? "INTEGER" : "TEXT"}`);
+      if (!have.has(c))
+        db.exec(
+          `ALTER TABLE ${t} ADD COLUMN ${c} ${NUMERIC_COLS.has(c) ? "REAL" : BOOL_COLS.has(c) ? "INTEGER" : "TEXT"}`,
+        );
     }
   }
-  db.exec(`CREATE TABLE IF NOT EXISTS app_users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, password_hash TEXT, role TEXT NOT NULL, oidc_sub TEXT UNIQUE, created_at TEXT NOT NULL)`);
-  db.exec(`CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL)`);
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS app_users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, password_hash TEXT, role TEXT NOT NULL, oidc_sub TEXT UNIQUE, created_at TEXT NOT NULL)`,
+  );
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL)`,
+  );
   db.exec(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)`);
   db.exec(USER_APPEARANCE_DDL);
   db.exec(USER_NAVIGATION_DDL);
+  db.exec(SYNC_OPERATIONS_DDL);
   return db;
 }
 
@@ -81,48 +135,113 @@ export function sqliteRepo(): Repo {
   const db = () => (dbPromise ??= openDb());
   return {
     async readNavigation(userId) {
-      const row = (await db()).prepare(`SELECT preferences FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).get(userId);
-      return row ? parseNavigation(JSON.parse(String(row["preferences"]))) : navigationSchema.parse(DEFAULT_NAVIGATION);
+      const row = (await db())
+        .prepare(`SELECT preferences FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`)
+        .get(userId);
+      return row
+        ? parseNavigation(JSON.parse(String(row["preferences"])))
+        : navigationSchema.parse(DEFAULT_NAVIGATION);
     },
     async writeNavigation(userId, value) {
       const valid = navigationSchema.parse(value);
-      (await db()).prepare(`INSERT INTO ${USER_NAVIGATION_TABLE} (user_id, preferences) VALUES (?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET preferences = excluded.preferences`).run(userId, JSON.stringify(valid));
+      (await db())
+        .prepare(
+          `INSERT INTO ${USER_NAVIGATION_TABLE} (user_id, preferences) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET preferences = excluded.preferences`,
+        )
+        .run(userId, JSON.stringify(valid));
     },
     async deleteNavigation(userId) {
       (await db()).prepare(`DELETE FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).run(userId);
     },
     async readAppearance(userId) {
-      const row = (await db()).prepare(`SELECT palette, mode FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).get(userId);
+      const row = (await db())
+        .prepare(`SELECT palette, mode FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`)
+        .get(userId);
       return row ? appearanceSchema.parse(row) : { ...DEFAULT_APPEARANCE };
     },
     async writeAppearance(userId, value) {
       const valid = appearanceSchema.parse(value);
-      (await db()).prepare(`INSERT INTO ${USER_APPEARANCE_TABLE} (user_id, palette, mode) VALUES (?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET palette = excluded.palette, mode = excluded.mode`).run(userId, valid.palette, valid.mode);
+      (await db())
+        .prepare(
+          `INSERT INTO ${USER_APPEARANCE_TABLE} (user_id, palette, mode) VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET palette = excluded.palette, mode = excluded.mode`,
+        )
+        .run(userId, valid.palette, valid.mode);
     },
     async deleteAppearance(userId) {
       (await db()).prepare(`DELETE FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).run(userId);
     },
+    async applySyncChange(userId, change) {
+      const d = await db();
+      d.exec("BEGIN IMMEDIATE");
+      try {
+        const completed = d
+          .prepare("SELECT id FROM app_sync_operations WHERE id = ? AND user_id = ?")
+          .get(change.id, userId);
+        if (completed) {
+          d.exec("COMMIT");
+          return { applied: true, current: null };
+        }
+        const raw = d.prepare(`SELECT * FROM ${change.table} WHERE id = ?`).get(change.rowId);
+        const current = raw ? serializeRow(normalize(raw)) : null;
+        if (!sameRecord(current, change.base)) {
+          d.exec("ROLLBACK");
+          return { applied: false, current };
+        }
+        if (change.action === "delete") {
+          await this.remove(change.table, change.rowId);
+        } else if (change.action === "create") {
+          if (!change.row) throw new Error("Sync create requires a row");
+          await this.insert(change.table, {
+            ...cleanRow(change.table, change.row),
+            id: change.rowId,
+            created_at: change.row["created_at"],
+          });
+        } else {
+          if (!change.row) throw new Error("Sync update requires a row");
+          await this.update(change.table, change.rowId, cleanRow(change.table, change.row));
+        }
+        d.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
+          change.id,
+          userId,
+          new Date().toISOString(),
+        );
+        d.exec("COMMIT");
+        return { applied: true, current: null };
+      } catch (error) {
+        d.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async deleteSyncOperations(userId) {
+      (await db()).prepare("DELETE FROM app_sync_operations WHERE user_id = ?").run(userId);
+    },
     async getAll() {
       const d = await db();
       const out = {} as Record<string, unknown[]>;
-      for (const t of TABLE_NAMES) out[t] = d.prepare(`SELECT * FROM ${t} ORDER BY created_at`).all().map(normalize);
+      for (const t of TABLE_NAMES)
+        out[t] = d.prepare(`SELECT * FROM ${t} ORDER BY created_at`).all().map(normalize);
       return out as unknown as Workspace;
     },
     async insert(table, row) {
       const d = await db();
       const id = (row["id"] as string) || crypto.randomUUID();
-      const full = { ...row, id, created_at: new Date().toISOString() };
+      const full = { ...row, id, created_at: row["created_at"] ?? new Date().toISOString() };
       const keys = Object.keys(full);
-      d.prepare(`INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`).run(...keys.map((k) => toSql((full as Record<string, unknown>)[k])));
+      d.prepare(
+        `INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,
+      ).run(...keys.map((k) => toSql((full as Record<string, unknown>)[k])));
       return full;
     },
     async update(table, id, patch) {
       const d = await db();
       const keys = Object.keys(patch);
       if (!keys.length) return;
-      d.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(...keys.map((k) => toSql(patch[k])), id);
+      d.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(
+        ...keys.map((k) => toSql(patch[k])),
+        id,
+      );
     },
     async remove(table, id) {
       (await db()).prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
@@ -149,13 +268,18 @@ export function sqliteRepo(): Repo {
     },
     readFile: (p) => readSqliteFile(p),
     async readOcrSettings() {
-      const row = (await db()).prepare("SELECT value FROM app_settings WHERE key = ?").get("ocr_config");
+      const row = (await db())
+        .prepare("SELECT value FROM app_settings WHERE key = ?")
+        .get("ocr_config");
       return row ? String(row["value"]) : null;
     },
     async writeOcrSettings(value) {
       const d = await db();
       if (value === null) d.prepare("DELETE FROM app_settings WHERE key = ?").run("ocr_config");
-      else d.prepare("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run("ocr_config", value);
+      else
+        d.prepare(
+          "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        ).run("ocr_config", value);
     },
   };
 }
@@ -182,6 +306,31 @@ function normalize(row: Record<string, unknown>) {
 function toSql(v: unknown) {
   if (typeof v === "boolean") return v ? 1 : 0;
   return v ?? null;
+}
+
+function sameRecord(a: Record<string, unknown> | null, b: Record<string, unknown> | null) {
+  if (a === null || b === null) return a === b;
+  const canonical = (value: Record<string, unknown>) =>
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(value).sort(([left], [right]) => left.localeCompare(right)),
+      ),
+    );
+  return canonical(a) === canonical(b);
+}
+
+function serializeRow(row: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      value === null ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+        ? value
+        : String(value),
+    ]),
+  ) as Record<string, string | number | boolean | null>;
 }
 
 function safeName(n: string) {

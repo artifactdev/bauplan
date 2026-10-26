@@ -9,6 +9,7 @@ The full documentation is in the [`docs/`](docs/README.md) folder:
 - [Features](docs/features.md)
 - [Budget logic](docs/budget.md)
 - [Documents & text recognition (OCR)](docs/ocr.md)
+- [Installable app & offline use](docs/offline.md)
 - [Users & sign-in](docs/auth.md)
 - [Calendar subscription (iCal)](docs/calendar-feed.md)
 - [Architecture](docs/architecture.md)

@@ -192,6 +192,7 @@ function AccountLoader({ userId, children }: { userId: string; children: ReactNo
       setApplied(true);
     }
   }, [query.data, saving, apply]);
+  if (!navigator.onLine) return children;
   if (query.isError)
     return (
       <div role="alert" className="mx-auto max-w-md space-y-3 p-6">

@@ -13,6 +13,9 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { toast } from "sonner";
+import { logoutLocal } from "@/lib/auth.functions";
+import { clearPendingOfflineLogout, hasPendingOfflineLogout } from "@/lib/offline-store";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
@@ -82,15 +85,28 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: tr("Bauplan – Renovierung im Griff") },
-      { name: "description", content: tr("Budget, Angebote, Dokumente, Aufgaben und Termine deiner Renovierung an einem Ort.") },
+      {
+        name: "description",
+        content: tr(
+          "Budget, Angebote, Dokumente, Aufgaben und Termine deiner Renovierung an einem Ort.",
+        ),
+      },
+      { name: "theme-color", content: "#f8f7f4" },
       { property: "og:title", content: tr("Bauplan – Renovierung im Griff") },
-      { property: "og:description", content: tr("Budget, Angebote, Dokumente, Aufgaben und Termine deiner Renovierung an einem Ort.") },
+      {
+        property: "og:description",
+        content: tr(
+          "Budget, Angebote, Dokumente, Aufgaben und Termine deiner Renovierung an einem Ort.",
+        ),
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "apple-touch-icon", href: "/pwa-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
     ],
   }),
   shellComponent: RootShell,
@@ -118,7 +134,36 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { i18n: i18nInst } = useTranslation();
 
-  useEffect(() => { syncClientLanguage(); }, []);
+  useEffect(() => {
+    syncClientLanguage();
+  }, []);
+  useEffect(() => {
+    const finishOfflineLogout = async () => {
+      if (!navigator.onLine || !hasPendingOfflineLogout()) return;
+      try {
+        await logoutLocal();
+        clearPendingOfflineLogout();
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : tr("Die Abmeldung konnte nicht abgeschlossen werden."),
+        );
+      }
+    };
+    window.addEventListener("online", finishOfflineLogout);
+    void finishOfflineLogout();
+    return () => window.removeEventListener("online", finishOfflineLogout);
+  }, []);
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .catch((error: unknown) => {
+        console.error("Could not register the PWA service worker", error);
+        toast.error(tr("Die Offline-Funktion konnte nicht aktiviert werden."));
+      });
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

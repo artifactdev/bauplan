@@ -14,5 +14,15 @@
   "budgetSummary": "Budget overview",
   "budgetPattern": "Budget: diagonal pattern",
   "expectedPattern": "Expected: solid fill",
-  "paidPattern": "Paid: dotted pattern"
+  "paidPattern": "Paid: dotted pattern",
+  "online": "Online",
+  "offline": "Offline",
+  "pendingSync": "{{count}} pending",
+  "syncNow": "Sync changes now",
+  "syncConflicts": "{{count}} conflicts",
+  "syncConflictExplanation": "These items changed on the server. Choose which version to keep.",
+  "useServerVersion": "Use server version",
+  "keepOfflineChanges": "Keep offline changes",
+  "workspaceUnavailable": "The saved workspace is unavailable. Connect to the server and try again.",
+  "installApp": "Install app"
 }

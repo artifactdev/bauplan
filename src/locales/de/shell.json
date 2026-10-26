@@ -14,5 +14,15 @@
   "budgetSummary": "Budgetübersicht",
   "budgetPattern": "Budget: diagonales Muster",
   "expectedPattern": "Voraussichtlich: gefüllte Fläche",
-  "paidPattern": "Bezahlt: Punktmuster"
+  "paidPattern": "Bezahlt: Punktmuster",
+  "online": "Online",
+  "offline": "Offline",
+  "pendingSync": "{{count}} ausstehend",
+  "syncNow": "Änderungen jetzt synchronisieren",
+  "syncConflicts": "{{count}} Konflikte",
+  "syncConflictExplanation": "Diese Einträge wurden auf dem Server geändert. Entscheide, welche Version behalten wird.",
+  "useServerVersion": "Server verwenden",
+  "keepOfflineChanges": "Offline-Änderungen behalten",
+  "workspaceUnavailable": "Der gespeicherte Arbeitsbereich ist nicht verfügbar. Stelle eine Verbindung zum Server her und versuche es erneut.",
+  "installApp": "App installieren"
 }

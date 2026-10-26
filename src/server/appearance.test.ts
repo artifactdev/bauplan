@@ -69,10 +69,20 @@ describe("Account appearance SQLite persistence", () => {
     const id = await createUser({ email: "delete@example.test", role: "member" });
     await repo.writeAppearance(id, { palette: "blue", mode: "dark" });
     await repo.writeNavigation(id, DEFAULT_NAVIGATION);
+    db.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
+      "sync-delete-test",
+      id,
+      "2026-01-01T00:00:00.000Z",
+    );
     await deleteUser(id);
     expect(
       db.prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).get(id),
     ).toBeUndefined();
-    expect(db.prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).get(id)).toBeUndefined();
+    expect(
+      db.prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).get(id),
+    ).toBeUndefined();
+    expect(
+      db.prepare("SELECT * FROM app_sync_operations WHERE user_id = ?").get(id),
+    ).toBeUndefined();
   });
 });

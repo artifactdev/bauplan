@@ -1,7 +1,7 @@
 # Architecture
 
 ## Stack
-- **TanStack Start** (React 19, Vite 8, SSR + server functions), TypeScript, Tailwind CSS v4, shadcn/ui.
+- **TanStack Start** (React 19, Vite 8, SSR + server functions), TypeScript, Tailwind CSS v4, shadcn/ui, and `vite-plugin-pwa`.
 - Runs locally as a Node server, directly or in Docker.
 - App data, accounts, and settings are stored in **SQLite** (`node:sqlite`) under `DATA_DIR`; uploaded files are stored on the local filesystem under `UPLOADS_DIR`.
 - Optional OIDC sign-in can contact an identity provider only when explicitly configured.
@@ -20,6 +20,10 @@ Server functions (src/lib/*.functions.ts)
 SQLite repository (src/server/repo.ts)
 ```
 The entire project is loaded as a single "Workspace" object (all tables). For a private renovation project the amount of data is small, which keeps the interface simple.
+
+The service worker precaches the generic app shell and versioned static assets only; it excludes `/api/*` and does not cache authenticated workspace responses or private files. `src/lib/offline-store.ts` stores account-keyed workspace snapshots, queued row changes, and upload blobs in IndexedDB. The offline identity marker is browser-profile local and is set only after a successful online session check. The `_ws` route can use that marker and cached snapshot while disconnected.
+
+Queued row changes include the complete row seen before editing. The server applies each operation in a SQLite `BEGIN IMMEDIATE` transaction only if the current row still matches that base snapshot. `app_sync_operations` makes retries idempotent. A mismatch is retained as a conflict rather than overwritten; the user can discard it or explicitly rebase the local version. Uploads use a stable document ID so retries after a lost response do not create duplicate document rows. Sign-out clears the account's snapshot, changes, and queued files; pending work requires an explicit discard confirmation.
 
 ## Data model (`src/lib/schema.ts`)
 The single source of truth for tables and columns. The SQLite schema is generated from it; missing columns are added at startup using `ALTER TABLE`.

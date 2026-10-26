@@ -9,6 +9,9 @@ export const USER_NAVIGATION_DDL = `CREATE TABLE IF NOT EXISTS ${USER_NAVIGATION
 export const USER_APPEARANCE_DDL = `CREATE TABLE IF NOT EXISTS ${USER_APPEARANCE_TABLE} (
   user_id TEXT PRIMARY KEY, palette TEXT NOT NULL, mode TEXT NOT NULL
 )`;
+export const SYNC_OPERATIONS_DDL = `CREATE TABLE IF NOT EXISTS app_sync_operations (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, applied_at TEXT NOT NULL
+)`;
 
 export const TABLES = {
   projects: ["name", "address", "total_budget", "start_date", "end_date"],

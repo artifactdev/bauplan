@@ -209,6 +209,41 @@ export const deleteRow = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const syncWorkspaceChanges = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        changes: z
+          .array(
+            z.object({
+              id: z.string().min(1),
+              table: tableSchema,
+              action: z.enum(["create", "update", "delete"]),
+              rowId: z.string().min(1),
+              base: z.record(z.unknown()).nullable(),
+              row: z.record(z.unknown()).nullable(),
+            }),
+          )
+          .max(50),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const results = [];
+    for (const change of data.changes) {
+      const document =
+        change.table === "documents" && change.action === "delete"
+          ? (await context.repo.getAll()).documents.find((item) => item.id === change.rowId)
+          : undefined;
+      const result = await context.repo.applySyncChange(context.user.id, change);
+      if (result.applied && document?.storage_path)
+        await context.repo.deleteFile(document.storage_path);
+      results.push({ id: change.id, ...result });
+    }
+    return results;
+  });
+
 export const uploadDocument = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((d: unknown) => {
@@ -220,21 +255,48 @@ export const uploadDocument = createServerFn({ method: "POST" })
     return { file, meta };
   })
   .handler(async ({ context, data }) => {
+    const requestedId = typeof data.meta["id"] === "string" ? data.meta["id"] : undefined;
+    if (requestedId) {
+      const existing = (await context.repo.getAll()).documents.find(
+        (doc) => doc.id === requestedId,
+      );
+      if (existing) {
+        return {
+          id: existing.id,
+          storage_path: existing.storage_path ?? "",
+          created_at: existing.created_at ?? "",
+        };
+      }
+    }
     const bytes = new Uint8Array(await data.file.arrayBuffer());
     const mime = data.file.type || "application/octet-stream";
     const storage_path = await context.repo.putFile(data.file.name, mime, bytes);
-    const row = await context.repo.insert(
-      "documents",
-      cleanRow("documents", {
-        name: data.file.name,
-        category: "Sonstiges",
-        ...data.meta,
-        storage_path,
-        mime_type: mime,
-        size: data.file.size,
-      }),
-    );
-    return { id: String(row["id"]) };
+    const documentRow = cleanRow("documents", {
+      name: data.file.name,
+      category: "Sonstiges",
+      ...data.meta,
+      storage_path,
+      mime_type: mime,
+      size: data.file.size,
+    });
+    const createdAt =
+      typeof data.meta["created_at"] === "string" ? data.meta["created_at"] : undefined;
+    let row: Record<string, unknown>;
+    try {
+      row = await context.repo.insert("documents", {
+        ...documentRow,
+        ...(requestedId ? { id: requestedId } : {}),
+        ...(createdAt ? { created_at: createdAt } : {}),
+      });
+    } catch (error) {
+      await context.repo.deleteFile(storage_path);
+      throw error;
+    }
+    return {
+      id: String(row["id"]),
+      storage_path: String(row["storage_path"] ?? ""),
+      created_at: String(row["created_at"] ?? ""),
+    };
   });
 
 export const getFileUrl = createServerFn({ method: "POST" })
