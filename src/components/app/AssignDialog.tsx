@@ -70,6 +70,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
       title: ex?.title ?? ex?.summary ?? doc?.name ?? null,
       amount: ex?.amount ?? null,
       date: ex?.date ?? null,
+      payment_date: ex?.date ?? null,
       due_date: ex?.due_date ?? null,
       trade_id: trade?.id ?? doc?.trade_id ?? null,
       cost_item_id: doc?.cost_item_id ?? null,
@@ -92,6 +93,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
           { name: "amount", label: tr("Betrag brutto (€)"), type: "number", required: true },
           { name: "title", label: tr("Beschreibung"), required: true, full: true },
           { name: "date", label: tr("Datum"), type: "date" },
+          ...(target !== "angebot" ? [{ name: "payment_date", label: tr("Zahlungsdatum (Plan / Ist)"), type: "date" as const }] : []),
           ...(target === "rechnung" ? [{ name: "due_date", label: tr("Zahlbar bis"), type: "date" as const }] : []),
           ...(target === "ausgabe"
             ? [
@@ -109,9 +111,9 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
     if (!documentId) return;
     const base = { trade_id: v.trade_id ?? null, cost_item_id: v.cost_item_id ?? null, document_id: documentId };
     if (target === "ausgabe")
-      await create.mutateAsync({ table: "expenses", row: { ...base, title: v.title, vendor: v.vendor, amount: v.amount, expense_date: v.date, category: v.category, status: v.status, budget_pot_id: v["budget_pot_id"] ?? null } });
+      await create.mutateAsync({ table: "expenses", row: { ...base, title: v.title, vendor: v.vendor, amount: v.amount, expense_date: v.date, payment_date: v["payment_date"], category: v.category, status: v.status, budget_pot_id: v["budget_pot_id"] ?? null } });
     if (target === "rechnung")
-      await create.mutateAsync({ table: "invoices", row: { ...base, contractor: v.vendor, title: v.title, amount: v.amount, invoice_date: v.date, due_date: v.due_date, paid: !!v.paid, budget_pot_id: v["budget_pot_id"] ?? null } });
+      await create.mutateAsync({ table: "invoices", row: { ...base, contractor: v.vendor, title: v.title, amount: v.amount, invoice_date: v.date, due_date: v.due_date, payment_date: v["payment_date"], paid: !!v.paid, budget_pot_id: v["budget_pot_id"] ?? null } });
     if (target === "angebot")
       await create.mutateAsync({ table: "offers", row: { ...base, contractor: v.vendor, title: v.title, amount: v.amount, offer_date: v.date, status: "received" } });
     const category = target === "ausgabe" ? (ex?.doc_type === "rechnung" ? "Rechnung" : "Beleg") : target === "rechnung" ? "Rechnung" : target === "angebot" ? "Angebot" : CATEGORY_FOR[ex?.doc_type ?? "sonstiges"];

@@ -177,6 +177,7 @@ function ExpensesPage() {
           { name: "vendor", label: tr("Geschäft / Firma") },
           { name: "amount", label: tr("Betrag brutto (€)"), type: "number", required: true },
           { name: "expense_date", label: tr("Datum"), type: "date" },
+          { name: "payment_date", label: tr("Zahlungsdatum (Plan / Ist)"), type: "date" },
           { name: "category", label: tr("Kategorie"), type: "select", options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
           { name: "status", label: tr("Status"), type: "select", required: true, options: STATUS_OPTIONS },
           { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },

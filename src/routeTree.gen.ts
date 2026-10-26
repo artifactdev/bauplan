@@ -21,6 +21,7 @@ import { Route as WsDokumenteRouteImport } from './routes/_ws/dokumente'
 import { Route as WsEinstellungenRouteImport } from './routes/_ws/einstellungen'
 import { Route as WsKalenderRouteImport } from './routes/_ws/kalender'
 import { Route as WsKontakteRouteImport } from './routes/_ws/kontakte'
+import { Route as WsKreditRouteImport } from './routes/_ws/kredit'
 import { Route as WsSammlungenRouteImport } from './routes/_ws/sammlungen'
 import { Route as ApiFilesSplatRouteImport } from './routes/api/files.$'
 import { Route as ApiOidcCallbackRouteImport } from './routes/api/oidc/callback'
@@ -86,6 +87,11 @@ const WsKontakteRoute = WsKontakteRouteImport.update({
   path: '/kontakte',
   getParentRoute: () => WsRouteRoute,
 } as any)
+const WsKreditRoute = WsKreditRouteImport.update({
+  id: '/kredit',
+  path: '/kredit',
+  getParentRoute: () => WsRouteRoute,
+} as any)
 const WsSammlungenRoute = WsSammlungenRouteImport.update({
   id: '/sammlungen',
   path: '/sammlungen',
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/einstellungen': typeof WsEinstellungenRoute
   '/kalender': typeof WsKalenderRoute
   '/kontakte': typeof WsKontakteRoute
+  '/kredit': typeof WsKreditRoute
   '/sammlungen': typeof WsSammlungenRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/api/oidc/callback': typeof ApiOidcCallbackRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/einstellungen': typeof WsEinstellungenRoute
   '/kalender': typeof WsKalenderRoute
   '/kontakte': typeof WsKontakteRoute
+  '/kredit': typeof WsKreditRoute
   '/sammlungen': typeof WsSammlungenRoute
   '/': typeof WsIndexRoute
   '/api/files/$': typeof ApiFilesSplatRoute
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/_ws/einstellungen': typeof WsEinstellungenRoute
   '/_ws/kalender': typeof WsKalenderRoute
   '/_ws/kontakte': typeof WsKontakteRoute
+  '/_ws/kredit': typeof WsKreditRoute
   '/_ws/sammlungen': typeof WsSammlungenRoute
   '/_ws/': typeof WsIndexRoute
   '/api/files/$': typeof ApiFilesSplatRoute
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/einstellungen'
     | '/kalender'
     | '/kontakte'
+    | '/kredit'
     | '/sammlungen'
     | '/api/files/$'
     | '/api/oidc/callback'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/einstellungen'
     | '/kalender'
     | '/kontakte'
+    | '/kredit'
     | '/sammlungen'
     | '/'
     | '/api/files/$'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/_ws/einstellungen'
     | '/_ws/kalender'
     | '/_ws/kontakte'
+    | '/_ws/kredit'
     | '/_ws/sammlungen'
     | '/_ws/'
     | '/api/files/$'
@@ -322,6 +334,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WsKontakteRouteImport
       parentRoute: typeof WsRouteRoute
     }
+    '/_ws/kredit': {
+      id: '/_ws/kredit'
+      path: '/kredit'
+      fullPath: '/kredit'
+      preLoaderRoute: typeof WsKreditRouteImport
+      parentRoute: typeof WsRouteRoute
+    }
     '/_ws/sammlungen': {
       id: '/_ws/sammlungen'
       path: '/sammlungen'
@@ -369,6 +388,7 @@ interface WsRouteRouteChildren {
   WsEinstellungenRoute: typeof WsEinstellungenRoute
   WsKalenderRoute: typeof WsKalenderRoute
   WsKontakteRoute: typeof WsKontakteRoute
+  WsKreditRoute: typeof WsKreditRoute
   WsSammlungenRoute: typeof WsSammlungenRoute
   WsIndexRoute: typeof WsIndexRoute
 }
@@ -382,6 +402,7 @@ const WsRouteRouteChildren: WsRouteRouteChildren = {
   WsEinstellungenRoute: WsEinstellungenRoute,
   WsKalenderRoute: WsKalenderRoute,
   WsKontakteRoute: WsKontakteRoute,
+  WsKreditRoute: WsKreditRoute,
   WsSammlungenRoute: WsSammlungenRoute,
   WsIndexRoute: WsIndexRoute,
 }

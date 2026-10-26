@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { createRow, deleteRow, getWorkspace, updateRow, uploadDocument } from "@/lib/data.functions";
 import type { TableName, Workspace } from "@/lib/schema";
 
-const EMPTY: Workspace = { projects: [], trades: [], cost_items: [], offers: [], invoices: [], documents: [], tasks: [], events: [], expenses: [], ideas: [], contacts: [], budget_pots: [] };
+const EMPTY: Workspace = { projects: [], trades: [], cost_items: [], offers: [], invoices: [], documents: [], tasks: [], events: [], expenses: [], ideas: [], contacts: [], budget_pots: [], credit_terms: [], credit_repayments: [] };
 
 export function useWorkspace() {
   const q = useQuery({ queryKey: ["ws"], queryFn: () => getWorkspace() as Promise<Workspace> });

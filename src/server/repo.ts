@@ -3,7 +3,7 @@
 import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, USER_APPEARANCE_DDL, USER_APPEARANCE_TABLE, type TableName, type Workspace } from "@/lib/schema";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_DDL, USER_NAVIGATION_TABLE } from "@/lib/schema";
-import { navigationSchema, DEFAULT_NAVIGATION, type NavigationPreferences } from "@/lib/navigation";
+import { parseNavigation, navigationSchema, DEFAULT_NAVIGATION, type NavigationPreferences } from "@/lib/navigation";
 
 export interface Repo {
   readNavigation(userId: string): Promise<NavigationPreferences>;
@@ -82,7 +82,7 @@ export function sqliteRepo(): Repo {
   return {
     async readNavigation(userId) {
       const row = (await db()).prepare(`SELECT preferences FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).get(userId);
-      return row ? navigationSchema.parse(JSON.parse(String(row["preferences"]))) : navigationSchema.parse(DEFAULT_NAVIGATION);
+      return row ? parseNavigation(JSON.parse(String(row["preferences"]))) : navigationSchema.parse(DEFAULT_NAVIGATION);
     },
     async writeNavigation(userId, value) {
       const valid = navigationSchema.parse(value);

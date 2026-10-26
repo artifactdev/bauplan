@@ -49,6 +49,7 @@ const invoiceFields = (ws: Workspace): Field[] => [
   { name: "amount", label: tr("Betrag brutto (€)"), type: "number", required: true },
   { name: "invoice_date", label: tr("Rechnungsdatum"), type: "date" },
   { name: "due_date", label: tr("Zahlbar bis"), type: "date" },
+  { name: "payment_date", label: tr("Zahlungsdatum (Plan / Ist)"), type: "date" },
   { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
   { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
   { name: "document_id", label: tr("PDF / Dokument"), type: "select", options: docOptions(ws) },

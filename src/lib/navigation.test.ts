@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_NAVIGATION, NAV_PATHS, navigationSchema, visibleNavigation } from "./navigation";
+import {
+  DEFAULT_NAVIGATION,
+  NAV_PATHS,
+  navigationSchema,
+  parseNavigation,
+  visibleNavigation,
+} from "./navigation";
 
 describe("Navigation preferences", () => {
   it("keeps ordered visible pages, including an empty navigation", () => {
@@ -19,5 +25,13 @@ describe("Navigation preferences", () => {
       { ...DEFAULT_NAVIGATION, userId: "other" },
     ])
       expect(navigationSchema.safeParse(value).success).toBe(false);
+  });
+  it("adds the credit page to existing saved navigation preferences", () => {
+    const previous = NAV_PATHS.filter((path) => path !== "/kredit");
+    const parsed = parseNavigation({ order: [...previous].reverse(), hidden: ["/budget"] });
+    expect(parsed.order).toHaveLength(NAV_PATHS.length);
+    expect(parsed.order.slice(0, -1)).toEqual([...previous].reverse());
+    expect(parsed.order.at(-1)).toBe("/kredit");
+    expect(parsed.hidden).toEqual(["/budget"]);
   });
 });
