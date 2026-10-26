@@ -13,14 +13,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const MODE_ICONS = { light: Sun, dark: Moon, system: Monitor };
-const SWATCHES = { current: "#32674f", blue: "#1d4ed8", green: "#3f6212", violet: "#6d28d9" };
+const SWATCHES = { current: "#0e6375", blue: "#295cc5", green: "#176b50", violet: "#6d28d9" };
 
 export function AppearancePanel() {
   const { t } = useTranslation("appearance");
   const { appearance, saving, setAppearance } = useAppearance();
   return (
     <Panel title={t("title")}>
-      <fieldset disabled={saving} className="space-y-4">
+      <fieldset className="space-y-5" aria-describedby="appearance-account-hint">
         <legend className="sr-only">{t("title")}</legend>
         <fieldset>
           <legend className="mb-2 text-sm font-medium">{t("palette")}</legend>
@@ -28,31 +28,51 @@ export function AppearancePanel() {
             {PALETTES.map((palette) => (
               <label
                 key={palette}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-input p-3 text-sm has-[:checked]:ring-2 has-[:checked]:ring-ring"
+                className="theme-choice min-w-0 cursor-pointer rounded-xl border border-input p-3 text-sm has-[:checked]:ring-2 has-[:checked]:ring-ring has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-ring"
               >
-                <input
-                  type="radio"
-                  name="appearance-palette"
-                  value={palette}
-                  checked={appearance.palette === palette}
-                  onChange={() => setAppearance({ ...appearance, palette })}
-                  className="accent-primary"
-                />
                 <span
                   aria-hidden="true"
-                  className="h-5 w-5 rounded-full"
-                  style={{ backgroundColor: SWATCHES[palette] }}
-                />
-                {t(palette)}
+                  className="mb-3 flex h-16 overflow-hidden rounded-md border border-border bg-background"
+                >
+                  <span className="w-1/4 bg-sidebar p-1.5">
+                    <span
+                      className="mb-1 block h-1 rounded"
+                      style={{ backgroundColor: SWATCHES[palette] }}
+                    />
+                    <span className="block h-1 rounded bg-input" />
+                  </span>
+                  <span className="grid flex-1 grid-cols-2 gap-1.5 p-2">
+                    <span className="rounded bg-card" />
+                    <span className="rounded bg-card" />
+                    <span
+                      className="col-span-2 rounded opacity-70"
+                      style={{ backgroundColor: SWATCHES[palette] }}
+                    />
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="appearance-palette"
+                    value={palette}
+                    checked={appearance.palette === palette}
+                    onChange={() => setAppearance({ ...appearance, palette })}
+                    className="accent-primary"
+                  />
+                  {t(palette)}
+                </span>
               </label>
             ))}
           </div>
         </fieldset>
         <fieldset>
           <legend className="mb-2 text-sm font-medium">{t("mode")}</legend>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             {MODES.map((mode) => (
-              <label key={mode} className="flex cursor-pointer items-center gap-2 text-sm">
+              <label
+                key={mode}
+                className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-input px-3 text-sm has-[:checked]:bg-accent has-[:checked]:text-accent-foreground"
+              >
                 <input
                   type="radio"
                   name="appearance-mode"
@@ -67,19 +87,23 @@ export function AppearancePanel() {
           </div>
         </fieldset>
       </fieldset>
-      <p className="mt-3 text-xs text-muted-foreground">{t("accountHint")}</p>
-      {saving && (
-        <p role="status" className="mt-2 text-sm text-muted-foreground">
-          {t("saving")}
-        </p>
-      )}
+      <p id="appearance-account-hint" className="mt-4 text-sm text-muted-foreground">
+        {t("accountHint")}
+      </p>
+      <p
+        role="status"
+        aria-label={t("title")}
+        className="mt-2 min-h-5 text-sm text-muted-foreground"
+      >
+        {saving ? t("saving") : ""}
+      </p>
     </Panel>
   );
 }
 
 export function AppearanceModeMenu() {
   const { t } = useTranslation("appearance");
-  const { appearance, saving, setAppearance } = useAppearance();
+  const { appearance, setAppearance } = useAppearance();
   const Icon = MODE_ICONS[appearance.mode];
   return (
     <DropdownMenu>
@@ -87,7 +111,6 @@ export function AppearanceModeMenu() {
         <Button
           variant="ghost"
           size="icon"
-          disabled={saving}
           aria-label={t("quickMode", { mode: t(appearance.mode) })}
         >
           <Icon className="h-5 w-5" />
@@ -103,7 +126,7 @@ export function AppearanceModeMenu() {
           {MODES.map((mode) => {
             const ModeIcon = MODE_ICONS[mode];
             return (
-              <DropdownMenuRadioItem key={mode} value={mode} disabled={saving}>
+              <DropdownMenuRadioItem key={mode} value={mode} className="min-h-11">
                 <ModeIcon className="mr-2 h-4 w-4" />
                 {t(mode)}
               </DropdownMenuRadioItem>

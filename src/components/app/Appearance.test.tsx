@@ -95,7 +95,7 @@ describe("Appearance account controller and settings", () => {
     mount();
     fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
     expect(document.documentElement).toHaveClass("dark");
-    expect(screen.getByRole("radio", { name: "Green" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Green" })).toBeEnabled();
     expect(JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY)!)).toEqual({
       palette: "blue",
       mode: "system",
@@ -104,7 +104,9 @@ describe("Appearance account controller and settings", () => {
       expect(saveAppearance).toHaveBeenCalledWith({ data: { palette: "blue", mode: "dark" } }),
     );
     await act(async () => complete({ palette: "blue", mode: "dark" }));
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Green" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
+    );
     fireEvent.click(screen.getByRole("radio", { name: "Green" }));
     await waitFor(() =>
       expect(saveAppearance).toHaveBeenLastCalledWith({ data: { palette: "green", mode: "dark" } }),
@@ -120,7 +122,9 @@ describe("Appearance account controller and settings", () => {
     expect(screen.getByTestId("resolved")).toHaveTextContent("dark");
     expect(saveAppearance).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("radio", { name: "Light" }));
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Light" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
+    );
     act(() => {
       dark = false;
       mediaListeners.forEach((listener) => listener());
@@ -176,7 +180,9 @@ describe("Appearance account controller and settings", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
     vi.mocked(getAppearance).mockResolvedValue({ palette: "violet", mode: "light" });
     // Begin a separate delayed write after the first save finishes.
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Green" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
+    );
     vi.mocked(saveAppearance).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -210,5 +216,55 @@ describe("Appearance account controller and settings", () => {
       expect(saveAppearance).toHaveBeenCalledWith({ data: { palette: "blue", mode: "dark" } }),
     );
     expect(warning).toHaveBeenCalled();
+  });
+  it("keeps radio focus and coalesces rapid keyboard choices without parallel writes", async () => {
+    let complete!: (value: Appearance) => void;
+    vi.mocked(saveAppearance).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    mount();
+    const green = await screen.findByRole("radio", { name: "Green" });
+    green.focus();
+    fireEvent.click(green);
+    await waitFor(() => expect(saveAppearance).toHaveBeenCalledTimes(1));
+    expect(green).toHaveFocus();
+    expect(green).toBeEnabled();
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Violet" }));
+    expect(saveAppearance).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.dataset["theme"]).toBe("violet");
+    await act(async () => complete({ palette: "green", mode: "system" }));
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
+    );
+    expect(saveAppearance).toHaveBeenCalledTimes(2);
+    expect(saveAppearance).toHaveBeenLastCalledWith({ data: { palette: "violet", mode: "dark" } });
+    expect(JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY)!)).toEqual({
+      palette: "violet",
+      mode: "dark",
+    });
+  });
+  it("restores the latest confirmed save when a queued write fails", async () => {
+    let complete!: (value: Appearance) => void;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(saveAppearance)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            complete = resolve;
+          }),
+      )
+      .mockRejectedValueOnce(new Error("offline"));
+    mount();
+    fireEvent.click(await screen.findByRole("radio", { name: "Green" }));
+    await waitFor(() => expect(saveAppearance).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+    await act(async () => complete({ palette: "green", mode: "system" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.getByRole("radio", { name: "Green" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "System" })).toBeChecked();
   });
 });

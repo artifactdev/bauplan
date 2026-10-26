@@ -1,0 +1,16 @@
+{
+  "skip": "Skip to content",
+  "workspace": "Workspace",
+  "navigation": "Main navigation",
+  "accountMenu": "Account menu",
+  "editProject": "Edit project",
+  "more": "More",
+  "personal": "Personal preferences",
+  "project": "Project settings",
+  "administration": "Administration",
+  "settingsHint": "Your preferences, project configuration, and administration in one place.",
+  "budgetSummary": "Budget overview",
+  "budgetPattern": "Budget: diagonal pattern",
+  "expectedPattern": "Expected: solid fill",
+  "paidPattern": "Paid: dotted pattern"
+}

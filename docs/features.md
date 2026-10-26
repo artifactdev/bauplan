@@ -1,12 +1,13 @@
 # Features
 
-All areas are in the left navigation (mobile: bottom bar). All approved users work on the **same project**.
+All areas are in the left navigation. On mobile, the bottom bar offers Overview, Budget, Documents, Tasks, and a **More** menu for the remaining areas. The shared top bar provides appearance and account controls. All approved users work on the **same project**.
 
 ## Overview (dashboard)
 - Metrics: total budget, expected costs, remaining budget, already paid.
 - Open/overdue invoices, upcoming events and tasks.
 - Quick actions: upload a document (also via camera), create a task or cost item.
 - On the very first visit without a project: create a project (name, address, budget, time period).
+- Edit the shared project's name, address, total budget, and dates from the sidebar project card or the account menu (also on mobile). The Budget page opens the same editor.
 
 ## Budget
 - **Trades** (e.g. roofing, electrical) with their own budget and color.
@@ -40,6 +41,7 @@ General expenses such as hardware store receipts or fees.
 ## Documents
 - Upload images and PDFs (up to 25 MB), also directly from the camera.
 - Categories, tags, description; assign to trade, task, or cost item.
+- Responsive document rows keep filenames readable, put related records on separate lines, and place actions in a dedicated lower toolbar on smaller screens. Desktop keeps actions beside the document details; touch targets remain at least 44 × 44 CSS pixels.
 - After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, invoice, quote, or just store). See [ocr.md](ocr.md).
 
 ## Tasks
@@ -69,5 +71,6 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 - Account and sign-out; storage mode display.
 - **Language:** German or English, chosen during setup or in Settings; saved per browser.
 - **Appearance:** Current, Blue, Green, or Violet palette, independently combined with Light, Dark, or System mode (default: Current + System). Settings has palette previews and mode controls; the desktop/mobile header has a quick mode menu. Changes save automatically per approved user account and synchronize on sign-in, reload, and window focus. System follows each device's own OS preference. The browser remembers the last appearance for the sign-in/setup screens; the signed-in account always takes precedence. Failed saves restore the previous choice and display an error.
+- **Visual design and accessibility:** coordinated neutral light/charcoal dark surfaces, restrained accents, distinct control boundaries, and separate readable status colors. Settings groups personal, project, and administrative options. Theme controls retain keyboard focus while saves are serialized and rapid choices are coalesced; a failed save restores the latest confirmed preference. Visible focus outlines, reduced-motion support, forced-colors selection outlines, and labeled/patterned budget chart series support non-pointer and non-color-dependent use.
 - Admins only: user management, calendar subscription, OIDC sign-in, and shared OCR settings.
 - **OCR:** select self-hosted Tesseract or Docling Serve, service URL, optional encrypted API key, recognition language, and a synthetic processing test. See [OCR configuration and destination policy](ocr.md).

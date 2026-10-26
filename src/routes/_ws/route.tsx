@@ -1,7 +1,8 @@
 import { tr } from "@/i18n";
-import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
-import { Bookmark, Contact as ContactIcon, CalendarDays, FileText, ShoppingCart, Hammer, LayoutDashboard, ListChecks, Receipt, Settings, Wallet } from "lucide-react";
+import { Bookmark, Contact as ContactIcon, CalendarDays, FileText, ShoppingCart, Hammer, LayoutDashboard, ListChecks, Receipt, Settings, Wallet, MoreHorizontal, UserRound, LogOut, Pencil } from "lucide-react";
 import { getBackendInfo } from "@/lib/data.functions";
 import { getAuthState, logoutLocal } from "@/lib/auth.functions";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -11,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
 import { AppearanceModeMenu } from "@/components/app/AppearanceControls";
+import { ProjectDialog } from "@/components/app/ProjectDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_ws")({
   ssr: false,
@@ -61,66 +64,111 @@ function Pending({ email }: { email: string }) {
 }
 
 function Shell() {
+  const { t } = useTranslation("shell");
+  const { auth } = Route.useRouteContext();
   const { ws, isLoading } = useWorkspace();
   const project = ws.projects[0];
+  const [projectOpen, setProjectOpen] = useState(false);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const primaryNav = NAV.filter((n) => ["/", "/budget", "/dokumente", "/aufgaben"].includes(n.to));
+  const secondaryNav = NAV.filter((n) => !primaryNav.includes(n));
+  const moreActive = secondaryNav.some((n) => n.to === pathname) || pathname === "/einstellungen";
 
   return (
     <div className="min-h-screen md:flex">
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-sidebar p-4 text-sidebar-foreground md:flex">
-        <div className="mb-8 flex items-center gap-2 px-2 font-display text-lg font-semibold text-sidebar-accent-foreground">
-          <Hammer className="h-5 w-5 text-sidebar-primary" /> {tr("Bauplan")}
+      <a href="#main-content" className="sr-only z-50 rounded-lg bg-popover p-3 text-popover-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-4">{t("skip")}</a>
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground md:flex">
+        <div className="mb-7 flex items-center gap-3 px-3 font-display text-lg font-semibold text-sidebar-accent-foreground">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Hammer className="h-5 w-5" /></span> {tr("Bauplan")}
         </div>
-        <nav className="grid gap-1">
+        <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
+        <nav aria-label={t("navigation")} className="grid gap-1">
           {[...NAV, { to: "/einstellungen", label: tr("Einstellungen"), icon: Settings } as const].map((n) => (
             <Link
               key={n.to}
               to={n.to}
               activeOptions={{ exact: n.to === "/" }}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
-              activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground font-medium" }}
+              className="flex min-h-11 items-center gap-3 rounded-lg border-l-2 border-transparent px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
+              activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground font-semibold", style: { borderLeftColor: "var(--primary)" } }}
             >
               <n.icon className="h-4 w-4" /> {n.label}
             </Link>
           ))}
         </nav>
         {project && (
-          <div className="mt-auto rounded-lg bg-sidebar-accent p-3 text-xs">
-            <div className="font-medium text-sidebar-accent-foreground">{project.name}</div>
-            {project.address && <div className="mt-0.5 opacity-70">{project.address}</div>}
-          </div>
+          <button
+            type="button"
+            aria-label={t("editProject")}
+            onClick={() => setProjectOpen(true)}
+            className="mt-auto flex w-full shrink-0 items-start gap-3 rounded-lg border border-sidebar-border p-3 text-left text-sm transition-colors hover:bg-sidebar-accent"
+          >
+            <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+              <span className="block font-medium text-sidebar-accent-foreground">{project.name}</span>
+              {project.address && <span className="mt-1 block text-xs">{project.address}</span>}
+            </span>
+            <Pencil className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          </button>
         )}
       </aside>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur md:hidden">
-        <div className="flex items-center gap-2 font-display font-semibold">
-          <Hammer className="h-5 w-5 text-primary" /> {tr("Bauplan")}
-        </div>
-        <div className="flex items-center gap-2">
-          <AppearanceModeMenu />
-          <Link to="/einstellungen" aria-label={tr("Einstellungen")}><Settings className="h-5 w-5 text-muted-foreground" /></Link>
-        </div>
-      </header>
+      <div className="min-w-0 flex-1">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-sidebar px-4 md:px-8">
+          <div className="min-w-0">
+            <span className="flex items-center gap-2 font-semibold md:hidden"><Hammer className="h-5 w-5 text-primary" />{tr("Bauplan")}</span>
+            <span className="hidden truncate text-sm text-muted-foreground md:block">{project?.name ?? t("workspace")}</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <AppearanceModeMenu />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" aria-label={t("accountMenu")} className="gap-2 px-3">
+                  <UserRound className="h-5 w-5" />
+                  <span className="hidden max-w-40 truncate text-sm md:block">{auth.user?.name || auth.user?.email}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {project && <DropdownMenuItem className="min-h-11" onSelect={() => setProjectOpen(true)}><Pencil />{t("editProject")}</DropdownMenuItem>}
+                <DropdownMenuItem asChild className="min-h-11"><Link to="/einstellungen"><Settings />{tr("Einstellungen")}</Link></DropdownMenuItem>
+                <DropdownMenuItem className="min-h-11" onSelect={() => void signOut()}><LogOut />{tr("Abmelden")}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+        <main id="main-content" tabIndex={-1} className="min-w-0 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-10 md:pt-8">
+          <div className="mx-auto min-w-0 max-w-7xl">
+            {isLoading ? <p className="text-sm text-muted-foreground">{tr("Lädt…")}</p> : project ? <Outlet /> : <ProjectSetup />}
+          </div>
+        </main>
+      </div>
 
-      <main className="min-w-0 flex-1 px-4 pb-24 pt-5 md:px-8 md:pb-10 md:pt-8">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-2 hidden justify-end md:flex"><AppearanceModeMenu /></div>
-          {isLoading ? <p className="text-sm text-muted-foreground">{tr("Lädt…")}</p> : project ? <Outlet /> : <ProjectSetup />}
-        </div>
-      </main>
-
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-9 border-t bg-card md:hidden">
-        {NAV.map((n) => (
+      <nav aria-label={t("navigation")} className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
+        {primaryNav.map((n) => (
           <Link
             key={n.to}
             to={n.to}
             activeOptions={{ exact: n.to === "/" }}
-            className="flex flex-col items-center gap-0.5 py-2 text-[10px] text-muted-foreground"
-            activeProps={{ className: "text-primary font-medium" }}
+            className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-0.5 py-2 text-xs text-muted-foreground"
+            activeProps={{ className: "bg-accent text-accent-foreground font-semibold" }}
           >
             <n.icon className="h-5 w-5" /> {n.label}
           </Link>
         ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={cn("flex min-h-16 flex-col items-center justify-center gap-1 py-2 text-xs text-muted-foreground", moreActive && "font-medium text-primary")}>
+              <MoreHorizontal className="h-5 w-5" />{t("more")}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" sideOffset={12}>
+            {[...secondaryNav, { to: "/einstellungen", label: tr("Einstellungen"), icon: Settings } as const].map((n) => (
+              <DropdownMenuItem asChild key={n.to} className="min-h-11">
+                <Link to={n.to}><n.icon />{n.label}</Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
+      {project && <ProjectDialog project={project} open={projectOpen} onOpenChange={setProjectOpen} />}
     </div>
   );
 }

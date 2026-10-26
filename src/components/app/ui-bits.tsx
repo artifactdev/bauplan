@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string | undefined; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-7 flex min-w-0 flex-wrap items-center justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold md:text-3xl">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 
 export function Panel({ title, action, children, className }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-xl border bg-card p-4 shadow-card md:p-5", className)}>
+    <section className={cn("min-w-0 rounded-xl bg-card p-5 shadow-card md:p-6", className)}>
       {(title || action) && (
         <div className="mb-3 flex items-center justify-between gap-2">
           {title && <h2 className="text-base font-semibold">{title}</h2>}
@@ -30,10 +30,10 @@ export function Panel({ title, action, children, className }: { title?: string; 
 
 const tones = {
   neutral: "bg-muted text-muted-foreground",
-  success: "bg-success/15 text-success",
-  warning: "bg-warning/25 text-warning-foreground dark:text-warning",
-  danger: "bg-destructive/12 text-destructive",
-  info: "bg-info/12 text-info",
+  success: "bg-success-subtle text-success",
+  warning: "bg-warning-subtle text-warning-foreground",
+  danger: "bg-destructive-subtle text-destructive",
+  info: "bg-info-subtle text-info",
   primary: "bg-accent text-accent-foreground",
 };
 

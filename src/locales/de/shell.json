@@ -1,0 +1,16 @@
+{
+  "skip": "Zum Inhalt springen",
+  "workspace": "Arbeitsbereich",
+  "navigation": "Hauptnavigation",
+  "accountMenu": "Kontomenü",
+  "editProject": "Projekt bearbeiten",
+  "more": "Mehr",
+  "personal": "Persönliche Einstellungen",
+  "project": "Projekteinstellungen",
+  "administration": "Administration",
+  "settingsHint": "Deine Darstellung, Projektkonfiguration und Administration an einem Ort.",
+  "budgetSummary": "Budgetübersicht",
+  "budgetPattern": "Budget: diagonales Muster",
+  "expectedPattern": "Voraussichtlich: gefüllte Fläche",
+  "paidPattern": "Bezahlt: Punktmuster"
+}

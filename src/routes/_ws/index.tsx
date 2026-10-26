@@ -78,26 +78,26 @@ function Dashboard() {
         </Panel>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label={tr("Gesamtbudget")} value={eur(s.budget)} />
         <Kpi label={tr("Voraussichtliche Kosten")} value={eur(s.expected)} hint={s.remaining >= 0 ? `${eur(s.remaining)} Puffer` : `${eur(-s.remaining)} über Budget`} tone={s.remaining < 0 ? "danger" : undefined} />
         <Kpi label={tr("Bezahlt")} value={eur(s.paid)} hint={s.open > 0 ? `${eur(s.open)} offene Rechnungen` : tr("Keine offenen Rechnungen")} />
         <Kpi label={tr("Fortschritt")} value={`${progress} %`} hint={`${done} von ${ws.tasks.length} Aufgaben erledigt`} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-6 grid min-w-0 items-start gap-5 lg:grid-cols-3">
         <Panel title={tr("Budget")} className="lg:col-span-2" action={<Link to="/budget" className="text-sm text-primary hover:underline">{tr("Details")}</Link>}>
           <div className="mb-4">
-            <div className="mb-1 flex justify-between text-sm"><span>Voraussichtlich {eur(s.expected)}</span><span className="text-muted-foreground">von {eur(s.budget)}</span></div>
+            <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm"><span>Voraussichtlich {eur(s.expected)}</span><span className="text-muted-foreground">von {eur(s.budget)}</span></div>
             <Bar value={s.expected} max={s.budget} tone={budgetTone} />
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular">
               <span>Geplant {eur(s.planned)}</span><span>Beauftragt {eur(s.committed)}</span><span>Bezahlt {eur(s.paid)}</span>
             </div>
           </div>
-          <div className="grid gap-3">
+          <div className="mt-6 grid gap-5">
             {s.trades.map((t) => (
               <div key={t.id}>
-                <div className="mb-1 flex justify-between text-sm"><span>{t.name}</span><span className="tabular text-muted-foreground">{eur(t.expected)} / {eur(t.budget)}</span></div>
+                <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm"><span>{t.name}</span><span className="tabular text-muted-foreground">{eur(t.expected)} / {eur(t.budget)}</span></div>
                 <Bar value={t.expected} max={t.budget} tone={t.deviation > 0 ? "danger" : "primary"} />
               </div>
             ))}
@@ -107,7 +107,7 @@ function Dashboard() {
 
         <div className="grid min-w-0 content-start gap-4">
           {(overdue.length > 0 || overBudget.length > 0) && (
-            <Panel title={tr("Achtung")} className="border-destructive/30">
+            <Panel title={tr("Achtung")} className="border-l-2 border-destructive">
               <ul className="grid gap-2 text-sm">
                 {overdue.map((t) => (
                   <li key={t.id} className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" /><span><b className="font-medium">{t.title}</b> überfällig seit {fmtDate(t.due_date)}</span></li>
@@ -133,7 +133,7 @@ function Dashboard() {
         </div>
       </div>
 
-      <Panel title={tr("Offene Aufgaben")} className="mt-4" action={<Link to="/aufgaben" className="text-sm text-primary hover:underline">{tr("Alle")}</Link>}>
+      <Panel title={tr("Offene Aufgaben")} className="mt-6" action={<Link to="/aufgaben" className="text-sm text-primary hover:underline">{tr("Alle")}</Link>}>
         <ul className="divide-y">
           {open.slice(0, 6).map((t) => {
             const od = isOverdue(t.due_date, false);
@@ -159,10 +159,10 @@ function Dashboard() {
 
 function Kpi({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "danger" | undefined }) {
   return (
-    <div className="rounded-xl border bg-card p-4 shadow-card">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-1 font-display text-2xl font-semibold tabular ${tone === "danger" ? "text-destructive" : ""}`}>{value}</div>
-      {hint && <div className={`mt-0.5 text-xs ${tone === "danger" ? "text-destructive" : "text-muted-foreground"}`}>{hint}</div>}
+    <div className="min-w-0 rounded-xl bg-card p-5 shadow-card md:p-6">
+      <div className="text-sm font-medium text-muted-foreground">{label}</div>
+      <div className={`mt-3 font-display text-3xl font-semibold tracking-tight tabular ${tone === "danger" ? "text-destructive" : ""}`}>{value}</div>
+      {hint && <div className={`mt-2 text-sm ${tone === "danger" ? "text-destructive" : "text-muted-foreground"}`}>{hint}</div>}
     </div>
   );
 }

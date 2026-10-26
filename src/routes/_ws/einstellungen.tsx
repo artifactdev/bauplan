@@ -17,6 +17,7 @@ import { LanguageSelect } from "@/components/app/LanguageSelect";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { OcrSettingsPanel } from "@/components/app/OcrSettingsPanel";
 import { AppearancePanel } from "@/components/app/AppearanceControls";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
   head: () => ({
@@ -33,39 +34,57 @@ export const Route = createFileRoute("/_ws/einstellungen")({
 const ROLE_LABEL = { admin: "Admin", member: "Mitglied", pending: "Wartet" } as const;
 
 function SettingsPage() {
+  const { t } = useTranslation("shell");
   const { backend, auth } = Route.useRouteContext();
   const isAdmin = auth.user?.role === "admin";
   return (
     <>
-      <PageHeader title={tr("Einstellungen")} />
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title={tr("Konto")}>
-          <p className="text-sm">{auth.user?.name || auth.user?.email}</p>
-          <p className="mb-3 text-xs text-muted-foreground">{auth.user?.email} · {tr(ROLE_LABEL[auth.user?.role ?? "member"])}</p>
-          <Button variant="outline" onClick={() => signOut()}><LogOut className="h-4 w-4" /> {tr("Abmelden")}</Button>
-        </Panel>
-        <Panel title={tr("Sprache")}>
-          <LanguageSelect />
-          <p className="mt-2 text-xs text-muted-foreground">{tr("Die Sprache wird in diesem Browser gespeichert.")}</p>
-        </Panel>
-        <AppearancePanel />
-        <Panel title={tr("Datenspeicher")}>
-          <div className="flex gap-3 rounded-lg border border-primary bg-accent/40 p-3">
-            <Database className="h-5 w-5 text-primary" />
-            <div className="flex-1">
-              <div className="font-medium">{tr("SQLite (selbst gehostet)")}</div>
-              <p className="text-sm text-muted-foreground">{tr("Daten werden lokal in SQLite gespeichert.")}</p>
-              <p className="mt-2 text-xs text-muted-foreground">{tr("Datenbank:")} <code>{backend.dataDir}</code></p>
-              <p className="text-xs text-muted-foreground">{tr("Dokumente:")} <code>{backend.uploadsDir}</code></p>
-            </div>
+      <PageHeader title={tr("Einstellungen")} subtitle={t("settingsHint")} />
+      <section aria-labelledby="personal-settings" className="mb-8">
+        <h2 id="personal-settings" className="mb-4 text-sm font-semibold text-muted-foreground">{t("personal")}</h2>
+        <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
+          <AppearancePanel />
+          <div className="grid min-w-0 gap-5">
+            <Panel title={tr("Konto")}>
+              <p className="text-sm">{auth.user?.name || auth.user?.email}</p>
+              <p className="mb-3 text-xs text-muted-foreground">{auth.user?.email} · {tr(ROLE_LABEL[auth.user?.role ?? "member"])}</p>
+              <Button variant="outline" onClick={() => signOut()}><LogOut className="h-4 w-4" /> {tr("Abmelden")}</Button>
+            </Panel>
+            <Panel title={tr("Sprache")}>
+              <LanguageSelect />
+              <p className="mt-2 text-xs text-muted-foreground">{tr("Die Sprache wird in diesem Browser gespeichert.")}</p>
+            </Panel>
           </div>
-        </Panel>
-        <PaymentSourcesPanel />
-        {isAdmin && <UsersPanel selfId={auth.user!.id} />}
-        {isAdmin && <CalendarFeedPanel />}
-        {isAdmin && <OidcPanel />}
-        {isAdmin && <OcrSettingsPanel />}
-      </div>
+        </div>
+      </section>
+      <section aria-labelledby="project-settings" className="mb-8">
+        <h2 id="project-settings" className="mb-4 text-sm font-semibold text-muted-foreground">{t("project")}</h2>
+        <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
+          <Panel title={tr("Datenspeicher")}>
+            <div className="flex gap-3 rounded-lg border border-primary bg-accent/40 p-3">
+              <Database className="h-5 w-5 shrink-0 text-primary" />
+              <div className="flex-1">
+                <div className="font-medium">{tr("SQLite (selbst gehostet)")}</div>
+                <p className="text-sm text-muted-foreground">{tr("Daten werden lokal in SQLite gespeichert.")}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{tr("Datenbank:")} <code>{backend.dataDir}</code></p>
+                <p className="text-xs text-muted-foreground">{tr("Dokumente:")} <code>{backend.uploadsDir}</code></p>
+              </div>
+            </div>
+          </Panel>
+          <PaymentSourcesPanel />
+        </div>
+      </section>
+      {isAdmin && (
+        <section aria-labelledby="admin-settings">
+          <h2 id="admin-settings" className="mb-4 text-sm font-semibold text-muted-foreground">{t("administration")}</h2>
+          <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <UsersPanel selfId={auth.user!.id} />
+            <CalendarFeedPanel />
+            <OidcPanel />
+            <OcrSettingsPanel />
+          </div>
+        </section>
+      )}
     </>
   );
 }

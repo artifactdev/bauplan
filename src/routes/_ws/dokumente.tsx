@@ -91,21 +91,25 @@ function DocsPage() {
 
       <Panel>
         <ul className="divide-y">
-          {docs.map((d) => (
-            <li key={d.id} className="flex flex-wrap items-center gap-3 py-3">
-              <DocIcon mime={d.mime_type} />
-              <div className="min-w-0 flex-1">
-                <button className="block max-w-full truncate text-left font-medium hover:underline" onClick={() => open(d, "preview")}>{d.name}</button>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          {docs.map((d) => {
+            const related = links(d);
+            return (
+            <li key={d.id} className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[2rem_minmax(0,1fr)_auto]">
+              <div className="pt-1"><DocIcon mime={d.mime_type} /></div>
+              <div className="min-w-0">
+                <button className="block max-w-full text-left text-sm font-medium leading-6 [overflow-wrap:anywhere] hover:underline lg:text-base" onClick={() => open(d, "preview")}>{d.name}</button>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-muted-foreground">
                   <Pill tone="primary">{d.category ? tr(d.category) : ""}</Pill>
                   <span>{fileSize(d.size)}</span>
                   <span>· {fmtDate(d.created_at ?? null)}</span>
-                  {links(d).map((l) => <span key={l}>· {l}</span>)}
                 </div>
-                {d.tags && <div className="mt-1 flex flex-wrap gap-1">{d.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => <Pill key={t}>#{t}</Pill>)}</div>}
-                {d.description && <p className="mt-1 text-xs text-muted-foreground">{d.description}</p>}
+                {related.length > 0 && <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                  {related.map((l) => <li key={l} className="[overflow-wrap:anywhere]">{l}</li>)}
+                </ul>}
+                {d.tags && <div className="mt-2 flex flex-wrap gap-1">{d.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => <span key={t} className="max-w-full rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">#{t}</span>)}</div>}
+                {d.description && <p className="mt-2 text-sm text-muted-foreground">{d.description}</p>}
               </div>
-              <div className="flex">
+              <div className="col-span-2 flex flex-wrap items-center justify-end gap-1 border-t border-border pt-2 lg:col-span-1 lg:border-0 lg:pt-0">
                 {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
                   <Button size="icon" variant="ghost" aria-label={tr("Inhalt erkennen und zuordnen")} title={tr("Inhalt erkennen und zuordnen")} onClick={() => setAssignId(d.id)}><ScanText className="h-4 w-4" /></Button>
                 )}
@@ -115,7 +119,8 @@ function DocsPage() {
                 <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(`„${d.name}“ löschen?`) && remove.mutate({ table: "documents", id: d.id })}><Trash2 className="h-4 w-4" /></Button>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
         {!docs.length && <Empty>{ws.documents.length ? tr("Keine Treffer.") : tr("Noch keine Dokumente – lade Angebote, Pläne oder Fotos hoch.")}</Empty>}
       </Panel>

@@ -46,6 +46,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [prefersDark, setPrefersDark] = useState(false);
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
+  const queued = useRef<Appearance | null>(null);
   const current = useRef(appearance);
   const account = useRef<string | null>(null);
   const generation = useRef(0);
@@ -75,29 +76,40 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
   const setAppearance = (value: Appearance) => {
     const userId = account.current;
-    if (!userId || busy.current) return;
+    if (!userId) return;
     const previous = current.current;
     const version = generation.current;
-    busy.current = true;
-    setSaving(true);
     current.current = value;
     setValue(value);
     applyAppearance(value, window.matchMedia("(prefers-color-scheme: dark)").matches);
+    queued.current = value;
+    if (busy.current) return;
+    busy.current = true;
+    setSaving(true);
     void (async () => {
+      let confirmed = previous;
       try {
         await queryClient.cancelQueries({ queryKey: ["appearance", userId] });
-        const saved = await saveAppearance({ data: value });
-        if (version !== generation.current) return;
-        queryClient.setQueryData(["appearance", userId], saved);
-        apply(saved);
+        while (queued.current && version === generation.current) {
+          const next = queued.current;
+          queued.current = null;
+          const saved = await saveAppearance({ data: next });
+          if (version !== generation.current) return;
+          confirmed = saved;
+          queryClient.setQueryData(["appearance", userId], saved);
+          if (!queued.current) apply(saved);
+        }
       } catch (error) {
         console.error("Could not save appearance", error);
         if (version !== generation.current) return;
-        apply(previous);
+        queued.current = null;
+        queryClient.setQueryData(["appearance", userId], confirmed);
+        apply(confirmed);
         toast.error(t("saveError"));
       } finally {
         if (version === generation.current) {
           busy.current = false;
+          queued.current = null;
           setSaving(false);
         }
       }

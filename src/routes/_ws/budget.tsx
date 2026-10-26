@@ -1,6 +1,7 @@
 import { tr } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Bar as RBar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -9,6 +10,7 @@ import { eur } from "@/lib/format";
 import { tradeName } from "@/lib/options";
 import { Bar, Empty, PageHeader, Panel } from "@/components/app/ui-bits";
 import { EntityDialog } from "@/components/app/EntityDialog";
+import { ProjectDialog } from "@/components/app/ProjectDialog";
 import { QuickCost } from "@/components/app/quick-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -26,6 +28,8 @@ export const Route = createFileRoute("/_ws/budget")({
 });
 
 function BudgetPage() {
+  const { t } = useTranslation("shell");
+  const patternId = useId().replace(/:/g, "");
   const { ws } = useWorkspace();
   const { create, update, remove } = useMutations();
   const s = useMemo(() => summarize(ws), [ws]);
@@ -67,9 +71,19 @@ function BudgetPage() {
         </Panel>
         <Panel title={tr("Gewerke im Vergleich")} className="lg:col-span-2">
           {chart.length ? (
-            <div className="h-64">
+            <div className="h-64" role="group" aria-label={t("budgetSummary")}>
               <ResponsiveContainer>
-                <BarChart data={chart} margin={{ left: 10 }}>
+                <BarChart data={chart} margin={{ left: 10 }} accessibilityLayer>
+                  <defs>
+                    <pattern id={`${patternId}-budget`} width="6" height="6" patternUnits="userSpaceOnUse">
+                      <rect width="6" height="6" fill="var(--chart-5)" />
+                      <path d="M-1 1L1-1M0 6L6 0M5 7L7 5" stroke="var(--card)" strokeWidth="1.5" />
+                    </pattern>
+                    <pattern id={`${patternId}-paid`} width="6" height="6" patternUnits="userSpaceOnUse">
+                      <rect width="6" height="6" fill="var(--chart-2)" />
+                      <circle cx="3" cy="3" r="1" fill="var(--card)" />
+                    </pattern>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} interval={0} />
                   <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
@@ -77,10 +91,10 @@ function BudgetPage() {
                     contentStyle={{ backgroundColor: "var(--popover)", borderColor: "var(--border)", color: "var(--popover-foreground)" }}
                     itemStyle={{ color: "var(--popover-foreground)" }}
                     cursor={{ fill: "var(--muted)" }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} formatter={(value) => <span className="text-foreground">{value}</span>} />
-                  <RBar dataKey="Budget" fill="var(--chart-5)" radius={[4, 4, 0, 0]} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} formatter={(value) => <span className="text-foreground">{t(value === "Budget" ? "budgetPattern" : value === "Bezahlt" ? "paidPattern" : "expectedPattern")}</span>} />
+                  <RBar dataKey="Budget" fill={`url(#${patternId}-budget)`} radius={[4, 4, 0, 0]} />
                   <RBar dataKey="Voraussichtlich" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
-                  <RBar dataKey="Bezahlt" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                  <RBar dataKey="Bezahlt" fill={`url(#${patternId}-paid)`} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -164,19 +178,10 @@ function BudgetPage() {
       />
       <QuickCost open={!!costDlg} onOpenChange={(o) => !o && setCostDlg(null)} initial={costDlg?.initial} editId={costDlg?.id} />
       {project && (
-        <EntityDialog
+        <ProjectDialog
+          project={project}
           open={budgetDlg}
           onOpenChange={setBudgetDlg}
-          title={tr("Projekt & Gesamtbudget")}
-          fields={[
-            { name: "name", label: tr("Projektname"), required: true, full: true },
-            { name: "address", label: tr("Adresse"), full: true },
-            { name: "total_budget", label: tr("Gesamtbudget (€)"), type: "number", required: true },
-            { name: "start_date", label: tr("Start"), type: "date" },
-            { name: "end_date", label: tr("Geplantes Ende"), type: "date" },
-          ]}
-          initial={{ ...project }}
-          onSubmit={(v) => update.mutateAsync({ table: "projects", id: project.id, patch: v })}
         />
       )}
     </>
