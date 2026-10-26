@@ -17,10 +17,10 @@ import type { Idea } from "@/lib/schema";
 export const Route = createFileRoute("/_ws/sammlungen")({
   head: () => ({
     meta: [
-      { title: tr("Sammlungen – Bauplan") },
-      { name: "description", content: tr("Ideen, Links und Bilder zu Böden, Fliesen, Leuchten und mehr – mit Notizen, filterbar.") },
-      { property: "og:title", content: tr("Sammlungen – Bauplan") },
-      { property: "og:description", content: tr("Ideen, Links und Bilder für deine Renovierung sammeln.") },
+      { title: tr("collections.collections_bauplan") },
+      { name: "description", content: tr("collections.ideas_links_images_floors") },
+      { property: "og:title", content: tr("collections.collections_bauplan") },
+      { property: "og:description", content: tr("collections.collect_ideas_links_images") },
     ],
   }),
   component: CollectionsPage,
@@ -69,9 +69,9 @@ function CollectionsPage() {
   return (
     <>
       <PageHeader
-        title={tr("Sammlungen")}
-        subtitle={tr("Links, Bilder und Ideen – z. B. Böden, Fliesen, Leuchten, die dir gefallen.")}
-        actions={<Button size="sm" onClick={() => setDlg({ initial: { collection: col ?? "" } })}><Plus className="h-4 w-4" /> {tr("Idee")}</Button>}
+        title={tr("shared.collections")}
+        subtitle={tr("collections.links_images_ideas_floors")}
+        actions={<Button size="sm" onClick={() => setDlg({ initial: { collection: col ?? "" } })}><Plus className="h-4 w-4" /> {tr("collections.idea")}</Button>}
       />
 
       <div className="mb-3 flex flex-wrap gap-2">
@@ -81,13 +81,13 @@ function CollectionsPage() {
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="relative min-w-52 flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder={tr("Suchen…")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input className="pl-9" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <select aria-label={tr("Gewerk")} className="h-9 rounded-md border bg-background px-2 text-sm" value={trade} onChange={(e) => setTrade(e.target.value)}>
-          <option value="">{tr("Alle Gewerke")}</option>
+        <select aria-label={tr("shared.trade")} className="h-9 rounded-md border bg-background px-2 text-sm" value={trade} onChange={(e) => setTrade(e.target.value)}>
+          <option value="">{tr("shared.all_trades")}</option>
           {ws.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <Button variant={favOnly ? "default" : "outline"} size="sm" onClick={() => setFavOnly(!favOnly)}><Star className="h-4 w-4" /> {tr("Favoriten")}</Button>
+        <Button variant={favOnly ? "default" : "outline"} size="sm" onClick={() => setFavOnly(!favOnly)}><Star className="h-4 w-4" /> {tr("collections.favorites")}</Button>
       </div>
       {tags.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-1.5">
@@ -105,37 +105,37 @@ function CollectionsPage() {
               trade={i.trade_id ? tradeName(ws, i.trade_id) : null}
               onFav={() => update.mutate({ table: "ideas", id: i.id, patch: { favorite: !i.favorite } })}
               onEdit={() => setDlg({ id: i.id, initial: { ...i } })}
-              onDelete={() => confirm(tr("Idee löschen?")) && remove.mutate({ table: "ideas", id: i.id })}
+              onDelete={() => confirm(tr("collections.delete_idea")) && remove.mutate({ table: "ideas", id: i.id })}
               onTag={setTag}
             />
           ))}
         </div>
       ) : (
-        <Empty>{ws.ideas.length ? tr("Keine Treffer.") : tr("Noch nichts gesammelt – füge einen Link oder ein Foto hinzu.")}</Empty>
+        <Empty>{ws.ideas.length ? tr("shared.no_results") : tr("collections.nothing_collected_yet_add")}</Empty>
       )}
 
       <EntityDialog
         open={!!dlg}
         onOpenChange={(o) => { if (!o) { setDlg(null); setFileName(""); } }}
-        title={dlg?.id ? tr("Idee bearbeiten") : tr("Neue Idee")}
+        title={dlg?.id ? tr("collections.edit_idea") : tr("collections.new_idea")}
         fields={[
-          { name: "title", label: tr("Titel"), required: true, full: true },
-          { name: "collection", label: tr("Sammlung"), required: true, suggestions: collections.map(([c]) => c) },
-          { name: "room", label: tr("Raum") },
-          { name: "url", label: tr("Link"), full: true },
-          { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-          { name: "price", label: tr("Preis (€, optional)"), type: "number" },
-          { name: "tags", label: tr("Schlagwörter (Komma-getrennt)"), full: true, suggestions: tags },
-          { name: "favorite", label: tr("Favorit"), type: "checkbox", full: true },
-          { name: "notes", label: tr("Notizen"), type: "textarea" },
+          { name: "title", label: tr("shared.title"), required: true, full: true },
+          { name: "collection", label: tr("collections.collection"), required: true, suggestions: collections.map(([c]) => c) },
+          { name: "room", label: tr("collections.room") },
+          { name: "url", label: tr("collections.link"), full: true },
+          { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+          { name: "price", label: tr("collections.price_optional"), type: "number" },
+          { name: "tags", label: tr("shared.tags_comma_separated"), full: true, suggestions: tags },
+          { name: "favorite", label: tr("collections.favorite"), type: "checkbox", full: true },
+          { name: "notes", label: tr("shared.notes"), type: "textarea" },
         ]}
         initial={dlg?.initial}
         extra={
           <div className="grid gap-1.5">
             <Label>Bild {dlg?.initial?.["document_id"] ? "(ersetzen)" : "(optional)"}</Label>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("Foto aufnehmen")}</Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}><ImagePlus className="h-4 w-4" /> {tr("Bild wählen")}</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}><ImagePlus className="h-4 w-4" /> {tr("collections.choose_image")}</Button>
               {fileName && <span className="self-center text-xs text-muted-foreground">{fileName}</span>}
             </div>
             <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
@@ -191,7 +191,7 @@ function IdeaCard({ idea, path, trade, onFav, onEdit, onDelete, onTag }: {
             <div className="text-xs text-muted-foreground">{idea.collection}{idea.room && ` · ${idea.room}`}{trade && ` · ${trade}`}</div>
             <h3 className="font-semibold leading-snug">{idea.title}</h3>
           </div>
-          <button type="button" aria-label={tr("Favorit")} onClick={onFav}>
+          <button type="button" aria-label={tr("collections.favorite")} onClick={onFav}>
             <Star className={cn("h-5 w-5", idea.favorite ? "fill-warning text-warning" : "text-muted-foreground")} />
           </button>
         </div>
@@ -209,8 +209,8 @@ function IdeaCard({ idea, path, trade, onFav, onEdit, onDelete, onTag }: {
             </a>
           )}
           <span className="ml-auto flex">
-            <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={onEdit}><Pencil className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
+            <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={onEdit}><Pencil className="h-4 w-4" /></Button>
+            <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
           </span>
         </div>
       </div>

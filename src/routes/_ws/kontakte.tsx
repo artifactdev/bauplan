@@ -15,10 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export const Route = createFileRoute("/_ws/kontakte")({
   head: () => ({
     meta: [
-      { title: tr("Kontakte – Bauplan") },
-      { name: "description", content: tr("Kontaktdaten von Handwerkern und Firmen samt Angeboten an einem Ort.") },
-      { property: "og:title", content: tr("Kontakte – Bauplan") },
-      { property: "og:description", content: tr("Handwerker-Kontakte und ihre Angebote verwalten.") },
+      { title: tr("contacts.contacts_bauplan") },
+      { name: "description", content: tr("contacts.contact_details_tradespeople_companies") },
+      { property: "og:title", content: tr("contacts.contacts_bauplan") },
+      { property: "og:description", content: tr("contacts.manage_tradesperson_contacts_quotes") },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -27,14 +27,14 @@ export const Route = createFileRoute("/_ws/kontakte")({
 });
 
 const fields = (ws: Workspace): Field[] => [
-  { name: "name", label: tr("Ansprechpartner"), required: true },
-  { name: "company", label: tr("Firma") },
-  { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-  { name: "phone", label: tr("Telefon") },
-  { name: "email", label: tr("E-Mail") },
-  { name: "website", label: tr("Website") },
-  { name: "address", label: tr("Adresse"), full: true },
-  { name: "notes", label: tr("Notizen"), type: "textarea" },
+  { name: "name", label: tr("contacts.contact_person"), required: true },
+  { name: "company", label: tr("shared.company") },
+  { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+  { name: "phone", label: tr("contacts.phone") },
+  { name: "email", label: tr("shared.email") },
+  { name: "website", label: tr("contacts.website") },
+  { name: "address", label: tr("shared.address"), full: true },
+  { name: "notes", label: tr("shared.notes"), type: "textarea" },
 ];
 
 const ALL = "__all";
@@ -57,16 +57,16 @@ function ContactsPage() {
   return (
     <>
       <PageHeader
-        title={tr("Kontakte")}
-        subtitle={tr("Handwerker, Firmen und Ansprechpartner – direkt auswählbar bei Angeboten.")}
-        actions={<Button size="sm" onClick={() => setDlg({ initial: {} })}><Plus className="h-4 w-4" /> {tr("Kontakt anlegen")}</Button>}
+        title={tr("shared.contacts")}
+        subtitle={tr("contacts.tradespeople_companies_contacts_selectable")}
+        actions={<Button size="sm" onClick={() => setDlg({ initial: {} })}><Plus className="h-4 w-4" /> {tr("contacts.create_contact")}</Button>}
       />
       <div className="mb-4 flex flex-wrap gap-2">
-        <Input className="max-w-xs" placeholder={tr("Suchen…")} value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input className="max-w-xs" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={trade} onValueChange={setTrade}>
           <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>{tr("Alle Gewerke")}</SelectItem>
+            <SelectItem value={ALL}>{tr("shared.all_trades")}</SelectItem>
             {tradeOptions(ws).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -84,8 +84,8 @@ function ContactsPage() {
                   {c.trade_id && <div className="mt-1"><Pill tone="primary">{tradeName(ws, c.trade_id)}</Pill></div>}
                 </div>
                 <div className="flex shrink-0">
-                  <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => setDlg({ id: c.id, initial: { ...c } })}><Pencil className="h-4 w-4" /></Button>
-                  <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(tr("Kontakt löschen?")) && remove.mutate({ table: "contacts", id: c.id })}><Trash2 className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setDlg({ id: c.id, initial: { ...c } })}><Pencil className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("contacts.delete_contact")) && remove.mutate({ table: "contacts", id: c.id })}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               </div>
               <div className="mt-3 grid gap-1 text-sm">
@@ -109,11 +109,11 @@ function ContactsPage() {
           );
         })}
       </div>
-      {!list.length && <Empty>{tr("Noch keine Kontakte.")}</Empty>}
+      {!list.length && <Empty>{tr("contacts.no_contacts_yet")}</Empty>}
       <EntityDialog
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}
-        title={dlg?.id ? tr("Kontakt bearbeiten") : tr("Neuer Kontakt")}
+        title={dlg?.id ? tr("contacts.edit_contact") : tr("shared.new_contact")}
         fields={fields(ws)}
         initial={dlg?.initial}
         onSubmit={(v) => (dlg?.id ? update.mutateAsync({ table: "contacts", id: dlg.id, patch: v }) : create.mutateAsync({ table: "contacts", row: v }))}

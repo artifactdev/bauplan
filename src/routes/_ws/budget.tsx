@@ -18,10 +18,10 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 export const Route = createFileRoute("/_ws/budget")({
   head: () => ({
     meta: [
-      { title: tr("Budget – Bauplan") },
-      { name: "description", content: tr("Gesamtbudget, Gewerke und Kostenpositionen: geplant, beauftragt und bezahlt im Vergleich.") },
-      { property: "og:title", content: tr("Budget – Bauplan") },
-      { property: "og:description", content: tr("Gesamtbudget, Gewerke und Kostenpositionen im Vergleich.") },
+      { title: tr("budget.budget_bauplan") },
+      { name: "description", content: tr("budget.total_budget_trades_cost_items") },
+      { property: "og:title", content: tr("budget.budget_bauplan") },
+      { property: "og:description", content: tr("budget.total_budget_trades_cost") },
     ],
   }),
   component: BudgetPage,
@@ -44,32 +44,32 @@ function BudgetPage() {
   return (
     <>
       <PageHeader
-        title={tr("Budget")}
-        subtitle={tr("Beauftragt = angenommene Angebote · Bezahlt = bezahlte Rechnungen · Voraussichtlich zählt nichts doppelt")}
+        title={tr("shared.budget")}
+        subtitle={tr("budget.committed_accepted_quotes_paid")}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setTradeDlg({})}><Plus className="h-4 w-4" /> {tr("Gewerk")}</Button>
-            <Button size="sm" onClick={() => setCostDlg({})}><Plus className="h-4 w-4" /> {tr("Kostenposition")}</Button>
+            <Button variant="outline" size="sm" onClick={() => setTradeDlg({})}><Plus className="h-4 w-4" /> {tr("shared.trade")}</Button>
+            <Button size="sm" onClick={() => setCostDlg({})}><Plus className="h-4 w-4" /> {tr("shared.cost_item")}</Button>
           </>
         }
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title={tr("Gesamtbudget")} action={<Button variant="ghost" size="icon" aria-label={tr("Budget bearbeiten")} onClick={() => setBudgetDlg(true)}><Pencil className="h-4 w-4" /></Button>}>
+        <Panel title={tr("shared.total_budget")} action={<Button variant="ghost" size="icon" aria-label={tr("budget.edit_budget")} onClick={() => setBudgetDlg(true)}><Pencil className="h-4 w-4" /></Button>}>
           <div className="font-display text-3xl font-semibold tabular">{eur(s.budget)}</div>
           <div className="mt-3"><Bar value={s.expected} max={s.budget} tone={s.remaining < 0 ? "danger" : "primary"} /></div>
           <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm tabular">
-            <dt className="text-muted-foreground">{tr("Geplant")}</dt><dd className="text-right">{eur(s.planned)}</dd>
-            <dt className="text-muted-foreground">{tr("Beauftragt")}</dt><dd className="text-right">{eur(s.committed)}</dd>
-            <dt className="text-muted-foreground">{tr("Abgerechnet")}</dt><dd className="text-right">{eur(s.invoiced)}</dd>
-            <dt className="text-muted-foreground">{tr("davon Ausgaben (Belege)")}</dt><dd className="text-right">{eur(s.expensesTotal)}</dd>
-            <dt className="text-muted-foreground">{tr("Bezahlt")}</dt><dd className="text-right">{eur(s.paid)}</dd>
-            <dt className="font-medium">{tr("Voraussichtlich")}</dt><dd className="text-right font-medium">{eur(s.expected)}</dd>
-            <dt className="font-medium">{tr("Verbleibend")}</dt><dd className={`text-right font-medium ${s.remaining < 0 ? "text-destructive" : "text-success"}`}>{eur(s.remaining)}</dd>
+            <dt className="text-muted-foreground">{tr("budget.planned")}</dt><dd className="text-right">{eur(s.planned)}</dd>
+            <dt className="text-muted-foreground">{tr("budget.committed")}</dt><dd className="text-right">{eur(s.committed)}</dd>
+            <dt className="text-muted-foreground">{tr("budget.invoiced")}</dt><dd className="text-right">{eur(s.invoiced)}</dd>
+            <dt className="text-muted-foreground">{tr("budget.expenses_receipts")}</dt><dd className="text-right">{eur(s.expensesTotal)}</dd>
+            <dt className="text-muted-foreground">{tr("shared.paid")}</dt><dd className="text-right">{eur(s.paid)}</dd>
+            <dt className="font-medium">{tr("budget.expected")}</dt><dd className="text-right font-medium">{eur(s.expected)}</dd>
+            <dt className="font-medium">{tr("budget.remaining")}</dt><dd className={`text-right font-medium ${s.remaining < 0 ? "text-destructive" : "text-success"}`}>{eur(s.remaining)}</dd>
           </dl>
           {tradeBudgets > s.budget && <p className="mt-3 text-xs text-destructive">Summe der Gewerk-Budgets ({eur(tradeBudgets)}) übersteigt das Gesamtbudget.</p>}
         </Panel>
-        <Panel title={tr("Gewerke im Vergleich")} className="lg:col-span-2">
+        <Panel title={tr("budget.trades_compared")} className="lg:col-span-2">
           {chart.length ? (
             <div className="h-64" role="group" aria-label={t("budgetSummary")}>
               <ResponsiveContainer>
@@ -99,16 +99,16 @@ function BudgetPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <Empty>{tr("Lege Gewerke an, um sie zu vergleichen.")}</Empty>
+            <Empty>{tr("budget.create_trades_compare")}</Empty>
           )}
         </Panel>
       </div>
 
-      <Panel title={tr("Gewerke")} className="mt-4">
+      <Panel title={tr("budget.trades")} className="mt-4">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>{tr("Gewerk")}</TableHead><TableHead className="text-right">{tr("Budget")}</TableHead><TableHead className="text-right">{tr("Beauftragt")}</TableHead><TableHead className="text-right">{tr("Bezahlt")}</TableHead><TableHead className="text-right">{tr("Voraussichtlich")}</TableHead><TableHead className="text-right">{tr("Abweichung")}</TableHead><TableHead /></TableRow>
+              <TableRow><TableHead>{tr("shared.trade")}</TableHead><TableHead className="text-right">{tr("shared.budget")}</TableHead><TableHead className="text-right">{tr("budget.committed")}</TableHead><TableHead className="text-right">{tr("shared.paid")}</TableHead><TableHead className="text-right">{tr("budget.expected")}</TableHead><TableHead className="text-right">{tr("budget.variance")}</TableHead><TableHead /></TableRow>
             </TableHeader>
             <TableBody className="tabular">
               {s.trades.map((t) => (
@@ -120,22 +120,22 @@ function BudgetPage() {
                   <TableCell className="text-right">{eur(t.expected)}</TableCell>
                   <TableCell className={`text-right ${t.deviation > 0 ? "text-destructive" : "text-success"}`}>{t.deviation > 0 ? "+" : ""}{eur(t.deviation)}</TableCell>
                   <TableCell className="whitespace-nowrap text-right">
-                    <Button variant="ghost" size="icon" aria-label={tr("Bearbeiten")} onClick={() => setTradeDlg({ id: t.id, initial: { name: t.name, budget: t.budget } })}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" aria-label={tr("Löschen")} onClick={() => confirm(`Gewerk „${t.name}“ löschen?`) && remove.mutate({ table: "trades", id: t.id })}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" aria-label={tr("shared.edit")} onClick={() => setTradeDlg({ id: t.id, initial: { name: t.name, budget: t.budget } })}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" aria-label={tr("shared.delete")} onClick={() => confirm(`Gewerk „${t.name}“ löschen?`) && remove.mutate({ table: "trades", id: t.id })}><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {!s.trades.length && <Empty>{tr("Noch keine Gewerke.")}</Empty>}
+          {!s.trades.length && <Empty>{tr("budget.no_trades_yet")}</Empty>}
         </div>
       </Panel>
 
-      <Panel title={tr("Kostenpositionen")} className="mt-4">
+      <Panel title={tr("budget.cost_items")} className="mt-4">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>{tr("Position")}</TableHead><TableHead>{tr("Gewerk")}</TableHead><TableHead className="text-right">{tr("Geplant")}</TableHead><TableHead className="text-right">{tr("Beauftragt")}</TableHead><TableHead className="text-right">{tr("Abgerechnet")}</TableHead><TableHead className="text-right">{tr("Bezahlt")}</TableHead><TableHead className="text-right">{tr("Voraussichtlich")}</TableHead><TableHead /></TableRow>
+              <TableRow><TableHead>{tr("budget.item")}</TableHead><TableHead>{tr("shared.trade")}</TableHead><TableHead className="text-right">{tr("budget.planned")}</TableHead><TableHead className="text-right">{tr("budget.committed")}</TableHead><TableHead className="text-right">{tr("budget.invoiced")}</TableHead><TableHead className="text-right">{tr("shared.paid")}</TableHead><TableHead className="text-right">{tr("budget.expected")}</TableHead><TableHead /></TableRow>
             </TableHeader>
             <TableBody className="tabular">
               {s.items.map((i) => {
@@ -150,8 +150,8 @@ function BudgetPage() {
                     <TableCell className="text-right">{i.paid ? eur(i.paid) : "–"}</TableCell>
                     <TableCell className={`text-right font-medium ${i.expected > i.planned ? "text-destructive" : ""}`}>{eur(i.expected)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      <Button variant="ghost" size="icon" aria-label={tr("Bearbeiten")} onClick={() => setCostDlg({ id: i.id, initial: { title: c.title, trade_id: c.trade_id, planned: c.planned, description: c.description } })}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" aria-label={tr("Löschen")} onClick={() => confirm(`„${i.title}“ löschen?`) && remove.mutate({ table: "cost_items", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" aria-label={tr("shared.edit")} onClick={() => setCostDlg({ id: i.id, initial: { title: c.title, trade_id: c.trade_id, planned: c.planned, description: c.description } })}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" aria-label={tr("shared.delete")} onClick={() => confirm(`„${i.title}“ löschen?`) && remove.mutate({ table: "cost_items", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -159,20 +159,20 @@ function BudgetPage() {
             </TableBody>
             {s.items.length > 0 && (
               <TableFooter className="tabular">
-                <TableRow><TableCell colSpan={2}>{tr("Summe Positionen")}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.planned, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.committed, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.invoiced, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.paid, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.expected, 0))}</TableCell><TableCell /></TableRow>
+                <TableRow><TableCell colSpan={2}>{tr("budget.sum_items")}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.planned, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.committed, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.invoiced, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.paid, 0))}</TableCell><TableCell className="text-right">{eur(s.items.reduce((a, i) => a + i.expected, 0))}</TableCell><TableCell /></TableRow>
               </TableFooter>
             )}
           </Table>
-          {!s.items.length && <Empty>{tr("Noch keine Kostenpositionen.")}</Empty>}
+          {!s.items.length && <Empty>{tr("budget.no_cost_items_yet")}</Empty>}
         </div>
       </Panel>
 
       <EntityDialog
         open={!!tradeDlg}
         onOpenChange={(o) => !o && setTradeDlg(null)}
-        title={tradeDlg?.id ? tr("Gewerk bearbeiten") : tr("Neues Gewerk")}
+        title={tradeDlg?.id ? tr("budget.edit_trade") : tr("shared.new_trade")}
         scan={tradeDlg?.id ? undefined : "trade"}
-        fields={[{ name: "name", label: tr("Name"), required: true, full: true }, { name: "budget", label: tr("Budget (€)"), type: "number", required: true }]}
+        fields={[{ name: "name", label: tr("shared.name"), required: true, full: true }, { name: "budget", label: tr("budget.budget"), type: "number", required: true }]}
         initial={tradeDlg?.initial}
         onSubmit={(v) => (tradeDlg?.id ? update.mutateAsync({ table: "trades", id: tradeDlg.id, patch: v }) : create.mutateAsync({ table: "trades", row: v }))}
       />

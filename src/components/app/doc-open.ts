@@ -7,7 +7,7 @@ export async function resolveFileUrl(path: string | null) {
   try {
     return (await getFileUrl({ data: { path } })).url;
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : tr("Datei nicht verfügbar"));
+    toast.error(e instanceof Error ? e.message : tr("doc-open.file_not_available"));
     return null;
   }
 }

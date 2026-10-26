@@ -17,13 +17,13 @@ export function ProjectDialog({
     <EntityDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={tr("Projekt & Gesamtbudget")}
+      title={tr("project_dialog.project_total_budget")}
       fields={[
-        { name: "name", label: tr("Projektname"), required: true, full: true },
-        { name: "address", label: tr("Adresse"), full: true },
-        { name: "total_budget", label: tr("Gesamtbudget (€)"), type: "number", required: true },
-        { name: "start_date", label: tr("Start"), type: "date" },
-        { name: "end_date", label: tr("Geplantes Ende"), type: "date" },
+        { name: "name", label: tr("shared.project_name"), required: true, full: true },
+        { name: "address", label: tr("shared.address"), full: true },
+        { name: "total_budget", label: tr("shared.total_budget_2"), type: "number", required: true },
+        { name: "start_date", label: tr("project_dialog.start"), type: "date" },
+        { name: "end_date", label: tr("project_dialog.planned_end"), type: "date" },
       ]}
       initial={project}
       onSubmit={(patch) => update.mutateAsync({ table: "projects", id: project.id, patch })}

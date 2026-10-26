@@ -27,9 +27,9 @@ export type Field = {
 const NONE = "__none";
 /** Select fields that allow creating a new entry inline. */
 const QUICK_ADD: Record<string, { table: "trades" | "cost_items" | "contacts"; col: string; label: string }> = {
-  trade_id: { table: "trades", col: "name", label: tr("Neues Gewerk") },
-  cost_item_id: { table: "cost_items", col: "title", label: tr("Neue Kostenposition") },
-  contact_id: { table: "contacts", col: "name", label: tr("Neuer Kontakt") },
+  trade_id: { table: "trades", col: "name", label: tr("shared.new_trade") },
+  cost_item_id: { table: "cost_items", col: "title", label: tr("shared.new_cost_item") },
+  contact_id: { table: "contacts", col: "name", label: tr("shared.new_contact") },
 };
 
 export function EntityDialog({
@@ -119,7 +119,7 @@ export function EntityDialog({
                   <Label htmlFor={id}>{f.label}</Label>
                   {f.type === "select" && QUICK_ADD[f.name] && adding !== f.name && (
                     <button type="button" className="flex items-center gap-1 text-xs text-primary hover:underline" onClick={() => { setAdding(f.name); setNewName(""); }}>
-                      <Plus className="h-3 w-3" /> {tr("Neu")}
+                      <Plus className="h-3 w-3" /> {tr("entity_dialog.new")}
                     </button>
                   )}
                 </div>
@@ -127,7 +127,7 @@ export function EntityDialog({
                   <div className="flex gap-2">
                     <Input autoFocus placeholder={QUICK_ADD[f.name]!.label} value={newName} onChange={(e) => setNewName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addNew(f.name); } if (e.key === "Escape") { e.preventDefault(); setAdding(null); } }} />
-                    <Button type="button" size="sm" disabled={!newName.trim() || create.isPending} onClick={() => void addNew(f.name)}>{tr("Anlegen")}</Button>
+                    <Button type="button" size="sm" disabled={!newName.trim() || create.isPending} onClick={() => void addNew(f.name)}>{tr("shared.create")}</Button>
                     <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(null)}>×</Button>
                   </div>
                 )}
@@ -150,12 +150,12 @@ export function EntityDialog({
                 ) : (f.type === "date" || f.type === "time") && !f.required && (v === null || v === undefined || v === "") && !shown.has(f.name) ? (
                   // Some browsers (Safari) display today's date/time in an empty field, so optional ones start as a button.
                   <Button id={id} type="button" variant="outline" className="justify-start font-normal text-muted-foreground" onClick={() => setShown((s) => new Set(s).add(f.name))}>
-                    <Plus className="h-4 w-4" /> {f.type === "date" ? tr("Datum hinzufügen") : tr("Uhrzeit hinzufügen")}
+                    <Plus className="h-4 w-4" /> {f.type === "date" ? tr("entity_dialog.add_date") : tr("entity_dialog.add_time")}
                   </Button>
                 ) : (f.type === "date" || f.type === "time") && !f.required ? (
                   <div className="flex gap-1">
                     <Input id={id} type={f.type} autoFocus={shown.has(f.name) && !v} value={v === null || v === undefined ? "" : String(v)} onChange={(e) => set(f.name, e.target.value)} />
-                    <Button type="button" size="icon" variant="ghost" aria-label={tr("Leeren")} onClick={() => { set(f.name, null); setShown((s) => { const n = new Set(s); n.delete(f.name); return n; }); }}>×</Button>
+                    <Button type="button" size="icon" variant="ghost" aria-label={tr("entity_dialog.clear")} onClick={() => { set(f.name, null); setShown((s) => { const n = new Set(s); n.delete(f.name); return n; }); }}>×</Button>
                   </div>
                 ) : (
                   <Input
@@ -177,7 +177,7 @@ export function EntityDialog({
           {extra && <div className="sm:col-span-2">{extra}</div>}
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              {tr("Abbrechen")}
+              {tr("entity_dialog.cancel")}
             </Button>
             <Button type="submit" disabled={busy}>
               {submitLabel}

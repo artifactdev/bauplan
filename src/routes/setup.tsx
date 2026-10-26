@@ -14,10 +14,10 @@ export const Route = createFileRoute("/setup")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: tr("Ersteinrichtung – Bauplan") },
-      { name: "description", content: tr("Lege das erste Admin-Konto für Bauplan an.") },
-      { property: "og:title", content: tr("Ersteinrichtung – Bauplan") },
-      { property: "og:description", content: tr("Lege das erste Admin-Konto für Bauplan an.") },
+      { title: tr("setup.first_run_setup_bauplan") },
+      { name: "description", content: tr("setup.create_first_admin_account") },
+      { property: "og:title", content: tr("setup.first_run_setup_bauplan") },
+      { property: "og:description", content: tr("setup.create_first_admin_account") },
     ],
   }),
   beforeLoad: async () => {
@@ -40,11 +40,11 @@ function SetupPage() {
   async function restoreBackup(e: React.FormEvent) {
     e.preventDefault();
     if (!backupFile) {
-      toast.error(tr("Wähle eine gültige Bauplan-Backup-Datei aus."));
+      toast.error(tr("shared.choose_valid_bauplan_backup"));
       return;
     }
     if (backupFile.size > 128 * 1024 * 1024) {
-      toast.error(tr("Das Backup ist größer als 128 MB."));
+      toast.error(tr("shared.backup_exceeds_128_mb"));
       return;
     }
     setBackupBusy(true);
@@ -53,15 +53,15 @@ function SetupPage() {
       form.set("file", backupFile);
       const result = await importSetupBackup({ data: form });
       if (result.users > 0) {
-        toast.success(tr("Backup wiederhergestellt. Melde dich mit einem Konto aus dem Backup an."));
+        toast.success(tr("setup.backup_restored_sign_account"));
         window.location.href = "/auth";
         return;
       }
       setBackupImported(true);
       setBackupFile(null);
-      toast.success(tr("Backup ohne Benutzerkonto wiederhergestellt. Lege jetzt das erste Admin-Konto an."));
+      toast.success(tr("setup.backup_restored_without_user"));
     } catch (err) {
-      toast.error(err instanceof Error ? tr(err.message) : tr("Einrichtung fehlgeschlagen"));
+      toast.error(err instanceof Error ? tr(err.message) : tr("setup.setup_failed"));
     } finally {
       setBackupBusy(false);
     }
@@ -69,13 +69,13 @@ function SetupPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== password2) { toast.error(tr("Die Passwörter stimmen nicht überein")); return; }
+    if (password !== password2) { toast.error(tr("setup.passwords_not_match")); return; }
     setBusy(true);
     try {
       await runSetup({ data: { name, email, password } });
       window.location.href = "/";
     } catch (err) {
-      toast.error(err instanceof Error ? tr(err.message) : tr("Einrichtung fehlgeschlagen"));
+      toast.error(err instanceof Error ? tr(err.message) : tr("setup.setup_failed"));
       setBusy(false);
     }
   }
@@ -84,19 +84,19 @@ function SetupPage() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-card">
         <div className="flex items-center gap-2 font-display text-lg font-semibold">
-          <Hammer className="h-5 w-5 text-primary" /> {tr("Bauplan")}
+          <Hammer className="h-5 w-5 text-primary" /> {tr("shared.bauplan")}
         </div>
-        <h1 className="mt-6 text-2xl font-semibold">{tr("Willkommen! Ersteinrichtung")}</h1>
+        <h1 className="mt-6 text-2xl font-semibold">{tr("setup.welcome_first_run_setup")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {tr("Es gibt noch kein Konto. Lege jetzt das Admin-Konto an. Weitere Personen und die Anmeldung über OIDC (z. B. Pocket ID) richtest du danach in den Einstellungen ein.")}
+          {tr("setup.no_account_yet_create")}
         </p>
         <section className="mt-6 rounded-lg border p-4">
-          <h2 className="font-medium">{tr("Backup vor der Kontoerstellung importieren")}</h2>
+          <h2 className="font-medium">{tr("setup.import_backup_before_creating")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {tr("Du kannst hier ein vollständiges Bauplan-Backup importieren. Enthaltene Benutzerkonten werden übernommen; danach meldest du dich mit einem Konto aus dem Backup an.")}
+            {tr("setup.import_full_bauplan_backup")}
           </p>
           <form onSubmit={restoreBackup} className="mt-3 grid gap-3">
-            <Label htmlFor="setup-backup">{tr("Backup-Datei (.zip)")}</Label>
+            <Label htmlFor="setup-backup">{tr("shared.backup_file_zip")}</Label>
             <Input
               id="setup-backup"
               type="file"
@@ -104,12 +104,12 @@ function SetupPage() {
               onChange={(e) => setBackupFile(e.currentTarget.files?.[0] ?? null)}
             />
             <Button type="submit" variant="outline" disabled={backupBusy || !backupFile}>
-              {backupBusy ? tr("Wird wiederhergestellt…") : tr("Backup wiederherstellen")}
+              {backupBusy ? tr("shared.restoring") : tr("shared.restore_backup")}
             </Button>
           </form>
           {backupImported && (
             <p role="status" className="mt-3 text-sm text-muted-foreground">
-              {tr("Backup ohne Benutzerkonto wiederhergestellt. Lege jetzt das erste Admin-Konto an.")}
+              {tr("setup.backup_restored_without_user")}
             </p>
           )}
         </section>
@@ -119,22 +119,22 @@ function SetupPage() {
             <LanguageSelect id="lang" />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="n">{tr("Name")}</Label>
+            <Label htmlFor="n">{tr("shared.name")}</Label>
             <Input id="n" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="e">{tr("E-Mail")}</Label>
+            <Label htmlFor="e">{tr("shared.email")}</Label>
             <Input id="e" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="p">{tr("Passwort (mind. 8 Zeichen)")}</Label>
+            <Label htmlFor="p">{tr("setup.password_min_8_characters")}</Label>
             <Input id="p" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="p2">{tr("Passwort wiederholen")}</Label>
+            <Label htmlFor="p2">{tr("setup.repeat_password")}</Label>
             <Input id="p2" type="password" required minLength={8} value={password2} onChange={(e) => setPassword2(e.target.value)} />
           </div>
-          <Button type="submit" disabled={busy}>{tr("Admin-Konto anlegen")}</Button>
+          <Button type="submit" disabled={busy}>{tr("setup.create_admin_account")}</Button>
         </form>
       </div>
     </div>

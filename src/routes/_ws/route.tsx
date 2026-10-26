@@ -88,7 +88,7 @@ export const Route = createFileRoute("/_ws")({
     return { backend: info, auth };
   },
   component: Layout,
-  pendingComponent: () => <div className="p-10 text-sm text-muted-foreground">{tr("Lädt…")}</div>,
+  pendingComponent: () => <div className="p-10 text-sm text-muted-foreground">{tr("shared.loading")}</div>,
 });
 
 export async function signOut(userId = getOfflineAccount()?.id) {
@@ -99,7 +99,7 @@ export async function signOut(userId = getOfflineAccount()?.id) {
     if (changes.length + uploads.length > 0) {
       if (
         !window.confirm(
-          tr("Es gibt noch nicht synchronisierte Änderungen. Verwerfen und abmelden?"),
+          tr("route.unsynchronized_changes_discard_sign"),
         )
       )
         return;
@@ -117,7 +117,7 @@ export async function signOut(userId = getOfflineAccount()?.id) {
     toast.error(
       error instanceof Error
         ? error.message
-        : tr("Die Abmeldung konnte nicht abgeschlossen werden."),
+        : tr("shared.not_complete_sign_out"),
     );
   }
 }
@@ -137,13 +137,13 @@ function Pending({ email }: { email: string }) {
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="max-w-md rounded-xl border bg-card p-6 text-center shadow-card">
         <Hammer className="mx-auto h-8 w-8 text-primary" />
-        <h1 className="mt-3 text-2xl font-semibold">{tr("Warte auf Freischaltung")}</h1>
+        <h1 className="mt-3 text-2xl font-semibold">{tr("route.waiting_approval")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Du bist als {email} angemeldet. Ein Admin muss dein Konto in den Einstellungen
           freischalten, bevor du das Projekt sehen kannst.
         </p>
         <Button variant="outline" className="mt-5" onClick={() => signOut()}>
-          {tr("Abmelden")}
+          {tr("shared.sign_out")}
         </Button>
       </div>
     </div>
@@ -193,7 +193,7 @@ function Shell() {
       toast.error(
         error instanceof Error
           ? error.message
-          : tr("Die Installation konnte nicht gestartet werden."),
+          : tr("route.not_start_installation"),
       );
     }
   };
@@ -211,13 +211,13 @@ function Shell() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Hammer className="h-5 w-5" />
           </span>{" "}
-          {tr("Bauplan")}
+          {tr("shared.bauplan")}
         </div>
         <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
         <nav aria-label={t("navigation")} className="grid gap-1">
           {[
             ...items,
-            { to: "/einstellungen", label: tr("Einstellungen"), icon: Settings } as const,
+            { to: "/einstellungen", label: tr("shared.settings"), icon: Settings } as const,
           ].map((n) => (
             <Link
               key={n.to}
@@ -256,7 +256,7 @@ function Shell() {
           <div className="min-w-0">
             <span className="flex items-center gap-2 font-semibold md:hidden">
               <Hammer className="h-5 w-5 text-primary" />
-              {tr("Bauplan")}
+              {tr("shared.bauplan")}
             </span>
             <span className="hidden truncate text-sm text-muted-foreground md:block">
               {project?.name ?? t("workspace")}
@@ -313,12 +313,12 @@ function Shell() {
                 <DropdownMenuItem asChild className="min-h-11">
                   <Link to="/einstellungen">
                     <Settings />
-                    {tr("Einstellungen")}
+                    {tr("shared.settings")}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="min-h-11" onSelect={() => void signOut(auth.user!.id)}>
                   <LogOut />
-                  {tr("Abmelden")}
+                  {tr("shared.sign_out")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -362,7 +362,7 @@ function Shell() {
               </p>
             )}
             {isLoading ? (
-              <p className="text-sm text-muted-foreground">{tr("Lädt…")}</p>
+              <p className="text-sm text-muted-foreground">{tr("shared.loading")}</p>
             ) : workspace.isError && !workspace.data ? (
               <p role="alert" className="text-sm text-muted-foreground">
                 {t("workspaceUnavailable")}{" "}
@@ -410,7 +410,7 @@ function Shell() {
           <DropdownMenuContent align="end" side="top" sideOffset={12}>
             {[
               ...secondaryNav,
-              { to: "/einstellungen", label: tr("Einstellungen"), icon: Settings } as const,
+              { to: "/einstellungen", label: tr("shared.settings"), icon: Settings } as const,
             ].map((n) => (
               <DropdownMenuItem asChild key={n.to} className="min-h-11">
                 <Link to={n.to}>
@@ -435,9 +435,9 @@ function ProjectSetup() {
   const [budget, setBudget] = useState("");
   return (
     <div className="mx-auto mt-10 max-w-md rounded-xl border bg-card p-6 shadow-card">
-      <h1 className="text-2xl font-semibold">{tr("Projekt anlegen")}</h1>
+      <h1 className="text-2xl font-semibold">{tr("route.create_project")}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {tr("Nur zwei Angaben – alles Weitere kannst du später ergänzen.")}
+        {tr("route.just_two_details_add")}
       </p>
       <form
         className="mt-6 grid gap-4"
@@ -450,16 +450,16 @@ function ProjectSetup() {
         }}
       >
         <div className="grid gap-1.5">
-          <Label htmlFor="pn">{tr("Projektname")}</Label>
+          <Label htmlFor="pn">{tr("shared.project_name")}</Label>
           <Input
             id="pn"
-            placeholder={tr("z. B. Sanierung Altbauwohnung")}
+            placeholder={tr("route.renovating_old_apartment")}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="pb">{tr("Gesamtbudget (€)")}</Label>
+          <Label htmlFor="pb">{tr("shared.total_budget_2")}</Label>
           <Input
             id="pb"
             type="number"
@@ -469,7 +469,7 @@ function ProjectSetup() {
           />
         </div>
         <Button type="submit" disabled={create.isPending} className={cn()}>
-          {tr("Projekt starten")}
+          {tr("route.start_project")}
         </Button>
       </form>
     </div>

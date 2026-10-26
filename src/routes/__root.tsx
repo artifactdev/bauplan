@@ -27,16 +27,16 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">{tr("Page not found")}</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">{tr("app.page_not_found")}</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          {tr("The page you're looking for doesn't exist or has been moved.")}
+          {tr("app.page_looking_not_exist")}
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            {tr("Go home")}
+            {tr("app.go_home")}
           </Link>
         </div>
       </div>
@@ -52,10 +52,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          {tr("This page didn't load")}
+          {tr("app.page_failed_load")}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {tr("Something went wrong on our end. You can try refreshing or head back home.")}
+          {tr("app.something_went_wrong_end")}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -65,13 +65,13 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            {tr("Try again")}
+            {tr("shared.try_again")}
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            {tr("Go home")}
+            {tr("app.go_home")}
           </a>
         </div>
       </div>
@@ -84,19 +84,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: tr("Bauplan – Renovierung im Griff") },
+      { title: tr("app.bauplan_renovation_under_control") },
       {
         name: "description",
         content: tr(
-          "Budget, Angebote, Dokumente, Aufgaben und Termine deiner Renovierung an einem Ort.",
+          "app.budget_quotes_documents_tasks",
         ),
       },
       { name: "theme-color", content: "#f8f7f4" },
-      { property: "og:title", content: tr("Bauplan – Renovierung im Griff") },
+      { property: "og:title", content: tr("app.bauplan_renovation_under_control") },
       {
         property: "og:description",
         content: tr(
-          "Budget, Angebote, Dokumente, Aufgaben und Termine deiner Renovierung an einem Ort.",
+          "app.budget_quotes_documents_tasks",
         ),
       },
       { property: "og:type", content: "website" },
@@ -147,7 +147,7 @@ function RootComponent() {
         toast.error(
           error instanceof Error
             ? error.message
-            : tr("Die Abmeldung konnte nicht abgeschlossen werden."),
+            : tr("shared.not_complete_sign_out"),
         );
       }
     };
@@ -161,7 +161,7 @@ function RootComponent() {
       .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .catch((error: unknown) => {
         console.error("Could not register the PWA service worker", error);
-        toast.error(tr("Die Offline-Funktion konnte nicht aktiviert werden."));
+        toast.error(tr("app.not_enable_offline_support"));
       });
   }, []);
 

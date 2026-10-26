@@ -17,15 +17,15 @@ import { CreditSummaryCard } from "@/components/app/CreditCalculator";
 export const Route = createFileRoute("/_ws/")({
   head: () => ({
     meta: [
-      { title: tr("Übersicht – Bauplan") },
+      { title: tr("index.overview_bauplan") },
       {
         name: "description",
-        content: tr("Fortschritt, Budget, offene Aufgaben und nächste Termine deiner Renovierung."),
+        content: tr("index.progress_budget_open_tasks"),
       },
-      { property: "og:title", content: tr("Übersicht – Bauplan") },
+      { property: "og:title", content: tr("index.overview_bauplan") },
       {
         property: "og:description",
-        content: tr("Fortschritt, Budget, offene Aufgaben und nächste Termine deiner Renovierung."),
+        content: tr("index.progress_budget_open_tasks"),
       },
     ],
   }),
@@ -64,7 +64,7 @@ function Dashboard() {
   return (
     <>
       <PageHeader
-        title={project?.name ?? tr("Übersicht")}
+        title={project?.name ?? tr("shared.overview")}
         subtitle={
           project?.start_date
             ? `${fmtDate(project.start_date)} – ${fmtDate(project.end_date)}`
@@ -73,13 +73,13 @@ function Dashboard() {
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => setDlg("cost")}>
-              <Plus className="h-4 w-4" /> {tr("Kosten")}
+              <Plus className="h-4 w-4" /> {tr("index.cost")}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setDlg("upload")}>
-              <Upload className="h-4 w-4" /> {tr("Dokument")}
+              <Upload className="h-4 w-4" /> {tr("shared.document")}
             </Button>
             <Button size="sm" onClick={() => setDlg("task")}>
-              <ListPlus className="h-4 w-4" /> {tr("Aufgabe")}
+              <ListPlus className="h-4 w-4" /> {tr("shared.task")}
             </Button>
           </>
         }
@@ -90,7 +90,7 @@ function Dashboard() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm">
               {tr(
-                "Noch leer. Lege Gewerke im Budget an – oder schau dir zuerst ein Beispielprojekt an.",
+                "index.still_empty_create_trades",
               )}
             </p>
             <Button
@@ -99,19 +99,19 @@ function Dashboard() {
               onClick={async () => {
                 await loadDemoData();
                 await qc.invalidateQueries({ queryKey: ["ws"] });
-                toast.success(tr("Beispieldaten geladen"));
+                toast.success(tr("index.sample_data_loaded"));
               }}
             >
-              <Sparkles className="h-4 w-4" /> {tr("Beispieldaten laden")}
+              <Sparkles className="h-4 w-4" /> {tr("index.load_sample_data")}
             </Button>
           </div>
         </Panel>
       )}
 
       <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label={tr("Gesamtbudget")} value={eur(s.budget)} />
+        <Kpi label={tr("shared.total_budget")} value={eur(s.budget)} />
         <Kpi
-          label={tr("Voraussichtliche Kosten")}
+          label={tr("index.expected_costs")}
           value={eur(s.expected)}
           hint={
             s.remaining >= 0 ? `${eur(s.remaining)} Puffer` : `${eur(-s.remaining)} über Budget`
@@ -119,12 +119,12 @@ function Dashboard() {
           tone={s.remaining < 0 ? "danger" : undefined}
         />
         <Kpi
-          label={tr("Bezahlt")}
+          label={tr("shared.paid")}
           value={eur(s.paid)}
-          hint={s.open > 0 ? `${eur(s.open)} offene Rechnungen` : tr("Keine offenen Rechnungen")}
+          hint={s.open > 0 ? `${eur(s.open)} offene Rechnungen` : tr("index.no_open_invoices")}
         />
         <Kpi
-          label={tr("Fortschritt")}
+          label={tr("index.progress")}
           value={`${progress} %`}
           hint={`${done} von ${ws.tasks.length} Aufgaben erledigt`}
         />
@@ -134,11 +134,11 @@ function Dashboard() {
 
       <div className="mt-6 grid min-w-0 items-start gap-5 lg:grid-cols-3">
         <Panel
-          title={tr("Budget")}
+          title={tr("shared.budget")}
           className="lg:col-span-2"
           action={
             <Link to="/budget" className="text-sm text-primary hover:underline">
-              {tr("Details")}
+              {tr("index.details")}
             </Link>
           }
         >
@@ -170,13 +170,13 @@ function Dashboard() {
                 />
               </div>
             ))}
-            {!s.trades.length && <Empty>{tr("Noch keine Gewerke angelegt.")}</Empty>}
+            {!s.trades.length && <Empty>{tr("index.no_trades_created_yet")}</Empty>}
           </div>
         </Panel>
 
         <div className="grid min-w-0 content-start gap-4">
           {(overdue.length > 0 || overBudget.length > 0) && (
-            <Panel title={tr("Achtung")} className="border-l-2 border-destructive">
+            <Panel title={tr("index.attention")} className="border-l-2 border-destructive">
               <ul className="grid gap-2 text-sm">
                 {overdue.map((t) => (
                   <li key={t.id} className="flex gap-2">
@@ -198,10 +198,10 @@ function Dashboard() {
             </Panel>
           )}
           <Panel
-            title={tr("Als Nächstes")}
+            title={tr("index.up_next")}
             action={
               <Link to="/kalender" className="text-sm text-primary hover:underline">
-                {tr("Kalender")}
+                {tr("shared.calendar")}
               </Link>
             }
           >
@@ -213,18 +213,18 @@ function Dashboard() {
                   <span className="tabular text-xs text-muted-foreground">{fmtDate(u.date)}</span>
                 </li>
               ))}
-              {!upcoming.length && <Empty>{tr("Keine anstehenden Termine.")}</Empty>}
+              {!upcoming.length && <Empty>{tr("index.no_upcoming_appointments")}</Empty>}
             </ul>
           </Panel>
         </div>
       </div>
 
       <Panel
-        title={tr("Offene Aufgaben")}
+        title={tr("index.open_tasks")}
         className="mt-6"
         action={
           <Link to="/aufgaben" className="text-sm text-primary hover:underline">
-            {tr("Alle")}
+            {tr("shared.all")}
           </Link>
         }
       >
@@ -244,7 +244,7 @@ function Dashboard() {
               </li>
             );
           })}
-          {!open.length && <Empty>{tr("Alles erledigt.")}</Empty>}
+          {!open.length && <Empty>{tr("index.all_done")}</Empty>}
         </ul>
       </Panel>
 

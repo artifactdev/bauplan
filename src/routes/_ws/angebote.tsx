@@ -19,42 +19,42 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export const Route = createFileRoute("/_ws/angebote")({
   head: () => ({
     meta: [
-      { title: tr("Angebote & Rechnungen – Bauplan") },
-      { name: "description", content: tr("Handwerkerangebote vergleichen, annehmen und Rechnungen mit dem Budget verknüpfen.") },
-      { property: "og:title", content: tr("Angebote & Rechnungen – Bauplan") },
-      { property: "og:description", content: tr("Handwerkerangebote vergleichen und Rechnungen verfolgen.") },
+      { title: tr("quotes.quotes_invoices_bauplan") },
+      { name: "description", content: tr("quotes.compare_accept_contractor_quotes") },
+      { property: "og:title", content: tr("quotes.quotes_invoices_bauplan") },
+      { property: "og:description", content: tr("quotes.compare_contractor_quotes_track") },
     ],
   }),
   component: OffersPage,
 });
 
 const offerFields = (ws: Workspace): Field[] => [
-  { name: "contact_id", label: tr("Kontakt"), type: "select", options: contactOptions(ws) },
-  { name: "contractor", label: tr("Firma (falls kein Kontakt)") },
-  { name: "title", label: tr("Leistung") },
-  { name: "amount", label: tr("Betrag brutto (€)"), type: "number" },
-  { name: "requested_date", label: tr("Angefragt am"), type: "date" },
-  { name: "offer_date", label: tr("Angebotsdatum"), type: "date" },
-  { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-  { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
-  { name: "status", label: tr("Status"), type: "select", required: true, options: Object.entries(OFFER_STATUS).map(([value, s]) => ({ value, label: s.label })) },
-  { name: "document_id", label: tr("PDF / Dokument"), type: "select", options: docOptions(ws) },
-  { name: "notes", label: tr("Notizen"), type: "textarea" },
+  { name: "contact_id", label: tr("quotes.contact"), type: "select", options: contactOptions(ws) },
+  { name: "contractor", label: tr("quotes.company_no_contact") },
+  { name: "title", label: tr("shared.service") },
+  { name: "amount", label: tr("shared.gross_amount"), type: "number" },
+  { name: "requested_date", label: tr("quotes.requested"), type: "date" },
+  { name: "offer_date", label: tr("quotes.quote_date"), type: "date" },
+  { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+  { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+  { name: "status", label: tr("shared.status"), type: "select", required: true, options: Object.entries(OFFER_STATUS).map(([value, s]) => ({ value, label: s.label })) },
+  { name: "document_id", label: tr("quotes.pdf_document"), type: "select", options: docOptions(ws) },
+  { name: "notes", label: tr("shared.notes"), type: "textarea" },
 ];
 
 const invoiceFields = (ws: Workspace): Field[] => [
-  { name: "contact_id", label: tr("Kontakt"), type: "select", options: contactOptions(ws) },
-  { name: "contractor", label: tr("Firma (falls kein Kontakt)") },
-  { name: "title", label: tr("Leistung") },
-  { name: "amount", label: tr("Betrag brutto (€)"), type: "number", required: true },
-  { name: "invoice_date", label: tr("Rechnungsdatum"), type: "date" },
-  { name: "due_date", label: tr("Zahlbar bis"), type: "date" },
-  { name: "payment_date", label: tr("Zahlungsdatum (Plan / Ist)"), type: "date" },
-  { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-  { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
-  { name: "document_id", label: tr("PDF / Dokument"), type: "select", options: docOptions(ws) },
-  { name: "budget_pot_id", label: tr("Bezahlt aus"), type: "select", options: potOptions(ws) },
-  { name: "paid", label: tr("Bezahlt"), type: "checkbox" },
+  { name: "contact_id", label: tr("quotes.contact"), type: "select", options: contactOptions(ws) },
+  { name: "contractor", label: tr("quotes.company_no_contact") },
+  { name: "title", label: tr("shared.service") },
+  { name: "amount", label: tr("shared.gross_amount"), type: "number", required: true },
+  { name: "invoice_date", label: tr("quotes.invoice_date"), type: "date" },
+  { name: "due_date", label: tr("shared.payable"), type: "date" },
+  { name: "payment_date", label: tr("shared.payment_date_planned_actual"), type: "date" },
+  { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+  { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+  { name: "document_id", label: tr("quotes.pdf_document"), type: "select", options: docOptions(ws) },
+  { name: "budget_pot_id", label: tr("shared.paid_2"), type: "select", options: potOptions(ws) },
+  { name: "paid", label: tr("shared.paid"), type: "checkbox" },
 ];
 
 /** Fill contractor from the chosen contact and default a missing amount to 0. */
@@ -62,7 +62,7 @@ function normalize(ws: Workspace, v: Record<string, unknown>) {
   const out = { ...v };
   const c = ws.contacts.find((x) => x.id === out["contact_id"]);
   if (c && !String(out["contractor"] ?? "").trim()) out["contractor"] = c.company ?? c.name;
-  if (!String(out["contractor"] ?? "").trim()) throw new Error(tr("Bitte Kontakt oder Firma angeben."));
+  if (!String(out["contractor"] ?? "").trim()) throw new Error(tr("quotes.enter_contact_company"));
   if (out["amount"] === "" || out["amount"] == null) out["amount"] = 0;
   return out;
 }
@@ -70,8 +70,8 @@ function normalize(ws: Workspace, v: Record<string, unknown>) {
 const ALL = "__all";
 type SortKey = "firm" | "title" | "place" | "requested" | "offer" | "amount" | "status";
 const COLS: { key: SortKey; label: string }[] = [
-  { key: "firm", label: tr("Firma") }, { key: "title", label: tr("Leistung") }, { key: "place", label: tr("Gewerk / Position") },
-  { key: "requested", label: tr("Angefragt") }, { key: "offer", label: tr("Angebot") }, { key: "amount", label: tr("Betrag") }, { key: "status", label: tr("Status") },
+  { key: "firm", label: tr("shared.company") }, { key: "title", label: tr("shared.service") }, { key: "place", label: tr("quotes.trade_item") },
+  { key: "requested", label: tr("shared.requested") }, { key: "offer", label: tr("shared.quote") }, { key: "amount", label: tr("shared.amount") }, { key: "status", label: tr("shared.status") },
 ];
 /** Empty values always sort last-ish (as smallest); strings compare German-aware. */
 const cmp = (a: string | number | null, b: string | number | null) =>
@@ -117,7 +117,7 @@ function OffersPage() {
     const m = new Map<string, { label: string; offers: Offer[] }>();
     for (const o of offers) {
       const key = o.cost_item_id ?? `t-${o.trade_id ?? "none"}`;
-      const label = o.cost_item_id ? ws.cost_items.find((c) => c.id === o.cost_item_id)?.title ?? "–" : o.trade_id ? tradeName(ws, o.trade_id) : tr("Ohne Gewerk");
+      const label = o.cost_item_id ? ws.cost_items.find((c) => c.id === o.cost_item_id)?.title ?? "–" : o.trade_id ? tradeName(ws, o.trade_id) : tr("quotes.no_trade");
       if (!m.has(key)) m.set(key, { label, offers: [] });
       m.get(key)!.offers.push(o);
     }
@@ -132,7 +132,7 @@ function OffersPage() {
 
   return (
     <>
-      <PageHeader title={tr("Angebote & Rechnungen")} subtitle={tr("Angenommene Angebote zählen als beauftragt, Rechnungen als Ist-Kosten.")} />
+      <PageHeader title={tr("quotes.quotes_invoices")} subtitle={tr("quotes.accepted_quotes_count_committed")} />
       <Tabs defaultValue="offers">
         <TabsList>
           <TabsTrigger value="offers">Angebote ({ws.offers.length})</TabsTrigger>
@@ -141,19 +141,19 @@ function OffersPage() {
 
         <TabsContent value="offers" className="mt-4 grid gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => setOfferDlg({ initial: { status: "received" } })}><Plus className="h-4 w-4" /> {tr("Angebot erfassen")}</Button>
-            <Button size="sm" variant="outline" onClick={() => setOfferDlg({ initial: { status: "requested", requested_date: today } })}><Send className="h-4 w-4" /> {tr("Anfrage erfassen")}</Button>
+            <Button size="sm" onClick={() => setOfferDlg({ initial: { status: "received" } })}><Plus className="h-4 w-4" /> {tr("quotes.add_quote")}</Button>
+            <Button size="sm" variant="outline" onClick={() => setOfferDlg({ initial: { status: "requested", requested_date: today } })}><Send className="h-4 w-4" /> {tr("quotes.record_request")}</Button>
             {ws.offers.some((o) => o.status === "requested") && <span className="text-sm text-muted-foreground">{ws.offers.filter((o) => o.status === "requested").length} Anfrage(n) offen</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Input className="w-56" placeholder={tr("Suchen…")} value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input className="w-56" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
             <FilterSelect value={fStatus} onChange={setFStatus} all="Alle Status" options={Object.entries(OFFER_STATUS).map(([value, s]) => ({ value, label: s.label }))} />
             <FilterSelect value={fTrade} onChange={setFTrade} all="Alle Gewerke" options={tradeOptions(ws)} />
             <FilterSelect value={fContact} onChange={setFContact} all="Alle Kontakte" options={contactOptions(ws)} />
-            {(q || fStatus !== ALL || fTrade !== ALL || fContact !== ALL) && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setFStatus(ALL); setFTrade(ALL); setFContact(ALL); }}>{tr("Zurücksetzen")}</Button>}
+            {(q || fStatus !== ALL || fTrade !== ALL || fContact !== ALL) && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setFStatus(ALL); setFTrade(ALL); setFContact(ALL); }}>{tr("shared.reset")}</Button>}
             <div className="ml-auto flex rounded-md border">
-              <Button size="icon" variant={view === "cards" ? "secondary" : "ghost"} aria-label={tr("Kartenansicht")} onClick={() => setView("cards")}><LayoutGrid className="h-4 w-4" /></Button>
-              <Button size="icon" variant={view === "table" ? "secondary" : "ghost"} aria-label={tr("Tabellenansicht")} onClick={() => setView("table")}><List className="h-4 w-4" /></Button>
+              <Button size="icon" variant={view === "cards" ? "secondary" : "ghost"} aria-label={tr("quotes.card_view")} onClick={() => setView("cards")}><LayoutGrid className="h-4 w-4" /></Button>
+              <Button size="icon" variant={view === "table" ? "secondary" : "ghost"} aria-label={tr("quotes.table_view")} onClick={() => setView("table")}><List className="h-4 w-4" /></Button>
             </div>
           </div>
           {view === "table" && offers.length > 0 && (
@@ -179,11 +179,11 @@ function OffersPage() {
                         <TableCell className="text-right">{o.status === "requested" ? "–" : eur(o.amount, true)}</TableCell>
                         <TableCell><Pill tone={OFFER_STATUS[o.status]?.tone}>{OFFER_STATUS[o.status]?.label}</Pill></TableCell>
                         <TableCell className="whitespace-nowrap text-right">
-                          {o.status === "requested" && <Button size="icon" variant="ghost" aria-label={tr("Angebot erhalten")} onClick={() => setOfferDlg({ id: o.id, initial: { ...o, status: "received" } })}><Inbox className="h-4 w-4" /></Button>}
-                          {o.status === "received" && <Button size="icon" variant="ghost" aria-label={tr("Annehmen")} onClick={() => update.mutate({ table: "offers", id: o.id, patch: { status: "accepted" } })}><Check className="h-4 w-4" /></Button>}
-                          {o.document_id && <Button size="icon" variant="ghost" aria-label={tr("PDF öffnen")} onClick={() => openDoc(o.document_id)}><FileText className="h-4 w-4" /></Button>}
-                          <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => setOfferDlg({ id: o.id, initial: { ...o } })}><Pencil className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(tr("Angebot löschen?")) && remove.mutate({ table: "offers", id: o.id })}><Trash2 className="h-4 w-4" /></Button>
+                          {o.status === "requested" && <Button size="icon" variant="ghost" aria-label={tr("quotes.quote_received")} onClick={() => setOfferDlg({ id: o.id, initial: { ...o, status: "received" } })}><Inbox className="h-4 w-4" /></Button>}
+                          {o.status === "received" && <Button size="icon" variant="ghost" aria-label={tr("quotes.accept")} onClick={() => update.mutate({ table: "offers", id: o.id, patch: { status: "accepted" } })}><Check className="h-4 w-4" /></Button>}
+                          {o.document_id && <Button size="icon" variant="ghost" aria-label={tr("shared.open_pdf")} onClick={() => openDoc(o.document_id)}><FileText className="h-4 w-4" /></Button>}
+                          <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setOfferDlg({ id: o.id, initial: { ...o } })}><Pencil className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("quotes.delete_quote")) && remove.mutate({ table: "offers", id: o.id })}><Trash2 className="h-4 w-4" /></Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -209,16 +209,16 @@ function OffersPage() {
                       </div>
                       <div className="mt-3 flex items-baseline gap-2">
                         <span className="font-display text-xl font-semibold tabular">{o.status === "requested" ? "–" : eur(o.amount)}</span>
-                        {o.status !== "requested" && priced.length > 1 && Number(o.amount) === min && <Pill tone="primary">{tr("Günstigstes")}</Pill>}
+                        {o.status !== "requested" && priced.length > 1 && Number(o.amount) === min && <Pill tone="primary">{tr("quotes.cheapest")}</Pill>}
                         {o.status !== "requested" && priced.length > 1 && Number(o.amount) > min && <span className="text-xs text-muted-foreground">+{eur(Number(o.amount) - min)}</span>}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1">
-                        {o.status === "requested" && <Button size="sm" variant="outline" onClick={() => setOfferDlg({ id: o.id, initial: { ...o, status: "received" } })}><Inbox className="h-3.5 w-3.5" /> {tr("Angebot erhalten")}</Button>}
-                        {o.status !== "accepted" && o.status !== "requested" && <Button size="sm" variant="outline" onClick={() => update.mutate({ table: "offers", id: o.id, patch: { status: "accepted" } })}><Check className="h-3.5 w-3.5" /> {tr("Annehmen")}</Button>}
-                        {(o.status === "received" || o.status === "requested") && <Button size="sm" variant="ghost" onClick={() => update.mutate({ table: "offers", id: o.id, patch: { status: "rejected" } })}><X className="h-3.5 w-3.5" /> {tr("Ablehnen")}</Button>}
-                        {o.document_id && <Button size="icon" variant="ghost" aria-label={tr("PDF öffnen")} onClick={() => openDoc(o.document_id)}><FileText className="h-4 w-4" /></Button>}
-                        <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => setOfferDlg({ id: o.id, initial: { ...o } })}><Pencil className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(tr("Angebot löschen?")) && remove.mutate({ table: "offers", id: o.id })}><Trash2 className="h-4 w-4" /></Button>
+                        {o.status === "requested" && <Button size="sm" variant="outline" onClick={() => setOfferDlg({ id: o.id, initial: { ...o, status: "received" } })}><Inbox className="h-3.5 w-3.5" /> {tr("quotes.quote_received")}</Button>}
+                        {o.status !== "accepted" && o.status !== "requested" && <Button size="sm" variant="outline" onClick={() => update.mutate({ table: "offers", id: o.id, patch: { status: "accepted" } })}><Check className="h-3.5 w-3.5" /> {tr("quotes.accept")}</Button>}
+                        {(o.status === "received" || o.status === "requested") && <Button size="sm" variant="ghost" onClick={() => update.mutate({ table: "offers", id: o.id, patch: { status: "rejected" } })}><X className="h-3.5 w-3.5" /> {tr("quotes.reject")}</Button>}
+                        {o.document_id && <Button size="icon" variant="ghost" aria-label={tr("shared.open_pdf")} onClick={() => openDoc(o.document_id)}><FileText className="h-4 w-4" /></Button>}
+                        <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setOfferDlg({ id: o.id, initial: { ...o } })}><Pencil className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("quotes.delete_quote")) && remove.mutate({ table: "offers", id: o.id })}><Trash2 className="h-4 w-4" /></Button>
                       </div>
                     </div>
                   ))}
@@ -226,11 +226,11 @@ function OffersPage() {
               </Panel>
             );
           })}
-          {!offers.length && <Empty>{ws.offers.length ? tr("Keine Angebote für diese Filter.") : tr("Noch keine Angebote erfasst.")}</Empty>}
+          {!offers.length && <Empty>{ws.offers.length ? tr("quotes.no_quotes_match_filters") : tr("quotes.no_quotes_recorded_yet")}</Empty>}
         </TabsContent>
 
         <TabsContent value="invoices" className="mt-4 grid gap-4">
-          <div><Button size="sm" onClick={() => setInvDlg({ initial: { invoice_date: today, paid: false } })}><Plus className="h-4 w-4" /> {tr("Rechnung erfassen")}</Button></div>
+          <div><Button size="sm" onClick={() => setInvDlg({ initial: { invoice_date: today, paid: false } })}><Plus className="h-4 w-4" /> {tr("quotes.add_invoice")}</Button></div>
           <InvoicesTable onEdit={(i) => setInvDlg({ id: i.id, initial: { ...i } })} openDoc={openDoc} />
         </TabsContent>
       </Tabs>
@@ -238,7 +238,7 @@ function OffersPage() {
       <EntityDialog
         open={!!offerDlg}
         onOpenChange={(o) => !o && setOfferDlg(null)}
-        title={offerDlg?.id ? tr("Angebot bearbeiten") : tr("Neues Angebot")}
+        title={offerDlg?.id ? tr("quotes.edit_quote") : tr("quotes.new_quote")}
         fields={offerFields(ws)}
         scan={offerDlg?.id ? undefined : "offer"}
         initial={offerDlg?.initial}
@@ -247,7 +247,7 @@ function OffersPage() {
       <EntityDialog
         open={!!invDlg}
         onOpenChange={(o) => !o && setInvDlg(null)}
-        title={invDlg?.id ? tr("Rechnung bearbeiten") : tr("Neue Rechnung")}
+        title={invDlg?.id ? tr("quotes.edit_invoice") : tr("quotes.new_invoice")}
         fields={invoiceFields(ws)}
         scan={invDlg?.id ? undefined : "invoice"}
         initial={invDlg?.initial}

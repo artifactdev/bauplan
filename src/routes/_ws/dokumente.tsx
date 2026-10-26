@@ -18,10 +18,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 export const Route = createFileRoute("/_ws/dokumente")({
   head: () => ({
     meta: [
-      { title: tr("Dokumente – Bauplan") },
-      { name: "description", content: tr("Pläne, Verträge, Datenblätter, Fotos und Belege zentral ablegen und durchsuchen.") },
-      { property: "og:title", content: tr("Dokumente – Bauplan") },
-      { property: "og:description", content: tr("Alle Unterlagen deiner Renovierung an einem Ort.") },
+      { title: tr("documents.documents_bauplan") },
+      { name: "description", content: tr("documents.store_search_plans_contracts") },
+      { property: "og:title", content: tr("documents.documents_bauplan") },
+      { property: "og:description", content: tr("documents.all_documents_renovation_one") },
     ],
   }),
   component: DocsPage,
@@ -75,14 +75,14 @@ function DocsPage() {
 
   return (
     <>
-      <PageHeader title={tr("Dokumente")} subtitle={`${ws.documents.length} Dateien`} actions={<Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr("Hochladen")}</Button>} />
+      <PageHeader title={tr("shared.documents")} subtitle={`${ws.documents.length} Dateien`} actions={<Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr("shared.upload")}</Button>} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-8" placeholder={tr("Suchen nach Name, Schlagwort…")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input className="pl-8" placeholder={tr("documents.search_name_tag")} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant={cat === null ? "secondary" : "ghost"} onClick={() => setCat(null)}>{tr("Alle")}</Button>
+          <Button size="sm" variant={cat === null ? "secondary" : "ghost"} onClick={() => setCat(null)}>{tr("shared.all")}</Button>
           {DOC_CATEGORIES.map((c) => (
             <Button key={c} size="sm" variant={cat === c ? "secondary" : "ghost"} onClick={() => setCat(c)}>{tr(c)}</Button>
           ))}
@@ -111,18 +111,18 @@ function DocsPage() {
               </div>
               <div className="col-span-2 flex flex-wrap items-center justify-end gap-1 border-t border-border pt-2 lg:col-span-1 lg:border-0 lg:pt-0">
                 {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
-                  <Button size="icon" variant="ghost" aria-label={tr("Inhalt erkennen und zuordnen")} title={tr("Inhalt erkennen und zuordnen")} onClick={() => setAssignId(d.id)}><ScanText className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("documents.recognize_assign_content")} title={tr("documents.recognize_assign_content")} onClick={() => setAssignId(d.id)}><ScanText className="h-4 w-4" /></Button>
                 )}
-                <Button size="icon" variant="ghost" aria-label={tr("Vorschau")} onClick={() => open(d, "preview")}><Eye className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" aria-label={tr("Herunterladen")} onClick={() => open(d, "download")}><Download className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => setEdit(d)}><Pencil className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(`„${d.name}“ löschen?`) && remove.mutate({ table: "documents", id: d.id })}><Trash2 className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" aria-label={tr("documents.preview")} onClick={() => open(d, "preview")}><Eye className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" aria-label={tr("documents.download")} onClick={() => open(d, "download")}><Download className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setEdit(d)}><Pencil className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(`„${d.name}“ löschen?`) && remove.mutate({ table: "documents", id: d.id })}><Trash2 className="h-4 w-4" /></Button>
               </div>
             </li>
             );
           })}
         </ul>
-        {!docs.length && <Empty>{ws.documents.length ? tr("Keine Treffer.") : tr("Noch keine Dokumente – lade Angebote, Pläne oder Fotos hoch.")}</Empty>}
+        {!docs.length && <Empty>{ws.documents.length ? tr("shared.no_results") : tr("documents.no_documents_yet_upload")}</Empty>}
       </Panel>
 
       <QuickUpload open={uploadOpen} onOpenChange={setUploadOpen} />
@@ -130,15 +130,15 @@ function DocsPage() {
       <EntityDialog
         open={!!edit}
         onOpenChange={(o) => !o && setEdit(null)}
-        title={tr("Dokument bearbeiten")}
+        title={tr("documents.edit_document")}
         fields={[
-          { name: "name", label: tr("Name"), required: true, full: true },
-          { name: "category", label: tr("Kategorie"), type: "select", required: true, options: DOC_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
-          { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-          { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
-          { name: "task_id", label: tr("Aufgabe"), type: "select", options: taskOptions(ws) },
-          { name: "tags", label: tr("Schlagwörter"), full: true },
-          { name: "description", label: tr("Beschreibung"), type: "textarea" },
+          { name: "name", label: tr("shared.name"), required: true, full: true },
+          { name: "category", label: tr("shared.category"), type: "select", required: true, options: DOC_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
+          { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+          { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+          { name: "task_id", label: tr("shared.task"), type: "select", options: taskOptions(ws) },
+          { name: "tags", label: tr("documents.tags"), full: true },
+          { name: "description", label: tr("shared.description"), type: "textarea" },
         ]}
         initial={edit ? { ...edit } : undefined}
         onSubmit={(v) => update.mutateAsync({ table: "documents", id: edit!.id, patch: v })}

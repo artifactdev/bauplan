@@ -5,10 +5,10 @@ import { CreditCalculator } from "@/components/app/CreditCalculator";
 export const Route = createFileRoute("/_ws/kredit")({
   head: () => ({
     meta: [
-      { title: tr("Kredit – Bauplan") },
+      { title: tr("credit.loan_bauplan") },
       {
         name: "description",
-        content: tr("Kreditkonditionen, Zinskosten und Rückzahlungen im Blick."),
+        content: tr("shared.keep_track_loan_terms"),
       },
     ],
   }),

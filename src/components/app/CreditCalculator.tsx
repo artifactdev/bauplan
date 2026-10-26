@@ -138,11 +138,11 @@ export function CreditCalculator() {
   const saveTerms = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!draft.budget_pot_id) {
-      toast.error(tr("Wähle die Zahlungsquelle des Kredits."));
+      toast.error(tr("credit_calculator.choose_loan_payment_source"));
       return;
     }
     if (!draft.commitment_start) {
-      toast.error(tr("Bitte das Datum für Vollauszahlung und Bereitstellungszinsen eintragen."));
+      toast.error(tr("credit_calculator.enter_full_drawdown_deadline"));
       return;
     }
     const totalCredit = Number(draft.total_credit);
@@ -158,7 +158,7 @@ export function CreditCalculator() {
       annualRate < 0 ||
       commitmentRate < 0
     ) {
-      toast.error(tr("Prüfe Darlehensbetrag, Sollzins, Monatsrate und Ratenanzahl."));
+      toast.error(tr("credit_calculator.check_loan_amount_nominal"));
       return;
     }
     const firstInstallmentDate = draft.commitment_start;
@@ -190,30 +190,30 @@ export function CreditCalculator() {
   return (
     <>
       <PageHeader
-        title={tr("Kredit")}
-        subtitle={tr("Kreditkonditionen, Zinskosten und Rückzahlungen im Blick.")}
+        title={tr("shared.loan")}
+        subtitle={tr("shared.keep_track_loan_terms")}
       />
-      <Panel title={tr("Kredit- und Zinskosten")}>
+      <Panel title={tr("credit_calculator.loan_interest_costs")}>
         <p className="mb-4 text-sm text-muted-foreground">
           {tr(
-            "Bank-finanzierte Rechnungen und Ausgaben bestimmen die Abrufe. Offene Einträge bilden die Prognose; bezahlte Einträge die Ist-Werte.",
+            "credit_calculator.bank_funded_invoices_expenses",
           )}
         </p>
         {!ws.budget_pots.length && (
           <Empty>
-            {tr("Lege zuerst unter Einstellungen eine Zahlungsquelle für den Bankkredit an.")}
+            {tr("credit_calculator.first_create_payment_source")}
           </Empty>
         )}
         {!!ws.budget_pots.length && (
           <form className="grid gap-4" onSubmit={saveTerms}>
             <div className="grid gap-1.5">
-              <Label htmlFor="credit-source">{tr("Kredit-Zahlungsquelle")}</Label>
+              <Label htmlFor="credit-source">{tr("credit_calculator.loan_payment_source")}</Label>
               <Select
                 value={draft.budget_pot_id}
                 onValueChange={(value) => setDraft((d) => ({ ...d, budget_pot_id: value }))}
               >
                 <SelectTrigger id="credit-source">
-                  <SelectValue placeholder={tr("Zahlungsquelle wählen")} />
+                  <SelectValue placeholder={tr("credit_calculator.choose_payment_source")} />
                 </SelectTrigger>
                 <SelectContent>
                   {ws.budget_pots.map((pot) => (
@@ -226,11 +226,11 @@ export function CreditCalculator() {
             </div>
             <div>
               <h3 className="mb-3 text-sm font-semibold">
-                {tr("Angaben aus dem Darlehensvertrag")}
+                {tr("credit_calculator.loan_contract_details")}
               </h3>
               <p className="mb-3 text-sm text-muted-foreground">
                 {tr(
-                  "Für die Sollzinsen zählt der gebundene Nominalzins. Effektivzins, Zinsfestschreibung und Auszahlungskurs werden nur zur Übersicht gespeichert.",
+                  "credit_calculator.fixed_nominal_rate_used",
                 )}
               </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -254,12 +254,12 @@ export function CreditCalculator() {
             </div>
             <div>
               <h3 className="mb-3 text-sm font-semibold">
-                {tr("Weitere Angaben aus dem Vertrag")}
+                {tr("credit_calculator.other_contract_details")}
               </h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="grid gap-1.5">
                   <Label htmlFor="credit-commitment-rate">
-                    {tr("Bereitstellungszinsen pro Monat (%)")}
+                    {tr("shared.commitment_interest_per_month")}
                   </Label>
                   <Input
                     id="credit-commitment-rate"
@@ -275,7 +275,7 @@ export function CreditCalculator() {
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="credit-commitment-start">
-                    {tr("Bereitstellungszinsen ab / volle Rate ab")}
+                    {tr("credit_calculator.commitment_interest_full_installment")}
                   </Label>
                   <Input
                     id="credit-commitment-start"
@@ -292,7 +292,7 @@ export function CreditCalculator() {
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="credit-day-basis">{tr("Zinstage pro Jahr")}</Label>
+                  <Label htmlFor="credit-day-basis">{tr("credit_calculator.interest_days_per_year")}</Label>
                   <Select
                     value={draft.day_basis}
                     onValueChange={(value) => setDraft((d) => ({ ...d, day_basis: value }))}
@@ -301,8 +301,8 @@ export function CreditCalculator() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="360">{tr("360 Tage (act/360)")}</SelectItem>
-                      <SelectItem value="365">{tr("365 Tage (act/365)")}</SelectItem>
+                      <SelectItem value="360">{tr("credit_calculator.360_days_act_360")}</SelectItem>
+                      <SelectItem value="365">{tr("credit_calculator.365_days_act_365")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -310,17 +310,17 @@ export function CreditCalculator() {
             </div>
             <p className="text-sm text-muted-foreground">
               {tr(
-                "Bis zu diesem Stichtag können Teilbeträge abgerufen werden. Ab diesem Datum wird die volle Monatsrate angesetzt; Bereitstellungszinsen fallen weiter nur auf den nicht abgerufenen Restbetrag an.",
+                "credit_calculator.partial_drawdowns_made_up",
               )}
             </p>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
                 {tr(
-                  "Das Vertragsdatum gilt einschließlich dieses Tages. Die Bereitstellungszinsen werden bis zum Abruf taggenau auf Monatsbasis anteilig berechnet.",
+                  "credit_calculator.contract_date_includes_that",
                 )}
               </p>
               <Button type="submit" disabled={saving}>
-                {tr("Kreditkonditionen speichern")}
+                {tr("credit_calculator.save_loan_terms")}
               </Button>
             </div>
           </form>
@@ -329,7 +329,7 @@ export function CreditCalculator() {
         {terms && !calculation && (
           <p className="mt-4 text-sm text-warning">
             {tr(
-              "Bitte vervollständige die Kreditkonditionen, damit die Kosten berechnet werden können.",
+              "credit_calculator.complete_loan_terms_calculate",
             )}
           </p>
         )}
@@ -337,43 +337,43 @@ export function CreditCalculator() {
           <div className="mt-6 grid gap-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
               <CreditMetric
-                label={tr("Ist-Sollzinsen")}
+                label={tr("credit_calculator.actual_nominal_interest")}
                 value={eur(calculation.actualInterest, true)}
               />
               <CreditMetric
-                label={tr("Ist-Bereitstellungszinsen")}
+                label={tr("credit_calculator.actual_commitment_interest_2")}
                 value={eur(calculation.actualCommitment, true)}
               />
               <CreditMetric
-                label={tr("Ist-Gesamtzinsen")}
+                label={tr("credit_calculator.actual_total_interest")}
                 value={eur(calculation.actualInterest + calculation.actualCommitment, true)}
               />
               <CreditMetric
-                label={tr("Prognose Sollzinsen")}
+                label={tr("credit_calculator.forecast_nominal_interest")}
                 value={eur(calculation.plannedInterest, true)}
               />
               <CreditMetric
-                label={tr("Prognose Bereitstellungszinsen")}
+                label={tr("credit_calculator.forecast_commitment_interest_2")}
                 value={eur(calculation.plannedCommitment, true)}
               />
               <CreditMetric
-                label={tr("Prognose Gesamtzinsen")}
+                label={tr("credit_calculator.forecast_total_interest")}
                 value={eur(calculation.plannedInterest + calculation.plannedCommitment, true)}
               />
               <CreditMetric
-                label={tr("Restschuld bei Tilgungsbeginn")}
+                label={tr("credit_calculator.balance_repayment_start")}
                 value={eur(calculation.plannedBalance, true)}
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">{tr("Tilgungen")}</h3>
+                <h3 className="text-sm font-semibold">{tr("credit_calculator.repayments")}</h3>
                 <p className="text-xs text-muted-foreground">
-                  {tr("Tilgungen reduzieren den Kreditstand ab ihrem Datum in Ist und Prognose.")}
+                  {tr("credit_calculator.repayments_reduce_loan_balance")}
                 </p>
               </div>
               <Button size="sm" variant="outline" onClick={() => setRepaymentOpen(true)}>
-                <Plus className="h-4 w-4" /> {tr("Tilgung erfassen")}
+                <Plus className="h-4 w-4" /> {tr("credit_calculator.record_repayment")}
               </Button>
             </div>
             {repaymentRows.length > 0 && (
@@ -383,14 +383,14 @@ export function CreditCalculator() {
                     <span className="text-muted-foreground">
                       {fmtDate(repayment.repayment_date)}
                     </span>
-                    <span className="flex-1">{repayment.notes || tr("Tilgung")}</span>
+                    <span className="flex-1">{repayment.notes || tr("credit_calculator.repayment")}</span>
                     <span className="tabular">{eur(repayment.amount, true)}</span>
                     <Button
                       size="icon"
                       variant="ghost"
-                      aria-label={tr("Tilgung löschen")}
+                      aria-label={tr("credit_calculator.delete_repayment")}
                       onClick={() =>
-                        confirm(tr("Tilgung löschen?")) &&
+                        confirm(tr("credit_calculator.delete_repayment_2")) &&
                         remove.mutate({ table: "credit_repayments", id: repayment.id })
                       }
                     >
@@ -403,40 +403,40 @@ export function CreditCalculator() {
 
             {calculation.annuity !== null && (
               <p className="rounded-lg bg-muted/60 p-3 text-sm">
-                {tr("Voraussichtliche Monatsrate ab Rückzahlungsbeginn")}:{" "}
+                {tr("credit_calculator.estimated_monthly_payment_repayment")}:{" "}
                 <b className="tabular">{eur(calculation.annuity, true)}</b>
                 <span className="text-muted-foreground">
                   {" "}
-                  · {draft.repayment_count} {tr("Monate")}
+                  · {draft.repayment_count} {tr("credit_calculator.months")}
                 </span>
               </p>
             )}
             <div>
               <h3 className="mb-2 text-sm font-semibold">
-                {tr("Monatlicher Verlauf – Ist und Prognose")}
+                {tr("credit_calculator.monthly_history_actual_forecast")}
               </h3>
               {calculation.months.length ? (
                 <div className="max-h-96 overflow-auto rounded-lg border">
                   <Table>
                     <TableHeader className="sticky top-0 bg-card">
                       <TableRow>
-                        <TableHead>{tr("Monat")}</TableHead>
-                        <TableHead className="text-right">{tr("Abrufe Ist")}</TableHead>
-                        <TableHead className="text-right">{tr("Restschuld Ist")}</TableHead>
-                        <TableHead className="text-right">{tr("Sollzins Ist")}</TableHead>
-                        <TableHead className="text-right">{tr("Bereitstellung Ist")}</TableHead>
-                        <TableHead className="text-right">{tr("Monatsbelastung Ist")}</TableHead>
-                        <TableHead className="text-right">{tr("Kumuliert Ist")}</TableHead>
-                        <TableHead className="text-right">{tr("Abrufe Prognose")}</TableHead>
-                        <TableHead className="text-right">{tr("Restschuld Prognose")}</TableHead>
-                        <TableHead className="text-right">{tr("Sollzins Prognose")}</TableHead>
+                        <TableHead>{tr("shared.month_2")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.actual_drawdowns")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.actual_balance")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.actual_nominal_interest_2")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.actual_commitment_interest")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.actual_monthly_burden")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.actual_cumulative")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.forecast_drawdowns")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.forecast_balance")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.forecast_nominal_interest_2")}</TableHead>
                         <TableHead className="text-right">
-                          {tr("Bereitstellung Prognose")}
+                          {tr("credit_calculator.forecast_commitment_interest")}
                         </TableHead>
                         <TableHead className="text-right">
-                          {tr("Monatsbelastung Prognose")}
+                          {tr("credit_calculator.forecast_monthly_burden")}
                         </TableHead>
-                        <TableHead className="text-right">{tr("Kumuliert Prognose")}</TableHead>
+                        <TableHead className="text-right">{tr("credit_calculator.forecast_cumulative")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="tabular">
@@ -485,7 +485,7 @@ export function CreditCalculator() {
                   </Table>
                 </div>
               ) : (
-                <Empty>{tr("Noch keine Monatswerte im tilgungsfreien Zeitraum.")}</Empty>
+                <Empty>{tr("credit_calculator.no_monthly_values_interest")}</Empty>
               )}
             </div>
           </div>
@@ -494,11 +494,11 @@ export function CreditCalculator() {
       <EntityDialog
         open={repaymentOpen}
         onOpenChange={setRepaymentOpen}
-        title={tr("Tilgung erfassen")}
+        title={tr("credit_calculator.record_repayment")}
         fields={[
-          { name: "amount", label: tr("Tilgungsbetrag (€)"), type: "number", required: true },
-          { name: "repayment_date", label: tr("Tilgungsdatum"), type: "date", required: true },
-          { name: "notes", label: tr("Notizen"), type: "text", full: true },
+          { name: "amount", label: tr("credit_calculator.repayment_amount"), type: "number", required: true },
+          { name: "repayment_date", label: tr("credit_calculator.repayment_date"), type: "date", required: true },
+          { name: "notes", label: tr("shared.notes"), type: "text", full: true },
         ]}
         initial={{ repayment_date: todayISO() }}
         onSubmit={(values) => create.mutateAsync({ table: "credit_repayments", row: values })}
@@ -531,11 +531,11 @@ export function CreditSummaryCard() {
 
   return (
     <Panel
-      title={tr("Kredit-Zinsen")}
+      title={tr("credit_calculator.loan_interest")}
       className="mt-6"
       action={
         <Link to="/kredit" className="text-sm text-primary hover:underline">
-          {tr("Kreditdetails")}
+          {tr("credit_calculator.loan_details")}
         </Link>
       }
     >
@@ -549,7 +549,7 @@ export function CreditSummaryCard() {
             commitmentInterest={current?.plannedCommitment ?? 0}
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            {tr("Ist bis heute")} · {tr("Prognose für den Monat")}
+            {tr("credit_calculator.actual_date")} · {tr("credit_calculator.forecast_month")}
           </p>
         </div>
         <div className="rounded-lg border p-4">
@@ -560,7 +560,7 @@ export function CreditSummaryCard() {
             commitmentInterest={next?.plannedCommitment ?? 0}
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            {tr("Voraussichtliche Monatszinsen")}
+            {tr("credit_calculator.estimated_monthly_interest")}
           </p>
         </div>
       </div>
@@ -586,16 +586,16 @@ function InterestMonth({
       </div>
       <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
         <div className="flex justify-between gap-2">
-          <span>{tr("Sollzinsen")}</span>
+          <span>{tr("credit_calculator.nominal_interest")}</span>
           <span className="tabular">{eur(sollInterest, true)}</span>
         </div>
         <div className="flex justify-between gap-2">
-          <span>{tr("Bereitstellungszinsen")}</span>
+          <span>{tr("credit_calculator.commitment_interest")}</span>
           <span className="tabular">{eur(commitmentInterest, true)}</span>
         </div>
         {actualInterest !== undefined && (
           <div className="flex justify-between gap-2 border-t pt-1 font-medium text-foreground">
-            <span>{tr("Ist bis heute")}</span>
+            <span>{tr("credit_calculator.actual_date")}</span>
             <span className="tabular">{eur(actualInterest, true)}</span>
           </div>
         )}

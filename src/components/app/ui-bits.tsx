@@ -56,20 +56,20 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export const OFFER_STATUS: Record<string, { label: string; tone: keyof typeof tones }> = {
-  requested: { label: tr("Angefragt"), tone: "warning" },
-  received: { label: tr("Erhalten"), tone: "info" },
-  accepted: { label: tr("Angenommen"), tone: "success" },
-  rejected: { label: tr("Abgelehnt"), tone: "neutral" },
+  requested: { label: tr("shared.requested"), tone: "warning" },
+  received: { label: tr("shared.received"), tone: "info" },
+  accepted: { label: tr("shared.accepted"), tone: "success" },
+  rejected: { label: tr("shared.rejected"), tone: "neutral" },
 };
 
 export const TASK_STATUS: Record<string, { label: string; tone: keyof typeof tones }> = {
-  offen: { label: tr("Offen"), tone: "neutral" },
-  in_arbeit: { label: tr("In Arbeit"), tone: "info" },
-  erledigt: { label: tr("Erledigt"), tone: "success" },
+  offen: { label: tr("shared.open"), tone: "neutral" },
+  in_arbeit: { label: tr("shared.progress"), tone: "info" },
+  erledigt: { label: tr("shared.done"), tone: "success" },
 };
 
 export const PRIORITY: Record<string, { label: string; tone: keyof typeof tones }> = {
-  niedrig: { label: tr("Niedrig"), tone: "neutral" },
-  mittel: { label: tr("Mittel"), tone: "warning" },
-  hoch: { label: tr("Hoch"), tone: "danger" },
+  niedrig: { label: tr("shared.low"), tone: "neutral" },
+  mittel: { label: tr("shared.medium"), tone: "warning" },
+  hoch: { label: tr("shared.high"), tone: "danger" },
 };

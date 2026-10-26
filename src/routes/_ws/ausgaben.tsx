@@ -18,20 +18,20 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 export const Route = createFileRoute("/_ws/ausgaben")({
   head: () => ({
     meta: [
-      { title: tr("Ausgaben – Bauplan") },
-      { name: "description", content: tr("Kassenzettel und allgemeine Rechnungen mit Beleg, Status bezahlt, eingereicht oder erstattet.") },
-      { property: "og:title", content: tr("Ausgaben – Bauplan") },
-      { property: "og:description", content: tr("Kassenzettel und Rechnungen deiner Renovierung im Überblick.") },
+      { title: tr("expenses.expenses_bauplan") },
+      { name: "description", content: tr("expenses.receipts_general_invoices_document") },
+      { property: "og:title", content: tr("expenses.expenses_bauplan") },
+      { property: "og:description", content: tr("expenses.receipts_invoices_renovation_glance") },
     ],
   }),
   component: ExpensesPage,
 });
 
 const EXPENSE_STATUS: Record<ExpenseStatus, { label: string; tone: "neutral" | "warning" | "success" | "info" | "primary" }> = {
-  offen: { label: tr("Offen"), tone: "warning" },
-  bezahlt: { label: tr("Bezahlt"), tone: "success" },
-  eingereicht: { label: tr("Eingereicht"), tone: "info" },
-  erstattet: { label: tr("Erstattet"), tone: "primary" },
+  offen: { label: tr("shared.open"), tone: "warning" },
+  bezahlt: { label: tr("shared.paid"), tone: "success" },
+  eingereicht: { label: tr("shared.submitted"), tone: "info" },
+  erstattet: { label: tr("shared.reimbursed"), tone: "primary" },
 };
 const STATUS_OPTIONS = Object.entries(EXPENSE_STATUS).map(([value, s]) => ({ value, label: s.label }));
 
@@ -67,18 +67,18 @@ function ExpensesPage() {
   return (
     <>
       <PageHeader
-        title={tr("Ausgaben")}
-        subtitle={tr("Kassenzettel und allgemeine Rechnungen – je nach Zahlungsquelle vom Budget abgezogen.")}
+        title={tr("shared.expenses")}
+        subtitle={tr("expenses.receipts_general_invoices_deducted")}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setDlg({ initial: { status: "bezahlt", expense_date: todayISO(), category: "Baumarkt" } })}><Plus className="h-4 w-4" /> {tr("Manuell")}</Button>
-            <Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr("Beleg hochladen")}</Button>
+            <Button variant="outline" size="sm" onClick={() => setDlg({ initial: { status: "bezahlt", expense_date: todayISO(), category: "Baumarkt" } })}><Plus className="h-4 w-4" /> {tr("expenses.manual")}</Button>
+            <Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr("expenses.upload_receipt")}</Button>
           </>
         }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label={tr("Gesamt")} value={eur(total, true)} />
+        <Stat label={tr("shared.total")} value={eur(total, true)} />
         {(Object.keys(EXPENSE_STATUS) as ExpenseStatus[]).map((st) => (
           <Stat key={st} label={EXPENSE_STATUS[st].label} value={eur(sumBy(st), true)} active={status === st} onClick={() => setStatus(status === st ? "all" : st)} />
         ))}
@@ -89,32 +89,32 @@ function ExpensesPage() {
           {ws.budget_pots.map((p) => (
             <button key={p.id} type="button" onClick={() => setSource(source === p.id ? "all" : p.id)} className={`rounded-full border px-3 py-1 tabular ${source === p.id ? "border-primary bg-primary/10" : "bg-card"}`}>
               {p.name}: <span className="font-medium">{eur(bySource(p.id), true)}</span>
-              {!p.deducts_from_budget && <span className="ml-1 text-xs text-muted-foreground">({tr("nicht vom Budget")})</span>}
+              {!p.deducts_from_budget && <span className="ml-1 text-xs text-muted-foreground">({tr("shared.not_budget")})</span>}
             </button>
           ))}
-          {bySource(null) > 0 && <span className="rounded-full border px-3 py-1 text-muted-foreground tabular">{tr("Ohne Quelle")}: {eur(bySource(null), true)}</span>}
+          {bySource(null) > 0 && <span className="rounded-full border px-3 py-1 text-muted-foreground tabular">{tr("expenses.no_source")}: {eur(bySource(null), true)}</span>}
         </div>
       )}
 
       <div className="my-4 flex flex-wrap gap-2">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-8" placeholder={tr("Suchen…")} value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input className="pl-8" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{tr("Alle Status")}</SelectItem>
+            <SelectItem value="all">{tr("shared.all_statuses")}</SelectItem>
             {STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
         {ws.budget_pots.length > 0 && (
           <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="w-44" aria-label={tr("Bezahlt aus")}><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-44" aria-label={tr("shared.paid_2")}><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{tr("Alle Quellen")}</SelectItem>
+              <SelectItem value="all">{tr("expenses.all_sources")}</SelectItem>
               {ws.budget_pots.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-              <SelectItem value="none">{tr("Ohne Quelle")}</SelectItem>
+              <SelectItem value="none">{tr("expenses.no_source")}</SelectItem>
             </SelectContent>
           </Select>
         )}
@@ -124,7 +124,7 @@ function ExpensesPage() {
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>{tr("Datum")}</TableHead><TableHead>{tr("Beschreibung")}</TableHead><TableHead>{tr("Geschäft")}</TableHead><TableHead>{tr("Kategorie")}</TableHead><TableHead>{tr("Gewerk")}</TableHead><TableHead>{tr("Bezahlt aus")}</TableHead><TableHead className="text-right">{tr("Betrag")}</TableHead><TableHead>{tr("Status")}</TableHead><TableHead>{tr("Beleg")}</TableHead><TableHead /></TableRow>
+              <TableRow><TableHead>{tr("shared.date")}</TableHead><TableHead>{tr("shared.description")}</TableHead><TableHead>{tr("expenses.shop")}</TableHead><TableHead>{tr("shared.category")}</TableHead><TableHead>{tr("shared.trade")}</TableHead><TableHead>{tr("shared.paid_2")}</TableHead><TableHead className="text-right">{tr("shared.amount")}</TableHead><TableHead>{tr("shared.status")}</TableHead><TableHead>{tr("shared.receipt")}</TableHead><TableHead /></TableRow>
             </TableHeader>
             <TableBody className="tabular">
               {list.map((e) => (
@@ -138,31 +138,31 @@ function ExpensesPage() {
                   <TableCell className="text-right">{eur(e.amount, true)}</TableCell>
                   <TableCell>
                     <Select value={e.status} onValueChange={(v) => update.mutate({ table: "expenses", id: e.id, patch: { status: v } })}>
-                      <SelectTrigger className="h-8 w-36" aria-label={tr("Status ändern")}><Pill tone={EXPENSE_STATUS[e.status]?.tone}>{EXPENSE_STATUS[e.status]?.label ?? e.status}</Pill></SelectTrigger>
+                      <SelectTrigger className="h-8 w-36" aria-label={tr("expenses.change_status")}><Pill tone={EXPENSE_STATUS[e.status]?.tone}>{EXPENSE_STATUS[e.status]?.label ?? e.status}</Pill></SelectTrigger>
                       <SelectContent>{STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </TableCell>
                   <TableCell>
                     {e.document_id ? (
-                      <Button size="sm" variant="ghost" onClick={() => openDoc(e.document_id)}><FileText className="h-4 w-4" /> {tr("Öffnen")}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => openDoc(e.document_id)}><FileText className="h-4 w-4" /> {tr("expenses.open")}</Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">{tr("kein Beleg")}</span>
+                      <span className="text-xs text-muted-foreground">{tr("expenses.no_receipt")}</span>
                     )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right">
-                    <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => setDlg({ id: e.id, initial: { ...e } })}><Pencil className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(tr("Ausgabe löschen? Der Beleg bleibt unter Dokumente.")) && remove.mutate({ table: "expenses", id: e.id })}><Trash2 className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setDlg({ id: e.id, initial: { ...e } })}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("expenses.delete_expense_receipt_stays")) && remove.mutate({ table: "expenses", id: e.id })}><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
             {list.length > 0 && (
               <TableFooter className="tabular">
-                <TableRow><TableCell colSpan={6}>{tr("Summe")}</TableCell><TableCell className="text-right">{eur(listTotal, true)}</TableCell><TableCell colSpan={3} /></TableRow>
+                <TableRow><TableCell colSpan={6}>{tr("expenses.sum")}</TableCell><TableCell className="text-right">{eur(listTotal, true)}</TableCell><TableCell colSpan={3} /></TableRow>
               </TableFooter>
             )}
           </Table>
-          {!list.length && <Empty>{ws.expenses.length ? tr("Keine Treffer.") : tr("Noch keine Ausgaben – lade einen Kassenzettel hoch, er wird automatisch erkannt.")}</Empty>}
+          {!list.length && <Empty>{ws.expenses.length ? tr("shared.no_results") : tr("expenses.no_expenses_yet_upload")}</Empty>}
         </div>
       </Panel>
 
@@ -170,21 +170,21 @@ function ExpensesPage() {
       <EntityDialog
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}
-        title={dlg?.id ? tr("Ausgabe bearbeiten") : tr("Neue Ausgabe")}
+        title={dlg?.id ? tr("expenses.edit_expense") : tr("expenses.new_expense")}
         scan={dlg?.id ? undefined : "expense"}
         fields={[
-          { name: "title", label: tr("Beschreibung"), required: true, full: true },
-          { name: "vendor", label: tr("Geschäft / Firma") },
-          { name: "amount", label: tr("Betrag brutto (€)"), type: "number", required: true },
-          { name: "expense_date", label: tr("Datum"), type: "date" },
-          { name: "payment_date", label: tr("Zahlungsdatum (Plan / Ist)"), type: "date" },
-          { name: "category", label: tr("Kategorie"), type: "select", options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
-          { name: "status", label: tr("Status"), type: "select", required: true, options: STATUS_OPTIONS },
-          { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-          { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
-          { name: "budget_pot_id", label: tr("Bezahlt aus"), type: "select", options: potOptions(ws) },
-          { name: "document_id", label: tr("Beleg"), type: "select", options: docOptions(ws) },
-          { name: "notes", label: tr("Notizen"), type: "textarea" },
+          { name: "title", label: tr("shared.description"), required: true, full: true },
+          { name: "vendor", label: tr("shared.shop_company") },
+          { name: "amount", label: tr("shared.gross_amount"), type: "number", required: true },
+          { name: "expense_date", label: tr("shared.date"), type: "date" },
+          { name: "payment_date", label: tr("shared.payment_date_planned_actual"), type: "date" },
+          { name: "category", label: tr("shared.category"), type: "select", options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
+          { name: "status", label: tr("shared.status"), type: "select", required: true, options: STATUS_OPTIONS },
+          { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+          { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+          { name: "budget_pot_id", label: tr("shared.paid_2"), type: "select", options: potOptions(ws) },
+          { name: "document_id", label: tr("shared.receipt"), type: "select", options: docOptions(ws) },
+          { name: "notes", label: tr("shared.notes"), type: "textarea" },
         ]}
         initial={dlg?.initial}
         onSubmit={(v) => (dlg?.id ? update.mutateAsync({ table: "expenses", id: dlg.id, patch: v }) : create.mutateAsync({ table: "expenses", row: v }))}

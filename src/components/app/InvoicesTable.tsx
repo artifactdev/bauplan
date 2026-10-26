@@ -14,17 +14,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 const ALL = "__all";
 type State = "offen" | "ueberfaellig" | "bezahlt";
 const STATE: Record<State, { label: string; tone: "warning" | "danger" | "success" }> = {
-  ueberfaellig: { label: tr("Überfällig"), tone: "danger" },
-  offen: { label: tr("Offen"), tone: "warning" },
-  bezahlt: { label: tr("Bezahlt"), tone: "success" },
+  ueberfaellig: { label: tr("shared.overdue"), tone: "danger" },
+  offen: { label: tr("shared.open"), tone: "warning" },
+  bezahlt: { label: tr("shared.paid"), tone: "success" },
 };
 export const invoiceState = (i: Pick<Invoice, "paid" | "due_date">, today: string): State =>
   i.paid ? "bezahlt" : i.due_date && i.due_date < today ? "ueberfaellig" : "offen";
 
 type Key = "firm" | "title" | "trade" | "date" | "due" | "amount" | "state";
 const COLS: { key: Key; label: string }[] = [
-  { key: "firm", label: tr("Firma") }, { key: "title", label: tr("Leistung") }, { key: "trade", label: tr("Gewerk") },
-  { key: "date", label: tr("Datum") }, { key: "due", label: tr("Fällig") }, { key: "amount", label: tr("Betrag") }, { key: "state", label: tr("Status") },
+  { key: "firm", label: tr("shared.company") }, { key: "title", label: tr("shared.service") }, { key: "trade", label: tr("shared.trade") },
+  { key: "date", label: tr("shared.date") }, { key: "due", label: tr("invoices_table.due") }, { key: "amount", label: tr("shared.amount") }, { key: "state", label: tr("shared.status") },
 ];
 const cmp = (a: string | number | null, b: string | number | null) =>
   a === b ? 0 : a === null || a === "" ? -1 : b === null || b === "" ? 1 : typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "de");
@@ -80,7 +80,7 @@ export function InvoicesTable({ onEdit, openDoc }: { onEdit: (i: Invoice) => voi
   return (
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {([[tr("Gesamt"), sum(), "neutral"], [tr("Offen"), sum("offen"), "warning"], [tr("Überfällig"), sum("ueberfaellig"), "danger"], [tr("Bezahlt"), sum("bezahlt"), "success"]] as const).map(([l, v, t]) => (
+        {([[tr("shared.total"), sum(), "neutral"], [tr("shared.open"), sum("offen"), "warning"], [tr("shared.overdue"), sum("ueberfaellig"), "danger"], [tr("shared.paid"), sum("bezahlt"), "success"]] as const).map(([l, v, t]) => (
           <Panel key={l} className="p-3 md:p-4">
             <div className="text-xs text-muted-foreground">{l}</div>
             <div className={`font-display text-lg font-semibold tabular ${t === "danger" && v > 0 ? "text-destructive" : ""}`}>{eur(v, true)}</div>
@@ -88,11 +88,11 @@ export function InvoicesTable({ onEdit, openDoc }: { onEdit: (i: Invoice) => voi
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Input className="w-56" placeholder={tr("Suchen…")} value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input className="w-56" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
         <FilterSelect value={fState} onChange={setFState} all="Alle Status" options={Object.entries(STATE).map(([value, s]) => ({ value, label: s.label }))} />
         <FilterSelect value={fTrade} onChange={setFTrade} all="Alle Gewerke" options={tradeOptions(ws)} />
         <FilterSelect value={fContact} onChange={setFContact} all="Alle Kontakte" options={contactOptions(ws)} />
-        {filtered && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setFState(ALL); setFTrade(ALL); setFContact(ALL); }}>{tr("Zurücksetzen")}</Button>}
+        {filtered && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setFState(ALL); setFTrade(ALL); setFContact(ALL); }}>{tr("shared.reset")}</Button>}
       </div>
       <Panel>
         <div className="overflow-x-auto">
@@ -118,21 +118,21 @@ export function InvoicesTable({ onEdit, openDoc }: { onEdit: (i: Invoice) => voi
                     <TableCell className={st === "ueberfaellig" ? "font-medium text-destructive" : ""}>{fmtDate(i.due_date)}</TableCell>
                     <TableCell className="text-right">{eur(i.amount, true)}</TableCell>
                     <TableCell>
-                      <button onClick={() => update.mutate({ table: "invoices", id: i.id, patch: { paid: !i.paid } })} title={tr("Status umschalten")}>
+                      <button onClick={() => update.mutate({ table: "invoices", id: i.id, patch: { paid: !i.paid } })} title={tr("invoices_table.toggle_status")}>
                         <Pill tone={STATE[st].tone}>{STATE[st].label}</Pill>
                       </button>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      {i.document_id && <Button size="icon" variant="ghost" aria-label={tr("PDF öffnen")} onClick={() => openDoc(i.document_id)}><FileText className="h-4 w-4" /></Button>}
-                      <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => onEdit(i)}><Pencil className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(tr("Rechnung löschen?")) && remove.mutate({ table: "invoices", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
+                      {i.document_id && <Button size="icon" variant="ghost" aria-label={tr("shared.open_pdf")} onClick={() => openDoc(i.document_id)}><FileText className="h-4 w-4" /></Button>}
+                      <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => onEdit(i)}><Pencil className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("invoices_table.delete_invoice")) && remove.mutate({ table: "invoices", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
-          {!list.length && <Empty>{ws.invoices.length ? tr("Keine Rechnungen für diese Filter.") : tr("Noch keine Rechnungen.")}</Empty>}
+          {!list.length && <Empty>{ws.invoices.length ? tr("invoices_table.no_invoices_match_filters") : tr("invoices_table.no_invoices_yet")}</Empty>}
         </div>
       </Panel>
     </>

@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils";
 type Target = "ausgabe" | "rechnung" | "angebot" | "ablegen";
 
 const TARGETS: { value: Target; label: string; hint: string }[] = [
-  { value: "ausgabe", label: tr("Ausgabe"), hint: tr("Kassenzettel oder allgemeine Rechnung – wird vom Budget abgezogen") },
-  { value: "rechnung", label: tr("Handwerkerrechnung"), hint: tr("Rechnung zu einem Auftrag / einer Kostenposition") },
-  { value: "angebot", label: tr("Angebot"), hint: tr("Kostenvoranschlag zum Vergleichen") },
-  { value: "ablegen", label: tr("Nur ablegen"), hint: tr("Plan, Vertrag, Foto, Datenblatt…") },
+  { value: "ausgabe", label: tr("assign_dialog.expense"), hint: tr("assign_dialog.receipt_general_invoice_deducted") },
+  { value: "rechnung", label: tr("assign_dialog.contractor_invoice"), hint: tr("assign_dialog.invoice_order_cost_item") },
+  { value: "angebot", label: tr("shared.quote"), hint: tr("assign_dialog.estimate_comparison") },
+  { value: "ablegen", label: tr("assign_dialog.just_file"), hint: tr("assign_dialog.plan_contract_photo_data") },
 ];
 
 const CATEGORY_FOR: Record<string, string> = {
@@ -56,7 +56,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
           setTarget(targetFor(r.result.doc_type));
         }
       })
-      .catch(() => !cancelled && setError(tr("Dokument konnte nicht ausgelesen werden")))
+      .catch(() => !cancelled && setError(tr("assign_dialog.document_not_read")))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -82,28 +82,28 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
   }, [ex, documentId]);
 
   const common: Field[] = [
-    { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-    { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
+    { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+    { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
   ];
   const fields: Field[] =
     target === "ablegen"
-      ? [{ name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) }]
+      ? [{ name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) }]
       : [
-          { name: "vendor", label: target === "ausgabe" ? tr("Geschäft / Firma") : "Firma", required: target !== "ausgabe" },
-          { name: "amount", label: tr("Betrag brutto (€)"), type: "number", required: true },
-          { name: "title", label: tr("Beschreibung"), required: true, full: true },
-          { name: "date", label: tr("Datum"), type: "date" },
-          ...(target !== "angebot" ? [{ name: "payment_date", label: tr("Zahlungsdatum (Plan / Ist)"), type: "date" as const }] : []),
-          ...(target === "rechnung" ? [{ name: "due_date", label: tr("Zahlbar bis"), type: "date" as const }] : []),
+          { name: "vendor", label: target === "ausgabe" ? tr("shared.shop_company") : "Firma", required: target !== "ausgabe" },
+          { name: "amount", label: tr("shared.gross_amount"), type: "number", required: true },
+          { name: "title", label: tr("shared.description"), required: true, full: true },
+          { name: "date", label: tr("shared.date"), type: "date" },
+          ...(target !== "angebot" ? [{ name: "payment_date", label: tr("shared.payment_date_planned_actual"), type: "date" as const }] : []),
+          ...(target === "rechnung" ? [{ name: "due_date", label: tr("shared.payable"), type: "date" as const }] : []),
           ...(target === "ausgabe"
             ? [
-                { name: "category", label: tr("Kategorie"), type: "select" as const, required: true, options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
-                { name: "status", label: tr("Status"), type: "select" as const, required: true, options: [{ value: "offen", label: tr("Offen") }, { value: "bezahlt", label: tr("Bezahlt") }, { value: "eingereicht", label: tr("Eingereicht") }, { value: "erstattet", label: tr("Erstattet") }] },
+                { name: "category", label: tr("shared.category"), type: "select" as const, required: true, options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
+                { name: "status", label: tr("shared.status"), type: "select" as const, required: true, options: [{ value: "offen", label: tr("shared.open") }, { value: "bezahlt", label: tr("shared.paid") }, { value: "eingereicht", label: tr("shared.submitted") }, { value: "erstattet", label: tr("shared.reimbursed") }] },
               ]
             : []),
           ...common,
-          ...(target !== "angebot" ? [{ name: "budget_pot_id", label: tr("Bezahlt aus"), type: "select" as const, options: potOptions(ws) }] : []),
-          ...(target === "rechnung" ? [{ name: "paid", label: tr("Bereits bezahlt"), type: "checkbox" as const }] : []),
+          ...(target !== "angebot" ? [{ name: "budget_pot_id", label: tr("shared.paid_2"), type: "select" as const, options: potOptions(ws) }] : []),
+          ...(target === "rechnung" ? [{ name: "paid", label: tr("assign_dialog.already_paid"), type: "checkbox" as const }] : []),
         ];
 
   async function submit(raw: Record<string, unknown>) {
@@ -128,7 +128,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
         ...(ex?.summary && !doc?.description ? { description: ex.summary } : {}),
       },
     });
-    toast.success(target === "ausgabe" ? tr("Ausgabe erfasst und vom Budget abgezogen") : target === "ablegen" ? tr("Dokument abgelegt") : "Zugeordnet");
+    toast.success(target === "ausgabe" ? tr("assign_dialog.expense_recorded_deducted_budget") : target === "ablegen" ? tr("assign_dialog.document_filed") : "Zugeordnet");
   }
 
   const header = (
@@ -136,7 +136,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
       <div className={cn("flex items-start gap-2 rounded-lg border p-3 text-sm", error ? "border-destructive/40 bg-destructive/5" : "bg-accent/40")}>
         {loading ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : <ScanText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
         <span>
-          {loading ? tr("Inhalt wird gelesen…") : error ? `${error}. Du kannst die Angaben selbst eintragen.` : ex ? <>{tr("Erkannt:")} <b className="font-medium">{CATEGORY_FOR[ex.doc_type]}</b>{ex.summary ? ` – ${ex.summary}` : ""} Bitte prüfen.</> : null}
+          {loading ? tr("assign_dialog.reading_content") : error ? `${error}. Du kannst die Angaben selbst eintragen.` : ex ? <>{tr("assign_dialog.recognized")} <b className="font-medium">{CATEGORY_FOR[ex.doc_type]}</b>{ex.summary ? ` – ${ex.summary}` : ""} Bitte prüfen.</> : null}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -159,7 +159,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
       fields={loading ? [] : fields}
       initial={initial}
       onSubmit={submit}
-      submitLabel={target === "ablegen" ? "Ablegen" : tr("Übernehmen")}
+      submitLabel={target === "ablegen" ? "Ablegen" : tr("assign_dialog.apply")}
     />
   );
 }

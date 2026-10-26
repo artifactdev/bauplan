@@ -16,10 +16,10 @@ import { coversDay, eventEnd, rangeError, rangeLabel } from "@/lib/events";
 export const Route = createFileRoute("/_ws/kalender")({
   head: () => ({
     meta: [
-      { title: tr("Kalender – Bauplan") },
-      { name: "description", content: tr("Termine, Fristen, Handwerkereinsätze und fällige Aufgaben im Monats- und Listenblick.") },
-      { property: "og:title", content: tr("Kalender – Bauplan") },
-      { property: "og:description", content: tr("Termine und Fristen deiner Renovierung im Blick.") },
+      { title: tr("calendar.calendar_bauplan") },
+      { name: "description", content: tr("calendar.appointments_deadlines_contractor_visits") },
+      { property: "og:title", content: tr("calendar.calendar_bauplan") },
+      { property: "og:description", content: tr("calendar.keep_track_renovation_s") },
     ],
   }),
   component: CalendarPage,
@@ -27,10 +27,10 @@ export const Route = createFileRoute("/_ws/kalender")({
 
 type Item = { id: string; title: string; date: string; end: string; label: string; start_time: string | null; kind: "termin" | "frist" | "arbeit" | "aufgabe"; trade_id: string | null; isEvent: boolean; done?: boolean };
 const KIND: Record<Item["kind"], { label: string; tone: "info" | "danger" | "primary" | "warning"; dot: string }> = {
-  termin: { label: tr("Termin"), tone: "info", dot: "bg-info" },
-  frist: { label: tr("Frist"), tone: "danger", dot: "bg-destructive" },
-  arbeit: { label: tr("Arbeiten"), tone: "primary", dot: "bg-primary" },
-  aufgabe: { label: tr("Aufgabe"), tone: "warning", dot: "bg-warning" },
+  termin: { label: tr("shared.appointment"), tone: "info", dot: "bg-info" },
+  frist: { label: tr("shared.deadline"), tone: "danger", dot: "bg-destructive" },
+  arbeit: { label: tr("shared.work"), tone: "primary", dot: "bg-primary" },
+  aufgabe: { label: tr("shared.task"), tone: "warning", dot: "bg-warning" },
 };
 const WD = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((d) => tr(d));
 const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"].map((m) => tr(m));
@@ -77,8 +77,8 @@ function CalendarPage() {
       <span className="text-xs text-muted-foreground">{tradeName(ws, i.trade_id)}</span>
       {i.isEvent && (
         <span className="flex">
-          <Button size="icon" variant="ghost" aria-label={tr("Bearbeiten")} onClick={() => editEvent(i.id)}><Pencil className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" aria-label={tr("Löschen")} onClick={() => confirm(tr("Termin löschen?")) && remove.mutate({ table: "events", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => editEvent(i.id)}><Pencil className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("calendar.delete_appointment")) && remove.mutate({ table: "events", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
         </span>
       )}
     </li>
@@ -86,15 +86,15 @@ function CalendarPage() {
 
   return (
     <>
-      <PageHeader title={tr("Kalender")} actions={<Button size="sm" onClick={() => setDlg({ initial: { kind: "termin", event_date: today } })}><Plus className="h-4 w-4" /> {tr("Termin")}</Button>} />
+      <PageHeader title={tr("shared.calendar")} actions={<Button size="sm" onClick={() => setDlg({ initial: { kind: "termin", event_date: today } })}><Plus className="h-4 w-4" /> {tr("shared.appointment")}</Button>} />
       <Tabs defaultValue="month">
-        <TabsList><TabsTrigger value="month">{tr("Monat")}</TabsTrigger><TabsTrigger value="list">{tr("Liste")}</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="month">{tr("shared.month_2")}</TabsTrigger><TabsTrigger value="list">{tr("calendar.list")}</TabsTrigger></TabsList>
         <TabsContent value="month" className="mt-4">
           <Panel>
             <div className="mb-3 flex items-center justify-between">
-              <Button size="icon" variant="ghost" aria-label={tr("Vorheriger Monat")} onClick={() => shift(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={tr("calendar.previous_month")} onClick={() => shift(-1)}><ChevronLeft className="h-4 w-4" /></Button>
               <h2 className="font-semibold">{MONTHS[cursor.m]} {cursor.y}</h2>
-              <Button size="icon" variant="ghost" aria-label={tr("Nächster Monat")} onClick={() => shift(1)}><ChevronRight className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={tr("calendar.next_month")} onClick={() => shift(1)}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border bg-border text-xs">
               {WD.map((d) => <div key={d} className="bg-muted px-2 py-1.5 font-medium text-muted-foreground">{d}</div>)}
@@ -123,28 +123,28 @@ function CalendarPage() {
         </TabsContent>
         <TabsContent value="list" className="mt-4 grid gap-4">
           {overdue.length > 0 && (
-            <Panel title={tr("Überfällig")} className="border-destructive/30"><ul className="divide-y">{overdue.map((i) => <Row key={i.id} i={i} />)}</ul></Panel>
+            <Panel title={tr("shared.overdue")} className="border-destructive/30"><ul className="divide-y">{overdue.map((i) => <Row key={i.id} i={i} />)}</ul></Panel>
           )}
-          <Panel title={tr("Anstehend")}>
+          <Panel title={tr("calendar.upcoming")}>
             <ul className="divide-y">{upcoming.map((i) => <Row key={i.id} i={i} />)}</ul>
-            {!upcoming.length && <Empty>{tr("Nichts geplant.")}</Empty>}
+            {!upcoming.length && <Empty>{tr("calendar.nothing_planned")}</Empty>}
           </Panel>
         </TabsContent>
       </Tabs>
       <EntityDialog
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}
-        title={dlg?.id ? tr("Termin bearbeiten") : tr("Neuer Termin")}
+        title={dlg?.id ? tr("calendar.edit_appointment") : tr("calendar.new_appointment")}
         scan={dlg?.id ? undefined : "event"}
         fields={[
-          { name: "title", label: tr("Titel"), required: true, full: true },
-          { name: "event_date", label: tr("Startdatum"), type: "date", required: true },
-          { name: "start_time", label: tr("Startzeit (optional)"), type: "time" },
-          { name: "end_date", label: tr("Enddatum (optional)"), type: "date" },
-          { name: "end_time", label: tr("Endzeit (optional)"), type: "time" },
-          { name: "kind", label: tr("Art"), type: "select", required: true, options: [{ value: "termin", label: tr("Termin") }, { value: "frist", label: tr("Frist") }, { value: "arbeit", label: tr("Arbeiten") }] },
-          { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-          { name: "notes", label: tr("Notizen"), type: "textarea" },
+          { name: "title", label: tr("shared.title"), required: true, full: true },
+          { name: "event_date", label: tr("calendar.start_date"), type: "date", required: true },
+          { name: "start_time", label: tr("calendar.start_time_optional"), type: "time" },
+          { name: "end_date", label: tr("calendar.end_date_optional"), type: "date" },
+          { name: "end_time", label: tr("calendar.end_time_optional"), type: "time" },
+          { name: "kind", label: tr("calendar.type"), type: "select", required: true, options: [{ value: "termin", label: tr("shared.appointment") }, { value: "frist", label: tr("shared.deadline") }, { value: "arbeit", label: tr("shared.work") }] },
+          { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+          { name: "notes", label: tr("shared.notes"), type: "textarea" },
         ]}
         initial={dlg?.initial}
         onSubmit={(v) => {

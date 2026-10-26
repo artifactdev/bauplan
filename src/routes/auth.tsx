@@ -15,15 +15,15 @@ export const Route = createFileRoute("/auth")({
   validateSearch: z.object({ fehler: z.string().optional() }),
   head: () => ({
     meta: [
-      { title: tr("Anmelden – Bauplan") },
+      { title: tr("auth.sign_bauplan") },
       {
         name: "description",
-        content: tr("Melde dich an, um dein Renovierungsprojekt zu verwalten."),
+        content: tr("auth.sign_manage_renovation_project"),
       },
-      { property: "og:title", content: tr("Anmelden – Bauplan") },
+      { property: "og:title", content: tr("auth.sign_bauplan") },
       {
         property: "og:description",
-        content: tr("Melde dich an, um dein Renovierungsprojekt zu verwalten."),
+        content: tr("auth.sign_manage_renovation_project"),
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -59,7 +59,7 @@ function AuthPage() {
       await loginLocal({ data: { email, password } });
       window.location.href = "/";
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : tr("Fehler bei der Anmeldung"));
+      toast.error(err instanceof Error ? err.message : tr("auth.sign_error"));
       setBusy(false);
     }
   }
@@ -72,27 +72,27 @@ function AuthPage() {
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="hidden flex-col justify-between bg-sidebar p-10 text-sidebar-foreground lg:flex">
         <div className="flex items-center gap-2 font-display text-lg font-semibold text-sidebar-accent-foreground">
-          <Hammer className="h-5 w-5 text-sidebar-primary" /> {tr("Bauplan")}
+          <Hammer className="h-5 w-5 text-sidebar-primary" /> {tr("shared.bauplan")}
         </div>
         <div>
           <h1 className="text-4xl font-semibold leading-tight text-sidebar-accent-foreground">
-            {tr("Deine Renovierung.")}
+            {tr("auth.renovation")}
             <br />
-            {tr("Klar im Blick.")}
+            {tr("auth.everything_view")}
           </h1>
           <p className="mt-4 max-w-md text-sidebar-foreground/80">
             {tr(
-              "Budget, Angebote, Rechnungen, Dokumente, Aufgaben und Termine – an einem Ort statt in zehn Tabellen.",
+              "auth.budget_quotes_invoices_documents",
             )}
           </p>
         </div>
         <p className="text-xs text-sidebar-foreground/60">
-          {tr("Für private Bauherren und Sanierer.")}
+          {tr("auth.private_homeowners_renovators")}
         </p>
       </div>
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-semibold">{tr("Anmelden")}</h2>
+          <h2 className="text-2xl font-semibold">{tr("auth.sign")}</h2>
           {fehler && (
             <p className="mt-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {fehler}
@@ -105,14 +105,14 @@ function AuthPage() {
               </Button>
               <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
                 <div className="h-px flex-1 bg-border" />
-                {tr("oder")}
+                {tr("auth.or")}
                 <div className="h-px flex-1 bg-border" />
               </div>
             </>
           )}
           <form onSubmit={submit} className={`${oidc.enabled ? "" : "mt-6"} grid gap-4`}>
             <div className="grid gap-1.5">
-              <Label htmlFor="email">{tr("E-Mail")}</Label>
+              <Label htmlFor="email">{tr("shared.email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -122,7 +122,7 @@ function AuthPage() {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="pw">{tr("Passwort")}</Label>
+              <Label htmlFor="pw">{tr("shared.password")}</Label>
               <Input
                 id="pw"
                 type="password"
@@ -132,11 +132,11 @@ function AuthPage() {
               />
             </div>
             <Button type="submit" disabled={busy}>
-              {tr("Anmelden")}
+              {tr("auth.sign")}
             </Button>
           </form>
           <p className="mt-4 text-sm text-muted-foreground">
-            {tr("Noch kein Konto? Bitte den Admin, dich in den Einstellungen anzulegen.")}
+            {tr("auth.no_account_yet_ask")}
           </p>
         </div>
       </div>

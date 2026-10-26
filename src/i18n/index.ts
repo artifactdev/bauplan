@@ -1,5 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
+import { resolveUiKey } from "./legacy-ui-keys";
 
 export const LANGUAGES = [
   { code: "de", label: "Deutsch", locale: "de-DE" },
@@ -38,11 +39,11 @@ if (!i18n.isInitialized) {
 }
 
 /**
- * Translate UI text. Keys are the German source text; English lives in
- * src/locales/en/ui.json. Missing keys fall back to the German key.
+ * Translate UI keys. Data labels and dynamic server messages still using
+ * source text are resolved through the compatibility map.
  */
 export function tr(key: string, options?: Record<string, unknown>): string {
-  return i18n.t(key, { ns: "ui", ...options }) as string;
+  return i18n.t(resolveUiKey(key), { ns: "ui", ...options }) as string;
 }
 
 export function currentLocale() {

@@ -48,11 +48,11 @@ export function useWorkspace() {
   const q = useQuery<Workspace>({
     queryKey: ["ws", userId],
     queryFn: async () => {
-      if (!userId) throw new Error(tr("Kein Konto für die Offline-Nutzung verfügbar."));
+      if (!userId) throw new Error(tr("offline.no_account_available_offline"));
       if (!navigator.onLine) {
         const cached = await loadSnapshot(userId);
         if (!cached)
-          throw new Error(tr("Der gespeicherte Arbeitsbereich ist offline nicht verfügbar."));
+          throw new Error(tr("offline.saved_workspace_unavailable_offline"));
         return cached;
       }
       const workspace = await mergePendingWorkspace(userId, (await getWorkspace()) as Workspace);
@@ -160,7 +160,7 @@ export function useMutations() {
 
   const upload = useMutation({
     mutationFn: async (v: { file: File; meta: Record<string, unknown> }) => {
-      if (v.file.size > 25 * 1024 * 1024) throw new Error(tr("Die Datei ist größer als 25 MB."));
+      if (v.file.size > 25 * 1024 * 1024) throw new Error(tr("offline.file_exceeds_25_mb"));
       if (navigator.onLine) {
         const fd = new FormData();
         fd.append("file", v.file);
@@ -215,7 +215,7 @@ export function useMutations() {
 function requireAccount(userId: string | undefined) {
   const account = getOfflineAccount();
   if (!userId || !account || account.id !== userId)
-    throw new Error(tr("Kein Konto für die Offline-Nutzung verfügbar."));
+    throw new Error(tr("offline.no_account_available_offline"));
   return account;
 }
 
@@ -225,7 +225,7 @@ async function readCachedWorkspace(
   userId: string,
 ): Promise<Workspace> {
   const cached = qc.getQueryData<Workspace>(key) ?? (await loadSnapshot(userId));
-  if (!cached) throw new Error(tr("Der gespeicherte Arbeitsbereich ist offline nicht verfügbar."));
+  if (!cached) throw new Error(tr("offline.saved_workspace_unavailable_offline"));
   return cached;
 }
 
@@ -247,7 +247,7 @@ function findRow(workspace: Workspace, table: TableName, id: string) {
   const row = (workspace[table] as unknown as Record<string, unknown>[]).find(
     (item) => item["id"] === id,
   );
-  if (!row) throw new Error(tr("Der Eintrag ist im Offline-Arbeitsbereich nicht verfügbar."));
+  if (!row) throw new Error(tr("offline.item_unavailable_offline_workspace"));
   return row;
 }
 
@@ -280,7 +280,7 @@ export function useOfflineSync(userId: string) {
         window.location.href = "/auth";
         throw new Error(
           tr(
-            "Die Sitzung ist nicht mehr aktiv. Melde dich erneut an; ausstehende Offline-Änderungen bleiben erhalten.",
+            "offline.session_no_longer_active",
           ),
         );
       }
@@ -339,7 +339,7 @@ export function useOfflineSync(userId: string) {
       toast.error(
         error instanceof Error
           ? tr(error.message)
-          : tr("Die Offline-Synchronisierung ist fehlgeschlagen."),
+          : tr("offline.offline_synchronization_failed"),
       );
     } finally {
       syncingRef.current = false;
@@ -350,7 +350,7 @@ export function useOfflineSync(userId: string) {
         toast.error(
           error instanceof Error
             ? tr(error.message)
-            : tr("Der Offline-Status konnte nicht geladen werden."),
+            : tr("offline.not_load_offline_status"),
         );
       }
     }

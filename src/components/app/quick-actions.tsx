@@ -14,15 +14,15 @@ type P = { open: boolean; onOpenChange: (o: boolean) => void; initial?: Record<s
 
 export function taskFields(ws: ReturnType<typeof useWorkspace>["ws"]): Field[] {
   return [
-    { name: "title", label: tr("Titel"), required: true, full: true },
-    { name: "due_date", label: tr("Fällig am"), type: "date" },
-    { name: "priority", label: tr("Priorität"), type: "select", required: true, options: [{ value: "niedrig", label: tr("Niedrig") }, { value: "mittel", label: tr("Mittel") }, { value: "hoch", label: tr("Hoch") }] },
-    { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-    { name: "phase", label: tr("Phase"), type: "select", options: PHASES.map((p) => ({ value: p, label: tr(p) })) },
-    { name: "status", label: tr("Status"), type: "select", required: true, options: [{ value: "offen", label: tr("Offen") }, { value: "in_arbeit", label: tr("In Arbeit") }, { value: "erledigt", label: tr("Erledigt") }] },
-    { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
-    { name: "document_id", label: tr("Dokument"), type: "select", options: ws.documents.map((d) => ({ value: d.id, label: d.name })) },
-    { name: "notes", label: tr("Notizen"), type: "textarea" },
+    { name: "title", label: tr("shared.title"), required: true, full: true },
+    { name: "due_date", label: tr("quick_actions.due"), type: "date" },
+    { name: "priority", label: tr("quick_actions.priority"), type: "select", required: true, options: [{ value: "niedrig", label: tr("shared.low") }, { value: "mittel", label: tr("shared.medium") }, { value: "hoch", label: tr("shared.high") }] },
+    { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+    { name: "phase", label: tr("quick_actions.phase"), type: "select", options: PHASES.map((p) => ({ value: p, label: tr(p) })) },
+    { name: "status", label: tr("shared.status"), type: "select", required: true, options: [{ value: "offen", label: tr("shared.open") }, { value: "in_arbeit", label: tr("shared.progress") }, { value: "erledigt", label: tr("shared.done") }] },
+    { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+    { name: "document_id", label: tr("shared.document"), type: "select", options: ws.documents.map((d) => ({ value: d.id, label: d.name })) },
+    { name: "notes", label: tr("shared.notes"), type: "textarea" },
   ];
 }
 
@@ -33,7 +33,7 @@ export function QuickTask({ open, onOpenChange, initial, editId }: P) {
     <EntityDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={editId ? tr("Aufgabe bearbeiten") : tr("Neue Aufgabe")}
+      title={editId ? tr("quick_actions.edit_task") : tr("quick_actions.new_task")}
       scan={editId ? undefined : "task"}
       fields={taskFields(ws)}
       initial={initial ?? { priority: "mittel", status: "offen" }}
@@ -49,13 +49,13 @@ export function QuickCost({ open, onOpenChange, initial, editId }: P) {
     <EntityDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={editId ? tr("Kostenposition bearbeiten") : tr("Neue Kostenposition")}
+      title={editId ? tr("quick_actions.edit_cost_item") : tr("shared.new_cost_item")}
       scan={editId ? undefined : "cost"}
       fields={[
-        { name: "title", label: tr("Bezeichnung"), required: true, full: true },
-        { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-        { name: "planned", label: tr("Geplante Kosten (€)"), type: "number", required: true },
-        { name: "description", label: tr("Beschreibung"), type: "textarea" },
+        { name: "title", label: tr("quick_actions.name"), required: true, full: true },
+        { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+        { name: "planned", label: tr("quick_actions.planned_costs"), type: "number", required: true },
+        { name: "description", label: tr("shared.description"), type: "textarea" },
       ]}
       initial={initial}
       onSubmit={(v) => (editId ? update.mutateAsync({ table: "cost_items", id: editId, patch: v }) : create.mutateAsync({ table: "cost_items", row: v }))}
@@ -78,22 +78,22 @@ export function QuickUpload({ open, onOpenChange, initial }: P) {
         if (!o) setFileName("");
         onOpenChange(o);
       }}
-      title={tr("Dokument hochladen")}
+      title={tr("quick_actions.upload_document")}
       submitLabel="Hochladen"
       fields={[
-        { name: "recognize", label: tr("Inhalt automatisch erkennen und zuordnen (Angebot, Rechnung, Kassenzettel…)"), type: "checkbox", full: true },
-        { name: "category", label: tr("Kategorie"), type: "select", required: true, options: DOC_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
-        { name: "trade_id", label: tr("Gewerk"), type: "select", options: tradeOptions(ws) },
-        { name: "cost_item_id", label: tr("Kostenposition"), type: "select", options: costItemOptions(ws) },
-        { name: "task_id", label: tr("Aufgabe"), type: "select", options: ws.tasks.map((t) => ({ value: t.id, label: t.title })) },
-        { name: "tags", label: tr("Schlagwörter (Komma-getrennt)"), full: true },
-        { name: "description", label: tr("Beschreibung"), type: "textarea" },
+        { name: "recognize", label: tr("quick_actions.recognize_content_automatically_assign"), type: "checkbox", full: true },
+        { name: "category", label: tr("shared.category"), type: "select", required: true, options: DOC_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
+        { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
+        { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+        { name: "task_id", label: tr("shared.task"), type: "select", options: ws.tasks.map((t) => ({ value: t.id, label: t.title })) },
+        { name: "tags", label: tr("shared.tags_comma_separated"), full: true },
+        { name: "description", label: tr("shared.description"), type: "textarea" },
       ]}
       initial={initial ?? { category: "Sonstiges", recognize: true }}
       extra={
         <div className="grid gap-1.5">
-          <Label htmlFor="file">{tr("Datei (max. 25 MB)")}</Label>
-          <Button type="button" size="sm" variant="outline" className="justify-self-start" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("Foto aufnehmen")}</Button>
+          <Label htmlFor="file">{tr("quick_actions.file_max_25_mb")}</Label>
+          <Button type="button" size="sm" variant="outline" className="justify-self-start" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
           <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f && fileRef.current) { const dt = new DataTransfer(); dt.items.add(f); fileRef.current.files = dt.files; setFileName(f.name); } }} />
           <Input id="file" ref={fileRef} type="file" required onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")} accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.dwg,.txt" />
           {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
@@ -101,7 +101,7 @@ export function QuickUpload({ open, onOpenChange, initial }: P) {
       }
       onSubmit={async (v) => {
         const file = fileRef.current?.files?.[0];
-        if (!file) throw new Error(tr("Bitte eine Datei wählen"));
+        if (!file) throw new Error(tr("quick_actions.choose_file"));
         const { recognize, ...meta } = v;
         const res = await upload.mutateAsync({ file, meta });
         const canRead = file.type === "application/pdf" || file.type.startsWith("image/");
