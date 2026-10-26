@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>bauplan-docling</Name>
+  <Repository>quay.io/docling-project/docling-serve-cpu:v1.38.1</Repository>
+  <Registry>https://quay.io/repository/docling-project/docling-serve-cpu</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/docling-project/docling-serve</Support>
+  <Project>https://github.com/docling-project/docling-serve</Project>
+  <Overview>Optional local Docling Serve OCR for Bauplan. Use a shared private Docker network; no published port is needed. Preload the models directory before mounting it. Select Docling Serve and http://bauplan-docling:5001 in Bauplan Settings.</Overview>
+  <Category>Productivity:</Category>
+  <Config Name="Local model assets" Target="/opt/app-root/src/.cache/docling/models" Default="/mnt/user/appdata/bauplan-docling/models" Mode="rw" Description="Must contain the model assets from the pinned image BEFORE startup. An empty bind mount hides bundled assets; see docs/ocr.md." Type="Path" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Disable remote services" Target="DOCLING_SERVE_ENABLE_REMOTE_SERVICES" Default="false" Type="Variable" Display="always" Required="true" Mask="false">false</Config>
+  <Config Name="Disable UI" Target="DOCLING_SERVE_ENABLE_UI" Default="false" Type="Variable" Display="advanced" Required="true" Mask="false">false</Config>
+  <Config Name="Maximum pages" Target="DOCLING_SERVE_MAX_NUM_PAGES" Default="10" Type="Variable" Display="advanced" Required="true" Mask="false">10</Config>
+  <Config Name="Document timeout" Target="DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT" Default="170" Type="Variable" Display="advanced" Required="true" Mask="false">170</Config>
+  <Config Name="Synchronous wait" Target="DOCLING_SERVE_MAX_SYNC_WAIT" Default="175" Type="Variable" Display="advanced" Required="true" Mask="false">175</Config>
+  <Config Name="Offline models" Target="HF_HUB_OFFLINE" Default="1" Type="Variable" Display="advanced" Required="true" Mask="false">1</Config>
+  <Config Name="Offline transformers" Target="TRANSFORMERS_OFFLINE" Default="1" Type="Variable" Display="advanced" Required="true" Mask="false">1</Config>
+  <Config Name="API key" Target="DOCLING_SERVE_API_KEY" Default="" Description="Optional service authentication. Configure the same key in Bauplan OCR settings; requires OCR_SETTINGS_KEY on the app." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+</Container>

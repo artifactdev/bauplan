@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    ports: ["3000:3000"]
+    volumes:
+      - "./daten:/data"
+      - "./dokumente:/uploads"
+    environment:
+      OCR_URL: http://ocr:8000
+      OCR_SETTINGS_KEY: ${OCR_SETTINGS_KEY:-}
+      UPLOADS_DIR: /uploads
+    depends_on: [ocr]
+    restart: unless-stopped
+  ocr:
+    build: ./ocr
+    restart: unless-stopped
+    # kein Port nach außen – nur die App spricht mit dem OCR-Dienst
+  docling:
+    image: quay.io/docling-project/docling-serve-cpu:v1.38.1
+    profiles: ["docling"]
+    environment:
+      DOCLING_SERVE_ENABLE_REMOTE_SERVICES: "false"
+      DOCLING_SERVE_ENABLE_UI: "false"
+      DOCLING_SERVE_MAX_NUM_PAGES: "10"
+      DOCLING_SERVE_MAX_DOCUMENT_TIMEOUT: "170"
+      DOCLING_SERVE_MAX_SYNC_WAIT: "175"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - "docling-models:/opt/app-root/src/.cache/docling/models"
+    restart: unless-stopped
+volumes:
+  docling-models:

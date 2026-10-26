@@ -1,0 +1,13 @@
+.git
+.lovable
+node_modules
+.output
+dist
+coverage
+data
+daten
+dokumente
+*.db
+*.sqlite
+.env
+.env.*

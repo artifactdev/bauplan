@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>bauplan-ocr</Name>
+  <Repository>ghcr.io/OWNER/bauplan-ocr:latest</Repository>
+  <Registry>https://github.com/OWNER/bauplan-ocr/pkgs/container/bauplan-ocr</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/OWNER/bauplan/issues</Support>
+  <Project>https://github.com/OWNER/bauplan</Project>
+  <Overview>Optional private OCR service for Bauplan. Do not expose port 8000 to the host.</Overview>
+  <Category>Productivity:</Category>
+</Container>
