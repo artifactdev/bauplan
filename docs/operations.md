@@ -19,6 +19,8 @@ The app has no OCR-related environment variables. Legacy `OCR_URL`, API-key, or 
 ### Backup
 The Compose setup stores the database and OCR models in `./daten` and uploaded files separately in `./dokumente`. Back up all three paths. For older installations, copy `daten/uploads/` into `dokumente/` before switching to the separate mount.
 
+Admins can also create a portable application backup in Settings and import it during setup or from Settings. It contains the database and uploaded documents, but not OCR language models; the archive includes sensitive user credentials and application settings. The in-app ZIP limit is 128 MB. See [backups and restore](backups.md) for expanded-size limits and restore behavior.
+
 ### Reverse proxy
 Put HTTPS in front of the app (cookies are `secure` under `https`). For OIDC, enter the public address in Settings.
 Allow a 25 MiB upload plus multipart overhead and OCR processing durations up to 180 seconds in the proxy.

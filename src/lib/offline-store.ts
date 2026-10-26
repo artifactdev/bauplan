@@ -16,6 +16,7 @@ export type OfflineChange = {
   rowId: string;
   base: Record<string, unknown> | null;
   row: Record<string, unknown> | null;
+  syncGeneration?: string | undefined;
   conflict?: Record<string, unknown> | null;
 };
 
@@ -26,6 +27,7 @@ export type PendingUpload = {
   name: string;
   mime: string;
   meta: Record<string, unknown>;
+  syncGeneration?: string | undefined;
 };
 
 type OfflineDb = {
@@ -77,6 +79,7 @@ export type OfflineAccount = {
   email: string;
   name: string | null;
   role: "admin" | "member";
+  syncGeneration?: string | undefined;
 };
 
 export function setOfflineAccount(account: OfflineAccount) {

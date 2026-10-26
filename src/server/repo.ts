@@ -26,6 +26,13 @@ export interface Repo {
   writeNavigation(userId: string, value: NavigationPreferences): Promise<void>;
   deleteNavigation(userId: string): Promise<void>;
   getAll(): Promise<Workspace>;
+  getSyncGeneration(): Promise<string>;
+  exportBackup(maxBytes?: number): Promise<{ database: BackupDatabase; files: BackupFile[] }>;
+  restoreBackup(
+    database: BackupDatabase,
+    files: BackupFile[],
+    requireNoUsers?: boolean,
+  ): Promise<void>;
   insert(table: TableName, row: Record<string, unknown>): Promise<Record<string, unknown>>;
   update(table: TableName, id: string, patch: Record<string, unknown>): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
@@ -47,6 +54,19 @@ export interface Repo {
   }>;
   deleteSyncOperations(userId: string): Promise<void>;
 }
+
+export type BackupDatabase = {
+  tables: Record<TableName, Record<string, unknown>[]>;
+  users: Record<string, unknown>[];
+  settings: Record<string, unknown>[];
+  appearances: Record<string, unknown>[];
+  navigation: Record<string, unknown>[];
+  syncOperations: Record<string, unknown>[];
+};
+
+export type BackupFile = { name: string; bytes: Uint8Array };
+
+const SYNC_GENERATION_SETTING = "workspace_generation";
 
 export type SyncChange = {
   id: string;
@@ -223,6 +243,176 @@ export function sqliteRepo(): Repo {
       for (const t of TABLE_NAMES)
         out[t] = d.prepare(`SELECT * FROM ${t} ORDER BY created_at`).all().map(normalize);
       return out as unknown as Workspace;
+    },
+    async getSyncGeneration() {
+      const d = await db();
+      const existing = d
+        .prepare("SELECT value FROM app_settings WHERE key = ?")
+        .get(SYNC_GENERATION_SETTING)?.["value"];
+      if (typeof existing === "string" && existing) return existing;
+      d.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run(
+        SYNC_GENERATION_SETTING,
+        crypto.randomUUID(),
+      );
+      return String(
+        d.prepare("SELECT value FROM app_settings WHERE key = ?").get(SYNC_GENERATION_SETTING)?.[
+          "value"
+        ] ?? "",
+      );
+    },
+    async exportBackup(maxBytes = Number.POSITIVE_INFINITY) {
+      const d = await db();
+      const path = await nodeImport<typeof import("node:path")>("node:" + "path");
+      const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
+      const tables = {} as BackupDatabase["tables"];
+      for (const table of TABLE_NAMES)
+        tables[table] = d.prepare(`SELECT * FROM ${table} ORDER BY created_at, id`).all();
+      const directory = uploadsDir(path);
+      const files: BackupFile[] = [];
+      let totalBytes = 0;
+      for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+        if (!entry.isFile()) throw new Error("Das Upload-Verzeichnis enthält einen ungültigen Eintrag.");
+        const filePath = path.join(directory, entry.name);
+        const fileStat = await fs.stat(filePath);
+        totalBytes += fileStat.size;
+        if (totalBytes > maxBytes) throw new Error("Die Uploads überschreiten die Backup-Größe.");
+        files.push({
+          name: entry.name,
+          bytes: new Uint8Array(await fs.readFile(filePath)),
+        });
+      }
+      return {
+        database: {
+          tables,
+          users: d.prepare("SELECT * FROM app_users ORDER BY id").all(),
+          settings: d
+            .prepare("SELECT * FROM app_settings WHERE key != ? ORDER BY key")
+            .all(SYNC_GENERATION_SETTING),
+          appearances: d
+            .prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} ORDER BY user_id`)
+            .all(),
+          navigation: d
+            .prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} ORDER BY user_id`)
+            .all(),
+          syncOperations: d.prepare("SELECT * FROM app_sync_operations ORDER BY id").all(),
+        },
+        files,
+      };
+    },
+    async restoreBackup(database, files, requireNoUsers = false) {
+      const d = await db();
+      const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
+      const path = await nodeImport<typeof import("node:path")>("node:" + "path");
+      const liveDirectory = uploadsDir(path);
+      const parent = path.dirname(liveDirectory);
+      const stageDirectory = await fs.mkdtemp(path.join(parent, ".bauplan-restore-"));
+      const stagedUploads = path.join(stageDirectory, "uploads");
+      const previousUploads = `${liveDirectory}.backup-${crypto.randomUUID()}`;
+      let oldMoved = false;
+      let newMoved = false;
+      let transactionOpen = false;
+
+      try {
+        await fs.mkdir(stagedUploads);
+        for (const file of files) {
+          if (
+            !file.name ||
+            file.name === "." ||
+            file.name === ".." ||
+            file.name !== path.basename(file.name) ||
+            file.name.includes("/") ||
+            file.name.includes("\\")
+          )
+            throw new Error("Das Backup enthält einen unsicheren Dateipfad.");
+          await fs.writeFile(path.join(stagedUploads, file.name), file.bytes, { flag: "wx" });
+        }
+
+        d.exec("BEGIN IMMEDIATE");
+        transactionOpen = true;
+        if (
+          requireNoUsers &&
+          Number(d.prepare("SELECT COUNT(*) AS n FROM app_users").get()?.["n"] ?? 0) > 0
+        )
+          throw new Error("Die Einrichtung wurde bereits abgeschlossen.");
+
+        for (const table of TABLE_NAMES) d.prepare(`DELETE FROM ${table}`).run();
+        d.prepare("DELETE FROM app_users").run();
+        d.prepare("DELETE FROM app_settings").run();
+        d.prepare(`DELETE FROM ${USER_APPEARANCE_TABLE}`).run();
+        d.prepare(`DELETE FROM ${USER_NAVIGATION_TABLE}`).run();
+        d.prepare("DELETE FROM app_sync_operations").run();
+        d.prepare("DELETE FROM app_sessions").run();
+
+        const insertRows = (table: string, rows: Record<string, unknown>[]) => {
+          for (const row of rows) {
+            const keys = Object.keys(row);
+            d.prepare(
+              `INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
+            ).run(...keys.map((key) => toSql(row[key])));
+          }
+        };
+        for (const table of TABLE_NAMES) insertRows(table, database.tables[table]);
+        insertRows("app_users", database.users);
+        insertRows(
+          "app_settings",
+          database.settings.filter((setting) => setting["key"] !== SYNC_GENERATION_SETTING),
+        );
+        insertRows("app_settings", [{ key: SYNC_GENERATION_SETTING, value: crypto.randomUUID() }]);
+        insertRows(USER_APPEARANCE_TABLE, database.appearances);
+        insertRows(USER_NAVIGATION_TABLE, database.navigation);
+        insertRows("app_sync_operations", database.syncOperations);
+
+        await fs.rename(liveDirectory, previousUploads);
+        oldMoved = true;
+        await fs.rename(stagedUploads, liveDirectory);
+        newMoved = true;
+        d.exec("COMMIT");
+        transactionOpen = false;
+      } catch (error) {
+        const recoveryErrors: unknown[] = [];
+        if (transactionOpen) {
+          try {
+            d.exec("ROLLBACK");
+          } catch (rollbackError) {
+            recoveryErrors.push(rollbackError);
+          }
+        }
+        if (newMoved) {
+          try {
+            await fs.rm(liveDirectory, { recursive: true, force: true });
+          } catch (cleanupError) {
+            recoveryErrors.push(cleanupError);
+          }
+        }
+        if (oldMoved) {
+          try {
+            await fs.rename(previousUploads, liveDirectory);
+          } catch (restoreError) {
+            recoveryErrors.push(restoreError);
+          }
+        }
+        try {
+          await fs.rm(stageDirectory, { recursive: true, force: true });
+        } catch (cleanupError) {
+          recoveryErrors.push(cleanupError);
+        }
+        if (recoveryErrors.length)
+          throw new Error(
+            "Der Restore ist fehlgeschlagen und der vorherige Zustand konnte nicht vollständig wiederhergestellt werden.",
+            { cause: new AggregateError([error, ...recoveryErrors]) },
+          );
+        throw error;
+      }
+
+      try {
+        await fs.rm(previousUploads, { recursive: true, force: true });
+        await fs.rm(stageDirectory, { recursive: true, force: true });
+      } catch (error) {
+        throw new Error(
+          "Backup wurde wiederhergestellt, temporäre Dateien konnten aber nicht vollständig entfernt werden.",
+          { cause: error },
+        );
+      }
     },
     async insert(table, row) {
       const d = await db();

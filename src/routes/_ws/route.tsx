@@ -15,7 +15,7 @@ import {
   WifiOff,
   Download,
 } from "lucide-react";
-import { getBackendInfo } from "@/lib/data.functions";
+import { getBackendInfo, getWorkspaceSyncGeneration } from "@/lib/data.functions";
 import { getAuthState, logoutLocal } from "@/lib/auth.functions";
 import { useMutations, useOfflineSync, useWorkspace } from "@/hooks/use-workspace";
 import {
@@ -76,11 +76,13 @@ export const Route = createFileRoute("/_ws")({
       throw redirect({ to: "/auth" });
     }
     if (auth.user.role === "admin" || auth.user.role === "member") {
+      const syncGeneration = await getWorkspaceSyncGeneration();
       setOfflineAccount({
         id: auth.user.id,
         email: auth.user.email,
         name: auth.user.name,
         role: auth.user.role,
+        syncGeneration,
       });
     }
     return { backend: info, auth };

@@ -3,7 +3,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CalendarDays, Copy, Database, KeyRound, LogOut, Trash2, UserPlus } from "lucide-react";
+import {
+  CalendarDays,
+  Copy,
+  Database,
+  Download,
+  KeyRound,
+  LogOut,
+  Trash2,
+  Upload,
+  UserPlus,
+} from "lucide-react";
 import { PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createManagedUser, deleteManagedUser, getCalendarFeed, setCalendarFeed, getOidcAdmin, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
 } from "@/lib/auth.functions";
+import { importBackup } from "@/lib/data.functions";
 import { signOut } from "./route";
 import { LanguageSelect } from "@/components/app/LanguageSelect";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -86,6 +97,7 @@ function SettingsPage() {
         <TabsContent value="admin" forceMount hidden={tab !== "admin"}>
           <div className="grid min-w-0 gap-5 md:grid-cols-2">
             <UsersPanel selfId={auth.user!.id} />
+            <BackupPanel />
             <CalendarFeedPanel />
             <OidcPanel />
             <OcrSettingsPanel />
@@ -94,6 +106,94 @@ function SettingsPage() {
       )}
       </Tabs>
     </>
+  );
+}
+
+function BackupPanel() {
+  const [file, setFile] = useState<File | null>(null);
+  const download = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/backup/export");
+      if (!response.ok) throw new Error(await response.text());
+      return response.blob();
+    },
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.hidden = true;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success(tr("Backup erfolgreich heruntergeladen."));
+    },
+    onError: (error: Error) => toast.error(tr(error.message)),
+  });
+  const restore = useMutation({
+    mutationFn: (data: FormData) => importBackup({ data }),
+    onSuccess: () => {
+      toast.success(
+        tr(
+          "Backup wurde wiederhergestellt. Bitte melde dich mit einem Konto aus dem Backup erneut an.",
+        ),
+      );
+      window.location.href = "/auth";
+    },
+    onError: (error: Error) => toast.error(tr(error.message)),
+  });
+
+  function submitRestore(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) {
+      toast.error(tr("Wähle eine gültige Bauplan-Backup-Datei aus."));
+      return;
+    }
+    if (file.size > 128 * 1024 * 1024) {
+      toast.error(tr("Das Backup ist größer als 128 MB."));
+      return;
+    }
+    if (!window.confirm(tr("Vorhandene Daten wirklich vollständig ersetzen?"))) return;
+    const data = new FormData();
+    data.set("file", file);
+    data.set("confirm", "replace");
+    restore.mutate(data);
+  }
+
+  return (
+    <Panel title={tr("Backup und Wiederherstellung")} className="md:col-span-2">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid content-start gap-3">
+          <p className="text-sm text-muted-foreground">
+            {tr(
+              "Ein vollständiges Backup mit Datenbank und allen Dokumenten herunterladen. Es enthält Benutzerkonten und vertrauliche Einstellungen, aber keine aktiven Sitzungen.",
+            )}
+          </p>
+          <Button onClick={() => download.mutate()} disabled={download.isPending}>
+            <Download className="h-4 w-4" />
+            {download.isPending ? tr("Backup wird erstellt…") : tr("Backup exportieren")}
+          </Button>
+        </div>
+        <form onSubmit={submitRestore} className="grid content-start gap-3">
+          <p className="text-sm text-muted-foreground">
+            {tr(
+              "Der Import ersetzt alle aktuellen Daten und Dokumente. Benutzerkonten und Einstellungen aus dem Backup werden übernommen; alle Nutzer müssen sich erneut anmelden.",
+            )}
+          </p>
+          <Label htmlFor="settings-backup">{tr("Backup-Datei (.zip)")}</Label>
+          <Input
+            id="settings-backup"
+            type="file"
+            accept=".zip,application/zip"
+            onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
+          />
+          <Button type="submit" variant="outline" disabled={restore.isPending || !file}>
+            <Upload className="h-4 w-4" />
+            {restore.isPending ? tr("Wird wiederhergestellt…") : tr("Backup wiederherstellen")}
+          </Button>
+        </form>
+      </div>
+    </Panel>
   );
 }
 

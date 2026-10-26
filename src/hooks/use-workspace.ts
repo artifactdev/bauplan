@@ -72,7 +72,7 @@ export function useMutations() {
     signalOfflineQueueChange();
     return qc.invalidateQueries({ queryKey: ["ws"] });
   };
-  const onError = (e: Error) => toast.error(e.message);
+  const onError = (e: Error) => toast.error(tr(e.message));
 
   const create = useMutation({
     mutationFn: async (v: { table: TableName; row: Record<string, unknown> }) => {
@@ -94,6 +94,7 @@ export function useMutations() {
         rowId,
         base: null,
         row,
+        syncGeneration: account.syncGeneration,
       };
       const next = applyChange(current, change);
       await persistChange(account.id, next, change);
@@ -120,6 +121,7 @@ export function useMutations() {
         rowId: v.id,
         base,
         row,
+        syncGeneration: account.syncGeneration,
       };
       const next = applyChange(current, change);
       await persistChange(account.id, next, change);
@@ -145,6 +147,7 @@ export function useMutations() {
         rowId: v.id,
         base,
         row: null,
+        syncGeneration: account.syncGeneration,
       };
       const next = applyChange(current, change);
       await persistChange(account.id, next, change);
@@ -197,6 +200,7 @@ export function useMutations() {
         name: v.file.name,
         mime: v.file.type || "application/octet-stream",
         meta: documentRow,
+        syncGeneration: account.syncGeneration,
       });
       qc.setQueryData(key, next);
       return { id };
@@ -209,8 +213,10 @@ export function useMutations() {
 }
 
 function requireAccount(userId: string | undefined) {
-  if (!userId) throw new Error(tr("Kein Konto für die Offline-Nutzung verfügbar."));
-  return { id: userId };
+  const account = getOfflineAccount();
+  if (!userId || !account || account.id !== userId)
+    throw new Error(tr("Kein Konto für die Offline-Nutzung verfügbar."));
+  return account;
 }
 
 async function readCachedWorkspace(
@@ -285,6 +291,7 @@ export function useOfflineSync(userId: string) {
         const form = new FormData();
         form.append("file", new File([upload.file], upload.name, { type: upload.mime }));
         form.append("meta", JSON.stringify(upload.meta));
+        form.append("syncGeneration", upload.syncGeneration ?? "");
         const result = await uploadDocument({ data: form });
         uploadedDocuments.set(upload.id, {
           storage_path: result.storage_path,
@@ -316,6 +323,7 @@ export function useOfflineSync(userId: string) {
                 rowId: change.rowId,
                 base: change.base,
                 row: change.row,
+                syncGeneration: change.syncGeneration ?? null,
               },
             ],
           },
@@ -330,7 +338,7 @@ export function useOfflineSync(userId: string) {
     } catch (error) {
       toast.error(
         error instanceof Error
-          ? error.message
+          ? tr(error.message)
           : tr("Die Offline-Synchronisierung ist fehlgeschlagen."),
       );
     } finally {
@@ -341,7 +349,7 @@ export function useOfflineSync(userId: string) {
       } catch (error) {
         toast.error(
           error instanceof Error
-            ? error.message
+            ? tr(error.message)
             : tr("Der Offline-Status konnte nicht geladen werden."),
         );
       }
@@ -407,6 +415,7 @@ export function useOfflineSync(userId: string) {
           rowId: conflict.rowId,
           base: null,
           row: serverRow,
+          syncGeneration: getOfflineAccount()?.syncGeneration,
         };
         const restored = applyChange(current, serverChange);
         const workspace = await mergePendingWorkspace(userId, restored);

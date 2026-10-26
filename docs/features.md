@@ -5,6 +5,9 @@ Visible areas appear in the left navigation in the account's chosen order. On mo
 ## Installable app & offline use
 Bauplan can be installed from a supported browser and used offline after signing in and opening the workspace on that device. Workspace edits are saved locally and synchronized when online; document uploads are queued. Conflicting server edits require a manual choice, and sign-out explicitly warns before discarding pending work. See [offline use](offline.md) for setup and limitations.
 
+## Backups
+Admins can export and restore a complete database-and-documents backup from Settings. A backup can also be imported during initial setup. Restoring replaces existing data and invalidates sessions; see [backups and restore](backups.md).
+
 ## Overview (dashboard)
 - Metrics: total budget, expected costs, remaining budget, already paid.
 - Open/overdue invoices, upcoming events and tasks.

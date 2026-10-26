@@ -170,9 +170,42 @@ export const getBackendInfo = createServerFn().handler(async () => {
   };
 });
 
+function backupFileFromForm(data: unknown, requireConfirmation: boolean) {
+  if (!(data instanceof FormData)) throw new Error("FormData erwartet");
+  const file = data.get("file");
+  if (!(file instanceof File)) throw new Error("Keine Backup-Datei ausgewählt.");
+  if (file.size > 128 * 1024 * 1024)
+    throw new Error("Die Backup-Datei darf höchstens 128 MB groß sein.");
+  if (requireConfirmation && data.get("confirm") !== "replace")
+    throw new Error("Die Bestätigung zum Ersetzen der vorhandenen Daten fehlt.");
+  return file;
+}
+
+export const importBackup = createServerFn({ method: "POST" })
+  .middleware([adminDataContext])
+  .inputValidator((data: unknown) => backupFileFromForm(data, true))
+  .handler(async ({ context, data }) => {
+    const { restoreBackup } = await import("@/server/backup");
+    const users = await restoreBackup(context.repo, new Uint8Array(await data.arrayBuffer()));
+    return { users };
+  });
+
+export const importSetupBackup = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => backupFileFromForm(data, false))
+  .handler(async ({ data }) => {
+    const repo = (await import("@/server/repo")).sqliteRepo();
+    const { restoreBackup } = await import("@/server/backup");
+    const users = await restoreBackup(repo, new Uint8Array(await data.arrayBuffer()), true);
+    return { users };
+  });
+
 export const getWorkspace = createServerFn()
   .middleware([dataContext])
   .handler(async ({ context }) => context.repo.getAll());
+
+export const getWorkspaceSyncGeneration = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) => context.repo.getSyncGeneration());
 
 const tableSchema = z.enum(TABLE_NAMES as [TableName, ...TableName[]]);
 
@@ -223,6 +256,7 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
               rowId: z.string().min(1),
               base: z.record(z.unknown()).nullable(),
               row: z.record(z.unknown()).nullable(),
+              syncGeneration: z.string().nullable(),
             }),
           )
           .max(50),
@@ -230,13 +264,19 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ context, data }) => {
+    const generation = await context.repo.getSyncGeneration();
+    if (data.changes.some((change) => change.syncGeneration !== generation))
+      throw new Error(
+        "Der Datenstand wurde durch eine Wiederherstellung ersetzt. Melde dich ab und verwerfe die veralteten Offline-Änderungen.",
+      );
     const results = [];
     for (const change of data.changes) {
+      const { syncGeneration: _syncGeneration, ...syncChange } = change;
       const document =
         change.table === "documents" && change.action === "delete"
           ? (await context.repo.getAll()).documents.find((item) => item.id === change.rowId)
           : undefined;
-      const result = await context.repo.applySyncChange(context.user.id, change);
+      const result = await context.repo.applySyncChange(context.user.id, syncChange);
       if (result.applied && document?.storage_path)
         await context.repo.deleteFile(document.storage_path);
       results.push({ id: change.id, ...result });
@@ -252,9 +292,17 @@ export const uploadDocument = createServerFn({ method: "POST" })
     if (!(file instanceof File)) throw new Error("Keine Datei");
     if (file.size > 25 * 1024 * 1024) throw new Error("Datei größer als 25 MB");
     const meta = JSON.parse(String(d.get("meta") ?? "{}")) as Record<string, unknown>;
-    return { file, meta };
+    const syncGeneration = d.has("syncGeneration") ? String(d.get("syncGeneration")) : undefined;
+    return { file, meta, syncGeneration };
   })
   .handler(async ({ context, data }) => {
+    if (
+      data.syncGeneration !== undefined &&
+      data.syncGeneration !== (await context.repo.getSyncGeneration())
+    )
+      throw new Error(
+        "Der Datenstand wurde durch eine Wiederherstellung ersetzt. Melde dich ab und verwerfe die veralteten Offline-Änderungen.",
+      );
     const requestedId = typeof data.meta["id"] === "string" ? data.meta["id"] : undefined;
     if (requestedId) {
       const existing = (await context.repo.getAll()).documents.find(

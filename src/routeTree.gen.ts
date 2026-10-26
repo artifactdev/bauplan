@@ -23,6 +23,7 @@ import { Route as WsKalenderRouteImport } from './routes/_ws/kalender'
 import { Route as WsKontakteRouteImport } from './routes/_ws/kontakte'
 import { Route as WsKreditRouteImport } from './routes/_ws/kredit'
 import { Route as WsSammlungenRouteImport } from './routes/_ws/sammlungen'
+import { Route as ApiBackupExportRouteImport } from './routes/api/backup/export'
 import { Route as ApiFilesSplatRouteImport } from './routes/api/files.$'
 import { Route as ApiOidcCallbackRouteImport } from './routes/api/oidc/callback'
 import { Route as ApiOidcLoginRouteImport } from './routes/api/oidc/login'
@@ -97,6 +98,11 @@ const WsSammlungenRoute = WsSammlungenRouteImport.update({
   path: '/sammlungen',
   getParentRoute: () => WsRouteRoute,
 } as any)
+const ApiBackupExportRoute = ApiBackupExportRouteImport.update({
+  id: '/api/backup/export',
+  path: '/api/backup/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiFilesSplatRoute = ApiFilesSplatRouteImport.update({
   id: '/api/files/$',
   path: '/api/files/$',
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/kontakte': typeof WsKontakteRoute
   '/kredit': typeof WsKreditRoute
   '/sammlungen': typeof WsSammlungenRoute
+  '/api/backup/export': typeof ApiBackupExportRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/api/oidc/callback': typeof ApiOidcCallbackRoute
   '/api/oidc/login': typeof ApiOidcLoginRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/kredit': typeof WsKreditRoute
   '/sammlungen': typeof WsSammlungenRoute
   '/': typeof WsIndexRoute
+  '/api/backup/export': typeof ApiBackupExportRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/api/oidc/callback': typeof ApiOidcCallbackRoute
   '/api/oidc/login': typeof ApiOidcLoginRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/_ws/kredit': typeof WsKreditRoute
   '/_ws/sammlungen': typeof WsSammlungenRoute
   '/_ws/': typeof WsIndexRoute
+  '/api/backup/export': typeof ApiBackupExportRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/api/oidc/callback': typeof ApiOidcCallbackRoute
   '/api/oidc/login': typeof ApiOidcLoginRoute
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | '/kontakte'
     | '/kredit'
     | '/sammlungen'
+    | '/api/backup/export'
     | '/api/files/$'
     | '/api/oidc/callback'
     | '/api/oidc/login'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/kredit'
     | '/sammlungen'
     | '/'
+    | '/api/backup/export'
     | '/api/files/$'
     | '/api/oidc/callback'
     | '/api/oidc/login'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/_ws/kredit'
     | '/_ws/sammlungen'
     | '/_ws/'
+    | '/api/backup/export'
     | '/api/files/$'
     | '/api/oidc/callback'
     | '/api/oidc/login'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   WsRouteRoute: typeof WsRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SetupRoute: typeof SetupRoute
+  ApiBackupExportRoute: typeof ApiBackupExportRoute
   ApiFilesSplatRoute: typeof ApiFilesSplatRoute
   ApiOidcCallbackRoute: typeof ApiOidcCallbackRoute
   ApiOidcLoginRoute: typeof ApiOidcLoginRoute
@@ -348,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WsSammlungenRouteImport
       parentRoute: typeof WsRouteRoute
     }
+    '/api/backup/export': {
+      id: '/api/backup/export'
+      path: '/api/backup/export'
+      fullPath: '/api/backup/export'
+      preLoaderRoute: typeof ApiBackupExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/files/$': {
       id: '/api/files/$'
       path: '/api/files/$'
@@ -414,6 +434,7 @@ const rootRouteChildren: RootRouteChildren = {
   WsRouteRoute: WsRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SetupRoute: SetupRoute,
+  ApiBackupExportRoute: ApiBackupExportRoute,
   ApiFilesSplatRoute: ApiFilesSplatRoute,
   ApiOidcCallbackRoute: ApiOidcCallbackRoute,
   ApiOidcLoginRoute: ApiOidcLoginRoute,

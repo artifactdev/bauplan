@@ -61,6 +61,30 @@ export async function createUser(u: {
   return id;
 }
 
+export async function createInitialAdmin(u: {
+  email: string;
+  name?: string | undefined;
+  password: string;
+}) {
+  const db = await getSqliteDb();
+  const email = u.email.trim().toLowerCase();
+  const passwordHash = await hashPassword(u.password);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (Number(db.prepare("SELECT COUNT(*) AS n FROM app_users").get()?.["n"] ?? 0) > 0)
+      throw new Error("Die Einrichtung wurde bereits abgeschlossen.");
+    const id = crypto.randomUUID();
+    db.prepare(
+      "INSERT INTO app_users (id, email, name, password_hash, role, oidc_sub, created_at) VALUES (?,?,?,?,?,?,?)",
+    ).run(id, email, u.name ?? null, passwordHash, "admin", null, new Date().toISOString());
+    db.exec("COMMIT");
+    return id;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 export async function updateUser(
   id: string,
   patch: { role?: Role; password?: string; name?: string },

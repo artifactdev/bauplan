@@ -46,8 +46,7 @@ export const runSetup = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => setupSchema.parse(d))
   .handler(async ({ data }) => {
     const la = await import("@/server/local-auth");
-    if ((await la.countUsers()) > 0) throw new Error("Die Einrichtung wurde bereits abgeschlossen.");
-    const id = await la.createUser({ ...data, role: "admin" });
+    const id = await la.createInitialAdmin(data);
     await startLocalSession(id);
     return { ok: true };
   });
