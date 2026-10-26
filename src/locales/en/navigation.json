@@ -1,0 +1,13 @@
+{
+  "title": "Navigation",
+  "hint": "Choose which pages appear and use the arrows to reorder them. The first four visible pages appear in the mobile bar; the rest are under More. Settings is always available. Save to apply across your devices. Hiding a page only removes its navigation link; it does not restrict access.",
+  "up": "Move {{name}} up",
+  "down": "Move {{name}} down",
+  "save": "Save navigation",
+  "saving": "Saving…",
+  "saved": "Navigation saved",
+  "reset": "Restore default layout",
+  "loadError": "Navigation preferences could not be loaded.",
+  "loading": "Loading navigation…",
+  "retry": "Try again"
+}

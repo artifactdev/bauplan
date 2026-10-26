@@ -2,7 +2,7 @@ import { tr } from "@/i18n";
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
-import { Bookmark, Contact as ContactIcon, CalendarDays, FileText, ShoppingCart, Hammer, LayoutDashboard, ListChecks, Receipt, Settings, Wallet, MoreHorizontal, UserRound, LogOut, Pencil } from "lucide-react";
+import { Hammer, Settings, MoreHorizontal, UserRound, LogOut, Pencil } from "lucide-react";
 import { getBackendInfo } from "@/lib/data.functions";
 import { getAuthState, logoutLocal } from "@/lib/auth.functions";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
 import { AppearanceModeMenu } from "@/components/app/AppearanceControls";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
+import { navigationItem } from "@/components/app/navigation-items";
+import { DEFAULT_NAVIGATION, visibleNavigation } from "@/lib/navigation";
+import { useNavigation } from "@/hooks/use-navigation";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_ws")({
@@ -26,18 +29,6 @@ export const Route = createFileRoute("/_ws")({
   component: Layout,
   pendingComponent: () => <div className="p-10 text-sm text-muted-foreground">{tr("Lädt…")}</div>,
 });
-
-const NAV = [
-  { to: "/", label: tr("Übersicht"), icon: LayoutDashboard },
-  { to: "/budget", label: tr("Budget"), icon: Wallet },
-  { to: "/angebote", label: tr("Angebote"), icon: Receipt },
-  { to: "/ausgaben", label: tr("Ausgaben"), icon: ShoppingCart },
-  { to: "/dokumente", label: tr("Dokumente"), icon: FileText },
-  { to: "/aufgaben", label: tr("Aufgaben"), icon: ListChecks },
-  { to: "/kalender", label: tr("Kalender"), icon: CalendarDays },
-  { to: "/sammlungen", label: tr("Sammlungen"), icon: Bookmark },
-  { to: "/kontakte", label: tr("Kontakte"), icon: ContactIcon },
-] as const;
 
 export async function signOut() {
   await logoutLocal();
@@ -70,8 +61,13 @@ function Shell() {
   const project = ws.projects[0];
   const [projectOpen, setProjectOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const primaryNav = NAV.filter((n) => ["/", "/budget", "/dokumente", "/aufgaben"].includes(n.to));
-  const secondaryNav = NAV.filter((n) => !primaryNav.includes(n));
+  const navigation = useNavigation(auth.user!.id);
+  const items = visibleNavigation(navigation.data ?? DEFAULT_NAVIGATION).map((path) => {
+    const item = navigationItem(path);
+    return { ...item, label: item.label() };
+  });
+  const primaryNav = items.slice(0, 4);
+  const secondaryNav = items.slice(4);
   const moreActive = secondaryNav.some((n) => n.to === pathname) || pathname === "/einstellungen";
 
   return (
@@ -83,7 +79,7 @@ function Shell() {
         </div>
         <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
         <nav aria-label={t("navigation")} className="grid gap-1">
-          {[...NAV, { to: "/einstellungen", label: tr("Einstellungen"), icon: Settings } as const].map((n) => (
+          {[...items, { to: "/einstellungen", label: tr("Einstellungen"), icon: Settings } as const].map((n) => (
             <Link
               key={n.to}
               to={n.to}
@@ -136,12 +132,13 @@ function Shell() {
         </header>
         <main id="main-content" tabIndex={-1} className="min-w-0 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-10 md:pt-8">
           <div className="mx-auto min-w-0 max-w-7xl">
+            {navigation.isError && <p role="alert" className="mb-4 text-sm">{t("navigationLoadError")} <Button variant="outline" size="sm" onClick={() => void navigation.refetch()}>{t("retry")}</Button></p>}
             {isLoading ? <p className="text-sm text-muted-foreground">{tr("Lädt…")}</p> : project ? <Outlet /> : <ProjectSetup />}
           </div>
         </main>
       </div>
 
-      <nav aria-label={t("navigation")} className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav aria-label={t("navigation")} style={{ gridTemplateColumns: `repeat(${primaryNav.length + 1}, minmax(0, 1fr))` }} className="fixed inset-x-0 bottom-0 z-30 grid border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden">
         {primaryNav.map((n) => (
           <Link
             key={n.to}

@@ -1,6 +1,6 @@
 # Features
 
-All areas are in the left navigation. On mobile, the bottom bar offers Overview, Budget, Documents, Tasks, and a **More** menu for the remaining areas. The shared top bar provides appearance and account controls. All approved users work on the **same project**.
+Visible areas appear in the left navigation in the account's chosen order. On mobile, the bottom bar offers the first four visible areas and a **More** menu for the remaining areas and Settings. The shared top bar provides appearance and account controls. All approved users work on the **same project**.
 
 ## Overview (dashboard)
 - Metrics: total budget, expected costs, remaining budget, already paid.
@@ -68,6 +68,8 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 - **"+ New"** next to trade, cost item, and contact to create and select an entry directly.
 
 ## Settings
+- **Navigation:** approved users can reorder or hide page links under Personal preferences, then save to their account. The sidebar follows this order; mobile shows the first four visible pages and puts the rest under More. Settings always stays available, even if all page links are hidden. Restore default layout resets the draft; Save applies it. Hidden links do not restrict page access. Preferences synchronize on reload, sign-in, and window focus.
+- Accessible tabs separate personal preferences (appearance, account, language), project configuration (storage and payment sources), and admin-only administration (users, calendar feed, OIDC, OCR). Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
 - Account and sign-out; storage mode display.
 - **Language:** German or English, chosen during setup or in Settings; saved per browser.
 - **Appearance:** Current, Blue, Green, or Violet palette, independently combined with Light, Dark, or System mode (default: Current + System). Settings has palette previews and mode controls; the desktop/mobile header has a quick mode menu. Changes save automatically per approved user account and synchronize on sign-in, reload, and window focus. System follows each device's own OS preference. The browser remembers the last appearance for the sign-in/setup screens; the signed-in account always takes precedence. Failed saves restore the previous choice and display an error.

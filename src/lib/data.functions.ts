@@ -5,6 +5,7 @@ import { cleanRow, TABLE_NAMES, type TableName } from "./schema";
 import { buildSeed } from "./seed";
 import { ocrDraftSchema, type OcrSettingsView, type OcrErrorCode } from "./ocr";
 import { appearanceSchema } from "./appearance";
+import { navigationSchema } from "./navigation";
 
 /**
  * Requires a signed-in member (admin or member; pending accounts see nothing)
@@ -29,6 +30,18 @@ export const adminDataContext = createMiddleware({ type: "function" })
 export const getAppearance = createServerFn()
   .middleware([dataContext])
   .handler(({ context }) => context.repo.readAppearance(context.user.id));
+
+export const getNavigation = createServerFn()
+  .middleware([dataContext])
+  .handler(({ context }) => context.repo.readNavigation(context.user.id));
+
+export const saveNavigation = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => navigationSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    await context.repo.writeNavigation(context.user.id, data);
+    return data;
+  });
 
 export const saveAppearance = createServerFn({ method: "POST" })
   .middleware([dataContext])

@@ -2,6 +2,8 @@
   "skip": "Zum Inhalt springen",
   "workspace": "Arbeitsbereich",
   "navigation": "Hauptnavigation",
+  "navigationLoadError": "Die Navigationseinstellungen konnten nicht geladen werden. Die Standardnavigation wird angezeigt.",
+  "retry": "Erneut versuchen",
   "accountMenu": "Kontomenü",
   "editProject": "Projekt bearbeiten",
   "more": "Mehr",

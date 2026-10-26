@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { USER_APPEARANCE_TABLE } from "@/lib/schema";
+import { USER_APPEARANCE_TABLE, USER_NAVIGATION_TABLE } from "@/lib/schema";
+import { DEFAULT_NAVIGATION, NAV_PATHS } from "@/lib/navigation";
 
 const dir = mkdtempSync(join(tmpdir(), "bauplan-appearance-"));
 const previousDir = process.env["DATA_DIR"];
@@ -31,6 +32,18 @@ afterAll(() => {
 });
 
 describe("Account appearance SQLite persistence", () => {
+  it("stores navigation privately per account, supports updates and reports corrupt data", async () => {
+    expect(await repo.readNavigation("new")).toEqual(DEFAULT_NAVIGATION);
+    const custom = { order: [...NAV_PATHS].reverse(), hidden: ["/budget" as const] };
+    await repo.writeNavigation("alice", custom);
+    expect(await repo.readNavigation("alice")).toEqual(custom);
+    expect(await repo.readNavigation("bob")).toEqual(DEFAULT_NAVIGATION);
+    await repo.writeNavigation("alice", DEFAULT_NAVIGATION);
+    expect(await repo.readNavigation("alice")).toEqual(DEFAULT_NAVIGATION);
+    expect(await repo.getAll()).not.toHaveProperty(USER_NAVIGATION_TABLE);
+    db.prepare(`INSERT INTO ${USER_NAVIGATION_TABLE} VALUES (?, ?)`).run("invalid", "{}");
+    await expect(repo.readNavigation("invalid")).rejects.toThrow();
+  });
   it("initializes additively without changing legacy project data", async () => {
     expect((await repo.getAll()).projects[0]?.name).toBe("Keep me");
     expect(await repo.readAppearance("new")).toEqual({ palette: "current", mode: "system" });
@@ -55,9 +68,11 @@ describe("Account appearance SQLite persistence", () => {
     const { createUser, deleteUser } = await import("./local-auth");
     const id = await createUser({ email: "delete@example.test", role: "member" });
     await repo.writeAppearance(id, { palette: "blue", mode: "dark" });
+    await repo.writeNavigation(id, DEFAULT_NAVIGATION);
     await deleteUser(id);
     expect(
       db.prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).get(id),
     ).toBeUndefined();
+    expect(db.prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).get(id)).toBeUndefined();
   });
 });

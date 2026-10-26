@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createManagedUser, deleteManagedUser, getCalendarFeed, setCalendarFeed, getOidcAdmin, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
 } from "@/lib/auth.functions";
@@ -17,6 +18,7 @@ import { LanguageSelect } from "@/components/app/LanguageSelect";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { OcrSettingsPanel } from "@/components/app/OcrSettingsPanel";
 import { AppearancePanel } from "@/components/app/AppearanceControls";
+import { NavigationPanel } from "@/components/app/NavigationPanel";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
@@ -37,11 +39,17 @@ function SettingsPage() {
   const { t } = useTranslation("shell");
   const { backend, auth } = Route.useRouteContext();
   const isAdmin = auth.user?.role === "admin";
+  const [tab, setTab] = useState("personal");
   return (
     <>
       <PageHeader title={tr("Einstellungen")} subtitle={t("settingsHint")} />
-      <section aria-labelledby="personal-settings" className="mb-8">
-        <h2 id="personal-settings" className="mb-4 text-sm font-semibold text-muted-foreground">{t("personal")}</h2>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList aria-label={tr("Einstellungen")} className="mb-5 flex h-auto w-full flex-wrap justify-start gap-1">
+          <TabsTrigger value="personal" className="min-h-11 whitespace-normal text-left">{t("personal")}</TabsTrigger>
+          <TabsTrigger value="project" className="min-h-11 whitespace-normal text-left">{t("project")}</TabsTrigger>
+          {isAdmin && <TabsTrigger value="admin" className="min-h-11 whitespace-normal text-left">{t("administration")}</TabsTrigger>}
+        </TabsList>
+      <TabsContent value="personal" forceMount hidden={tab !== "personal"}>
         <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
           <AppearancePanel />
           <div className="grid min-w-0 gap-5">
@@ -55,10 +63,10 @@ function SettingsPage() {
               <p className="mt-2 text-xs text-muted-foreground">{tr("Die Sprache wird in diesem Browser gespeichert.")}</p>
             </Panel>
           </div>
+          <NavigationPanel userId={auth.user!.id} />
         </div>
-      </section>
-      <section aria-labelledby="project-settings" className="mb-8">
-        <h2 id="project-settings" className="mb-4 text-sm font-semibold text-muted-foreground">{t("project")}</h2>
+      </TabsContent>
+      <TabsContent value="project" forceMount hidden={tab !== "project"}>
         <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
           <Panel title={tr("Datenspeicher")}>
             <div className="flex gap-3 rounded-lg border border-primary bg-accent/40 p-3">
@@ -73,18 +81,18 @@ function SettingsPage() {
           </Panel>
           <PaymentSourcesPanel />
         </div>
-      </section>
+      </TabsContent>
       {isAdmin && (
-        <section aria-labelledby="admin-settings">
-          <h2 id="admin-settings" className="mb-4 text-sm font-semibold text-muted-foreground">{t("administration")}</h2>
+        <TabsContent value="admin" forceMount hidden={tab !== "admin"}>
           <div className="grid min-w-0 gap-5 md:grid-cols-2">
             <UsersPanel selfId={auth.user!.id} />
             <CalendarFeedPanel />
             <OidcPanel />
             <OcrSettingsPanel />
           </div>
-        </section>
+        </TabsContent>
       )}
+      </Tabs>
     </>
   );
 }

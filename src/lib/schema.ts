@@ -2,6 +2,10 @@
 
 // Private account metadata must not be included in TABLES or Workspace.
 export const USER_APPEARANCE_TABLE = "app_user_appearance";
+export const USER_NAVIGATION_TABLE = "app_user_navigation";
+export const USER_NAVIGATION_DDL = `CREATE TABLE IF NOT EXISTS ${USER_NAVIGATION_TABLE} (
+  user_id TEXT PRIMARY KEY, preferences TEXT NOT NULL
+)`;
 export const USER_APPEARANCE_DDL = `CREATE TABLE IF NOT EXISTS ${USER_APPEARANCE_TABLE} (
   user_id TEXT PRIMARY KEY, palette TEXT NOT NULL, mode TEXT NOT NULL
 )`;

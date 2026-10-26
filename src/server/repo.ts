@@ -2,8 +2,13 @@
 // inside server function handlers.
 import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, USER_APPEARANCE_DDL, USER_APPEARANCE_TABLE, type TableName, type Workspace } from "@/lib/schema";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
+import { USER_NAVIGATION_DDL, USER_NAVIGATION_TABLE } from "@/lib/schema";
+import { navigationSchema, DEFAULT_NAVIGATION, type NavigationPreferences } from "@/lib/navigation";
 
 export interface Repo {
+  readNavigation(userId: string): Promise<NavigationPreferences>;
+  writeNavigation(userId: string, value: NavigationPreferences): Promise<void>;
+  deleteNavigation(userId: string): Promise<void>;
   getAll(): Promise<Workspace>;
   insert(table: TableName, row: Record<string, unknown>): Promise<Record<string, unknown>>;
   update(table: TableName, id: string, patch: Record<string, unknown>): Promise<void>;
@@ -63,6 +68,7 @@ async function openDb(): Promise<SqliteDb> {
   db.exec(`CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL)`);
   db.exec(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)`);
   db.exec(USER_APPEARANCE_DDL);
+  db.exec(USER_NAVIGATION_DDL);
   return db;
 }
 
@@ -74,6 +80,18 @@ export function getSqliteDb(): Promise<SqliteDb> {
 export function sqliteRepo(): Repo {
   const db = () => (dbPromise ??= openDb());
   return {
+    async readNavigation(userId) {
+      const row = (await db()).prepare(`SELECT preferences FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).get(userId);
+      return row ? navigationSchema.parse(JSON.parse(String(row["preferences"]))) : navigationSchema.parse(DEFAULT_NAVIGATION);
+    },
+    async writeNavigation(userId, value) {
+      const valid = navigationSchema.parse(value);
+      (await db()).prepare(`INSERT INTO ${USER_NAVIGATION_TABLE} (user_id, preferences) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET preferences = excluded.preferences`).run(userId, JSON.stringify(valid));
+    },
+    async deleteNavigation(userId) {
+      (await db()).prepare(`DELETE FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).run(userId);
+    },
     async readAppearance(userId) {
       const row = (await db()).prepare(`SELECT palette, mode FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).get(userId);
       return row ? appearanceSchema.parse(row) : { ...DEFAULT_APPEARANCE };

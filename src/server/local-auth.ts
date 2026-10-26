@@ -40,6 +40,7 @@ export async function updateUser(id: string, patch: { role?: Role; password?: st
 export async function deleteUser(id: string) {
   const db = await getSqliteDb();
   await sqliteRepo().deleteAppearance(id);
+  await sqliteRepo().deleteNavigation(id);
   db.prepare("DELETE FROM app_sessions WHERE user_id = ?").run(id);
   db.prepare("DELETE FROM app_users WHERE id = ?").run(id);
 }

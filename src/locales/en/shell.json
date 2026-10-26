@@ -2,6 +2,8 @@
   "skip": "Skip to content",
   "workspace": "Workspace",
   "navigation": "Main navigation",
+  "navigationLoadError": "Navigation preferences could not be loaded. Showing the default navigation.",
+  "retry": "Try again",
   "accountMenu": "Account menu",
   "editProject": "Edit project",
   "more": "More",
