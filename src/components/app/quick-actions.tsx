@@ -1,14 +1,16 @@
 import { tr } from "@/i18n";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { costItemOptions, tradeOptions } from "@/lib/options";
 import { DOC_CATEGORIES, PHASES } from "@/lib/schema";
 import { EntityDialog, type Field } from "./EntityDialog";
 import { AssignDialog } from "./AssignDialog";
+import { DocumentScanner } from "./DocumentScanner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Camera } from "lucide-react";
+import { Camera, ScanLine } from "lucide-react";
+import { MAX_UPLOAD_MB } from "@/lib/limits";
 
 type P = { open: boolean; onOpenChange: (o: boolean) => void; initial?: Record<string, unknown> | undefined; editId?: string | undefined };
 
@@ -63,19 +65,43 @@ export function QuickCost({ open, onOpenChange, initial, editId }: P) {
   );
 }
 
-export function QuickUpload({ open, onOpenChange, initial }: P) {
+export function QuickUpload({ open, onOpenChange, initial, initialFile }: P & { initialFile?: File | null | undefined }) {
   const { ws } = useWorkspace();
   const { upload } = useMutations();
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
+  // Photo or scan result; kept in state because not every browser can assign files to an input.
+  const [picked, setPicked] = useState<File | null>(null);
   const [assignId, setAssignId] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const applyFile = (f: File) => {
+    setPicked(f);
+    setFileName(f.name);
+  };
+  useEffect(() => {
+    if (open && initialFile) applyFile(initialFile);
+  }, [open, initialFile]);
+  // Mirror the picked file into the visible input; a callback ref also covers the input mounting later (dialog portal).
+  const fileInputRef = useCallback(
+    (el: HTMLInputElement | null) => {
+      fileRef.current = el;
+      if (!el || !picked || typeof DataTransfer === "undefined") return;
+      const dt = new DataTransfer();
+      dt.items.add(picked);
+      el.files = dt.files;
+    },
+    [picked],
+  );
   return (
     <>
     <EntityDialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) setFileName("");
+        if (!o) {
+          setFileName("");
+          setPicked(null);
+        }
         onOpenChange(o);
       }}
       title={tr("quick_actions.upload_document")}
@@ -92,15 +118,18 @@ export function QuickUpload({ open, onOpenChange, initial }: P) {
       initial={initial ?? { category: "Sonstiges", recognize: true }}
       extra={
         <div className="grid gap-1.5">
-          <Label htmlFor="file">{tr("quick_actions.file_max_25_mb")}</Label>
-          <Button type="button" size="sm" variant="outline" className="justify-self-start" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
-          <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f && fileRef.current) { const dt = new DataTransfer(); dt.items.add(f); fileRef.current.files = dt.files; setFileName(f.name); } }} />
-          <Input id="file" ref={fileRef} type="file" required onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")} accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.dwg,.txt" />
+          <Label htmlFor="file">{tr("quick_actions.file_max_size", { max: MAX_UPLOAD_MB })}</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setScanOpen(true)}><ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
+          </div>
+          <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) applyFile(f); }} />
+          <Input id="file" ref={fileInputRef} type="file" required={!picked} onChange={(e) => { setPicked(null); setFileName(e.target.files?.[0]?.name ?? ""); }} accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,.dwg,.txt" />
           {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
         </div>
       }
       onSubmit={async (v) => {
-        const file = fileRef.current?.files?.[0];
+        const file = picked ?? fileRef.current?.files?.[0];
         if (!file) throw new Error(tr("quick_actions.choose_file"));
         const { recognize, ...meta } = v;
         const res = await upload.mutateAsync({ file, meta });
@@ -109,6 +138,7 @@ export function QuickUpload({ open, onOpenChange, initial }: P) {
       }}
     />
     <AssignDialog documentId={assignId} onClose={() => setAssignId(null)} />
+    <DocumentScanner open={scanOpen} onOpenChange={setScanOpen} onComplete={applyFile} />
     </>
   );
 }

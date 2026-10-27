@@ -23,7 +23,7 @@ Admins can also create a portable application backup in Settings and import it d
 
 ### Reverse proxy
 Put HTTPS in front of the app (cookies are `secure` under `https`). For OIDC, enter the public address in Settings.
-Allow a 25 MiB upload plus multipart overhead and OCR processing durations up to 180 seconds in the proxy.
+Allow a 100 MiB upload plus multipart overhead (for example `client_max_body_size 110m;` in nginx) and OCR processing durations up to 180 seconds in the proxy.
 The application does not need external services at runtime. OCR language models are downloaded only after an explicit admin action; once downloaded, OCR processing is offline. Optional OIDC uses the identity provider configured by an administrator; disable it to keep sign-in fully local. Docker needs network access while downloading base images and build dependencies.
 
 ## Development

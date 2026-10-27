@@ -12,6 +12,7 @@ import {
 } from "./ocr";
 import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 
 /**
  * Requires a signed-in member (admin or member; pending accounts see nothing)
@@ -290,7 +291,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
     if (!(d instanceof FormData)) throw new Error("FormData erwartet");
     const file = d.get("file");
     if (!(file instanceof File)) throw new Error("Keine Datei");
-    if (file.size > 25 * 1024 * 1024) throw new Error("Datei größer als 25 MB");
+    if (file.size > MAX_UPLOAD_BYTES) throw new Error(`Datei größer als ${MAX_UPLOAD_MB} MB`);
     const meta = JSON.parse(String(d.get("meta") ?? "{}")) as Record<string, unknown>;
     const syncGeneration = d.has("syncGeneration") ? String(d.get("syncGeneration")) : undefined;
     return { file, meta, syncGeneration };

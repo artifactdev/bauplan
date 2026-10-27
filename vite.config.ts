@@ -9,6 +9,8 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ["@napi-rs/canvas"],
   },
+  // The document scanner runs OpenCV.js in a module worker.
+  worker: { format: "es" },
   plugins: [
     tanstackStart({
       server: { entry: "server" },
@@ -48,6 +50,19 @@ export default defineConfig({
         clientsClaim: true,
         globDirectory: ".output/public",
         globPatterns: ["**/*.{js,css,html,ico,svg,png,woff2}"],
+        // OpenCV.js (≈ 15 MB) is not precached for every install; it is cached on the first scan instead.
+        globIgnores: ["**/scan.worker-*.js"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => /\/assets\/scan\.worker-[\w-]+\.js$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "bauplan-scanner",
+              expiration: { maxEntries: 2 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
         additionalManifestEntries: [{ url: "/", revision: null }],
         navigateFallback: "/",
         navigateFallbackDenylist: [/^\/api\//],

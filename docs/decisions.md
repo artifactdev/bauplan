@@ -53,5 +53,8 @@ Data volumes are small; a single load keeps all pages consistent and simple. Ver
 ### 17. Payment sources instead of extra budgets
 Some costs (e.g. tools) are not financed by the bank loan. Rather than separate budgets with amounts, expenses and invoices reference a payment source (`budget_pot_id`) with a `deducts_from_budget` flag; items from non-deducting sources are excluded from all total-budget figures but stay visible in the expenses overview.
 
+### 19. Document scanning in the browser with OpenCV.js
+Edge detection, perspective correction, and filters run locally with OpenCV.js inside a Web Worker, so images never leave the device and the UI stays responsive. Scans are always saved as one PDF (pdf-lib) through the existing upload, keeping one storage and recognition path. The ~16 MB worker is excluded from the PWA precache and cached on first use instead.
+
 ### 16. Internationalization with i18next, German as default
 The interface supports German and English via JSON language files (`src/locales/<lang>/<namespace>.json`). The language is chosen during setup and in Settings and stored per browser. Amounts remain in euros; number/date formats follow the language. Documentation is written in English.

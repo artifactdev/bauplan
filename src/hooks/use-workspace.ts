@@ -25,6 +25,7 @@ import {
   type OfflineChange,
 } from "@/lib/offline-store";
 import { BOOL_COLS, cleanRow, TABLES, type TableName, type Workspace } from "@/lib/schema";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 
 const EMPTY: Workspace = {
   projects: [],
@@ -160,7 +161,7 @@ export function useMutations() {
 
   const upload = useMutation({
     mutationFn: async (v: { file: File; meta: Record<string, unknown> }) => {
-      if (v.file.size > 25 * 1024 * 1024) throw new Error(tr("offline.file_exceeds_25_mb"));
+      if (v.file.size > MAX_UPLOAD_BYTES) throw new Error(tr("offline.file_too_large", { max: MAX_UPLOAD_MB }));
       if (navigator.onLine) {
         const fd = new FormData();
         fd.append("file", v.file);

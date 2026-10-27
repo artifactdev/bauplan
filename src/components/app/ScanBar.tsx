@@ -1,12 +1,13 @@
 import { tr } from "@/i18n";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Camera, CheckCircle2, Loader2, Upload } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, ScanLine, Upload } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { analyzeDocument } from "@/lib/ocr.functions";
 import { ocrText } from "@/lib/ocr-ui";
 import { LINKS_DOCUMENT, mapExtraction, type ScanTarget } from "@/lib/scan-map";
 import { Button } from "@/components/ui/button";
+import { DocumentScanner } from "./DocumentScanner";
 
 const CATEGORY: Record<ScanTarget, string> = {
   offer: "Angebot", invoice: "Rechnung", expense: "Beleg", task: "Sonstiges", event: "Sonstiges", cost: "Angebot", trade: "Sonstiges",
@@ -19,6 +20,7 @@ export function ScanBar({ target, onFill }: { target: ScanTarget; onFill: (v: Re
   const cam = useRef<HTMLInputElement>(null);
   const pick = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<{ busy: boolean; done?: string }>({ busy: false });
+  const [scanOpen, setScanOpen] = useState(false);
 
   async function handle(file: File | undefined) {
     if (!file) return;
@@ -43,12 +45,15 @@ export function ScanBar({ target, onFill }: { target: ScanTarget; onFill: (v: Re
       <input ref={cam} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { handle(e.target.files?.[0]); e.target.value = ""; }} />
       <input ref={pick} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => { handle(e.target.files?.[0]); e.target.value = ""; }} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" disabled={state.busy} onClick={() => cam.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
+        <Button type="button" size="sm" disabled={state.busy} onClick={() => setScanOpen(true)}><ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}</Button>
+        <Button type="button" size="sm" variant="outline" disabled={state.busy} onClick={() => cam.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
         <Button type="button" size="sm" variant="outline" disabled={state.busy} onClick={() => pick.current?.click()}><Upload className="h-4 w-4" /> {tr("scan_bar.upload_file")}</Button>
         {state.busy && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {tr("scan_bar.reading")}</span>}
         {state.done && !state.busy && <span className="flex items-center gap-1 text-xs text-muted-foreground"><CheckCircle2 className="h-3 w-3 text-success" /> {state.done}</span>}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">{tr("scan_bar.optional_photograph_upload_receipt")}</p>
+      {/* The scanner hands over the PDF before closing; uploading continues in the background. */}
+      <DocumentScanner open={scanOpen} onOpenChange={setScanOpen} onComplete={(file) => void handle(file)} />
     </div>
   );
 }

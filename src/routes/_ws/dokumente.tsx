@@ -1,7 +1,7 @@
 import { tr } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Download, Eye, FileImage, FileSpreadsheet, FileText, File as FileIcon, Pencil, ScanText, Search, Trash2, Upload } from "lucide-react";
+import { Download, Eye, FileImage, FileSpreadsheet, FileText, File as FileIcon, Pencil, ScanLine, ScanText, Search, Trash2, Upload } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { fileSize, fmtDate } from "@/lib/format";
 import { costItemOptions, taskOptions, tradeName, tradeOptions } from "@/lib/options";
@@ -9,6 +9,7 @@ import { DOC_CATEGORIES, type Doc } from "@/lib/schema";
 import { Empty, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { EntityDialog } from "@/components/app/EntityDialog";
 import { QuickUpload } from "@/components/app/quick-actions";
+import { DocumentScanner } from "@/components/app/DocumentScanner";
 import { resolveFileUrl } from "@/components/app/doc-open";
 import { AssignDialog } from "@/components/app/AssignDialog";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,8 @@ function DocsPage() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanned, setScanned] = useState<File | null>(null);
   const [edit, setEdit] = useState<Doc | null>(null);
   const [assignId, setAssignId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ doc: Doc; url: string } | null>(null);
@@ -75,7 +78,10 @@ function DocsPage() {
 
   return (
     <>
-      <PageHeader title={tr("shared.documents")} subtitle={`${ws.documents.length} Dateien`} actions={<Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" /> {tr("shared.upload")}</Button>} />
+      <PageHeader title={tr("shared.documents")} subtitle={`${ws.documents.length} Dateien`} actions={<>
+        <Button size="sm" variant="outline" onClick={() => setScanOpen(true)}><ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}</Button>
+        <Button size="sm" onClick={() => { setScanned(null); setUploadOpen(true); }}><Upload className="h-4 w-4" /> {tr("shared.upload")}</Button>
+      </>} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -125,7 +131,9 @@ function DocsPage() {
         {!docs.length && <Empty>{ws.documents.length ? tr("shared.no_results") : tr("documents.no_documents_yet_upload")}</Empty>}
       </Panel>
 
-      <QuickUpload open={uploadOpen} onOpenChange={setUploadOpen} />
+      <QuickUpload open={uploadOpen} onOpenChange={setUploadOpen} initialFile={scanned} />
+      {/* Scan first, then choose category and links in the regular upload form. */}
+      <DocumentScanner open={scanOpen} onOpenChange={setScanOpen} onComplete={(file) => { setScanned(file); setUploadOpen(true); }} />
       <AssignDialog documentId={assignId} onClose={() => setAssignId(null)} />
       <EntityDialog
         open={!!edit}

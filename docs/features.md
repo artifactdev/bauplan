@@ -45,7 +45,8 @@ General expenses such as hardware store receipts or fees.
 - Expenses always count against the budget.
 
 ## Documents
-- Upload images and PDFs (up to 25 MB), also directly from the camera.
+- Upload images and PDFs (up to 100 MB), also directly from the camera.
+- **Scan document**: wherever documents or receipts are uploaded, scan paper with the camera or import photos. Bauplan detects the page edges, corrects perspective, and lets you adjust the four corners, rotate, and apply filters (color, grayscale, contrast, black & white). Scan up to 20 pages, reorder, retake, or remove them; the result is saved as one PDF through the normal upload. Processing runs entirely in the browser (OpenCV.js in a Web Worker); images are never sent to external services. The camera needs HTTPS (or localhost); image import works everywhere. Text recognition reads at most the first 10 pages.
 - Categories, tags, description; assign to trade, task, or cost item.
 - Responsive document rows keep filenames readable, put related records on separate lines, and place actions in a dedicated lower toolbar on smaller screens. Desktop keeps actions beside the document details; touch targets remain at least 44 × 44 CSS pixels.
 - After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, invoice, quote, or just store). See [ocr.md](ocr.md).
