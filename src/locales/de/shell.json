@@ -24,5 +24,6 @@
   "useServerVersion": "Server verwenden",
   "keepOfflineChanges": "Offline-Änderungen behalten",
   "workspaceUnavailable": "Der gespeicherte Arbeitsbereich ist nicht verfügbar. Stelle eine Verbindung zum Server her und versuche es erneut.",
-  "installApp": "App installieren"
+  "installApp": "App installieren",
+  "appVersion": "Version {{version}}"
 }

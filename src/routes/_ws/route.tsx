@@ -1,6 +1,7 @@
 import { tr } from "@/i18n";
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { version as appVersion } from "../../../package.json";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -249,6 +250,9 @@ function Shell() {
             <Pencil className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           </button>
         )}
+        <p className={cn("shrink-0 px-3 pt-3 text-[11px] text-muted-foreground/70", !project && "mt-auto")}>
+          {t("appVersion", { version: appVersion })}
+        </p>
       </aside>
 
       <div className="min-w-0 flex-1">

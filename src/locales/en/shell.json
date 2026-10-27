@@ -24,5 +24,6 @@
   "useServerVersion": "Use server version",
   "keepOfflineChanges": "Keep offline changes",
   "workspaceUnavailable": "The saved workspace is unavailable. Connect to the server and try again.",
-  "installApp": "Install app"
+  "installApp": "Install app",
+  "appVersion": "Version {{version}}"
 }
