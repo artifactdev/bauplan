@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MODES, PALETTES } from "./appearance";
+import { derivePrimaryColors } from "./appearance";
 
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
@@ -55,48 +55,64 @@ function contrast(a: string, b: string) {
 }
 
 describe("Accessible theme token contracts", () => {
-  for (const palette of PALETTES)
-    for (const mode of MODES.filter((mode) => mode !== "system")) {
-      it(`${palette}/${mode} keeps text, status, control, and focus contrast above their thresholds`, () => {
-        const token = tokens(palette, mode);
-        const textPairs = [
-          ["foreground", "background"],
-          ["card-foreground", "card"],
-          ["popover-foreground", "popover"],
-          ["muted-foreground", "card"],
-          ["muted-foreground", "muted"],
-          ["muted-foreground", "sidebar"],
-          ["primary-foreground", "primary"],
-          ["primary", "card"],
-          ["accent-foreground", "accent"],
-          ["sidebar-foreground", "sidebar"],
-          ["sidebar-accent-foreground", "sidebar-accent"],
-          ["success", "success-subtle"],
-          ["warning-foreground", "warning-subtle"],
-          ["destructive", "destructive-subtle"],
-          ["info", "info-subtle"],
-          ["success", "card"],
-          ["warning", "card"],
-          ["destructive", "card"],
-          ["info", "card"],
-        ];
-        for (const [foreground, background] of textPairs) {
+  for (const mode of ["light", "dark"])
+    it(`${mode} keeps text, status, control, and focus contrast above their thresholds`, () => {
+      const token = tokens("base", mode);
+      const textPairs = [
+        ["foreground", "background"],
+        ["card-foreground", "card"],
+        ["popover-foreground", "popover"],
+        ["muted-foreground", "card"],
+        ["muted-foreground", "muted"],
+        ["muted-foreground", "sidebar"],
+        ["primary-foreground", "primary"],
+        ["primary", "card"],
+        ["accent-foreground", "accent"],
+        ["sidebar-foreground", "sidebar"],
+        ["sidebar-accent-foreground", "sidebar-accent"],
+        ["success", "success-subtle"],
+        ["warning-foreground", "warning-subtle"],
+        ["destructive", "destructive-subtle"],
+        ["info", "info-subtle"],
+        ["success", "card"],
+        ["warning", "card"],
+        ["destructive", "card"],
+        ["info", "card"],
+      ];
+      for (const [foreground, background] of textPairs) {
+        expect(
+          contrast(token(foreground!), token(background!)),
+          `${foreground}/${background}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const background of ["background", "card", "popover"]) {
+        for (const foreground of ["input", "ring"]) {
           expect(
-            contrast(token(foreground!), token(background!)),
+            contrast(token(foreground), token(background)),
             `${foreground}/${background}`,
-          ).toBeGreaterThanOrEqual(4.5);
+          ).toBeGreaterThanOrEqual(3);
         }
-        for (const background of ["background", "card", "popover"]) {
-          for (const foreground of ["input", "ring"]) {
-            expect(
-              contrast(token(foreground), token(background)),
-              `${foreground}/${background}`,
-            ).toBeGreaterThanOrEqual(3);
-          }
-        }
-        const chart = [1, 2, 3, 4, 5].map((index) => token(`chart-${index}`));
-        expect(new Set(chart).size).toBe(5);
-        for (const color of chart) expect(contrast(color, token("card"))).toBeGreaterThanOrEqual(3);
-      });
-    }
+      }
+      const chart = [1, 2, 3, 4, 5].map((index) => token(`chart-${index}`));
+      expect(new Set(chart).size).toBe(5);
+      for (const color of chart) expect(contrast(color, token("card"))).toBeGreaterThanOrEqual(3);
+      const finance = ["budget", "planned", "committed", "expected", "paid"].map((role) =>
+        token(`finance-${role}`),
+      );
+      expect(new Set(finance).size).toBe(5);
+      for (const color of finance) expect(contrast(color, token("card"))).toBeGreaterThanOrEqual(3);
+    });
+
+  it.each(["#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", "#fbbf24", "#0e6375"])(
+    "keeps derived primary shades readable for %s",
+    (color) => {
+      const shades = derivePrimaryColors(color);
+      for (const background of ["#ffffff", "#f5f6fa"])
+        expect(contrast(shades.light, background)).toBeGreaterThanOrEqual(4.5);
+      for (const background of ["#171a28", "#222638", "#2b3043"])
+        expect(contrast(shades.dark, background)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(shades.onLight, shades.light)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(shades.onDark, shades.dark)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });

@@ -5,7 +5,7 @@ import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { eur, fmtDate, todayISO } from "@/lib/format";
 import { contactLabel, contactOptions, tradeName, tradeOptions } from "@/lib/options";
 import type { Invoice } from "@/lib/schema";
-import { Empty, Panel, Pill } from "@/components/app/ui-bits";
+import { Empty, MetricCard, Panel, Pill } from "@/components/app/ui-bits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -80,22 +80,19 @@ export function InvoicesTable({ onEdit, openDoc }: { onEdit: (i: Invoice) => voi
   return (
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {([[tr("shared.total"), sum(), "neutral"], [tr("shared.open"), sum("offen"), "warning"], [tr("shared.overdue"), sum("ueberfaellig"), "danger"], [tr("shared.paid"), sum("bezahlt"), "success"]] as const).map(([l, v, t]) => (
-          <Panel key={l} className="p-3 md:p-4">
-            <div className="text-xs text-muted-foreground">{l}</div>
-            <div className={`font-display text-lg font-semibold tabular ${t === "danger" && v > 0 ? "text-destructive" : ""}`}>{eur(v, true)}</div>
-          </Panel>
+        {([[tr("shared.total"), sum(), "neutral"], [tr("shared.open"), sum("offen"), "warning"], [tr("shared.overdue"), sum("ueberfaellig"), "danger"], [tr("shared.paid"), sum("bezahlt"), "success"]] as const).map(([label, amount, tone]) => (
+          <MetricCard key={label} label={label} value={eur(amount, true)} tone={tone} />
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Input className="w-56" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
-        <FilterSelect value={fState} onChange={setFState} all="Alle Status" options={Object.entries(STATE).map(([value, s]) => ({ value, label: s.label }))} />
-        <FilterSelect value={fTrade} onChange={setFTrade} all="Alle Gewerke" options={tradeOptions(ws)} />
+        <FilterSelect value={fState} onChange={setFState} all={tr("shared.all_statuses")} options={Object.entries(STATE).map(([value, s]) => ({ value, label: s.label }))} />
+        <FilterSelect value={fTrade} onChange={setFTrade} all={tr("shared.all_trades")} options={tradeOptions(ws)} />
         <FilterSelect value={fContact} onChange={setFContact} all="Alle Kontakte" options={contactOptions(ws)} />
         {filtered && <Button size="sm" variant="ghost" onClick={() => { setQ(""); setFState(ALL); setFTrade(ALL); setFContact(ALL); }}>{tr("shared.reset")}</Button>}
       </div>
       <Panel>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader><TableRow>
               {COLS.map((c) => (
@@ -132,8 +129,39 @@ export function InvoicesTable({ onEdit, openDoc }: { onEdit: (i: Invoice) => voi
               })}
             </TableBody>
           </Table>
-          {!list.length && <Empty>{ws.invoices.length ? tr("invoices_table.no_invoices_match_filters") : tr("invoices_table.no_invoices_yet")}</Empty>}
         </div>
+        <div className="grid gap-3 md:hidden">
+          {sorted.map((i) => {
+            const st = invoiceState(i, today);
+            return (
+              <article key={i.id} className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="break-words font-medium">{who(i)}</h3>
+                    {i.title && <p className="mt-0.5 break-words text-sm text-muted-foreground">{i.title}</p>}
+                    {i.trade_id && <p className="mt-0.5 text-xs text-muted-foreground">{tradeName(ws, i.trade_id)}</p>}
+                  </div>
+                  <span className="shrink-0 text-right font-semibold tabular">{eur(i.amount, true)}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{tr("shared.date")}: {fmtDate(i.invoice_date)}</span>
+                  <span className={st === "ueberfaellig" ? "font-medium text-destructive" : ""}>{tr("invoices_table.due")}: {fmtDate(i.due_date)}</span>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2">
+                  <button className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => update.mutate({ table: "invoices", id: i.id, patch: { paid: !i.paid } })} aria-label={tr("invoices_table.toggle_status")}>
+                    <Pill tone={STATE[st].tone}>{STATE[st].label}</Pill>
+                  </button>
+                  <div className="flex">
+                    {i.document_id && <Button size="icon" variant="ghost" aria-label={tr("shared.open_pdf")} onClick={() => openDoc(i.document_id)}><FileText className="h-4 w-4" /></Button>}
+                    <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => onEdit(i)}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("invoices_table.delete_invoice")) && remove.mutate({ table: "invoices", id: i.id })}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        {!list.length && <Empty>{ws.invoices.length ? tr("invoices_table.no_invoices_match_filters") : tr("invoices_table.no_invoices_yet")}</Empty>}
       </Panel>
     </>
   );

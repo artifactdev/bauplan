@@ -10,6 +10,8 @@ The link is served by the local Bauplan instance and can be used by any calendar
 ## Contents
 - All calendar events: all-day (no time) or timed, including multi-day events. Without an end time, a timed event lasts one hour.
 - Open tasks with a due date appear as all-day entries.
+- Received offers with a **Valid until** date appear as all-day decision deadlines. These entries are derived from offers (not separate editable appointments), so changing the date updates the deadline and accepting, rejecting, or deleting the offer removes it. They also appear in the app calendar and upcoming dashboard entries.
+- To delegate a decision, use **Create quote decision task** on a received offer. Review the prefilled deadline, document, cost item, and trade, choose an assignee, and save the task. This is a separate, optional task; subsequent offer changes do not modify it.
 - Calendar name = project name; recommended refresh interval: 1 hour.
 - Times are "floating" (local time without a time zone).
 

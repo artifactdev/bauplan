@@ -80,7 +80,19 @@ function validateDatabase(value: unknown): BackupDatabase {
   const normalizedTables = {} as BackupDatabase["tables"];
   for (const table of TABLE_NAMES) {
     const columns = ["id", "created_at", ...TABLES[table]];
-    const rows = validateRows(tables[table], columns, columns);
+    const required =
+      table === "tasks"
+        ? columns.filter((column) => column !== "assignee_id")
+        : table === "offers"
+          ? columns.filter((column) => column !== "valid_until")
+          : columns;
+    const validatedRows = validateRows(tables[table], columns, required);
+    const rows =
+      table === "tasks"
+        ? validatedRows.map((row) => ({ ...row, assignee_id: row["assignee_id"] ?? null }))
+        : table === "offers"
+          ? validatedRows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
+          : validatedRows;
     for (const row of rows) {
       for (const [column, item] of Object.entries(row)) {
         if (item !== null && NUMERIC_COLS.has(column) && typeof item !== "number")
@@ -355,7 +367,7 @@ function validateArchiveFiles(entries: Unzipped): {
   if (manifestFiles.size !== files.size) fail("Das Backup enthält nicht aufgeführte Dateien.");
   fileList(database, validFiles);
   return {
-    manifest: parsed as unknown as Manifest,
+    manifest: { ...parsed, database } as unknown as Manifest,
     files: validFiles,
   };
 }

@@ -69,16 +69,16 @@ function DocsPage() {
     const c = ws.cost_items.find((x) => x.id === d.cost_item_id);
     if (c) out.push(c.title);
     const t = ws.tasks.find((x) => x.id === d.task_id);
-    if (t) out.push(`Aufgabe: ${t.title}`);
-    ws.offers.filter((o) => o.document_id === d.id).forEach((o) => out.push(`Angebot ${o.contractor}`));
-    ws.invoices.filter((o) => o.document_id === d.id).forEach((o) => out.push(`Rechnung ${o.contractor}`));
-    ws.expenses.filter((o) => o.document_id === d.id).forEach((o) => out.push(`Ausgabe ${o.vendor ?? o.title}`));
+    if (t) out.push(tr("documents.related_task", { title: t.title }));
+    ws.offers.filter((o) => o.document_id === d.id).forEach((o) => out.push(tr("documents.related_offer", { company: o.contractor })));
+    ws.invoices.filter((o) => o.document_id === d.id).forEach((o) => out.push(tr("documents.related_invoice", { company: o.contractor })));
+    ws.expenses.filter((o) => o.document_id === d.id).forEach((o) => out.push(tr("documents.related_expense", { title: o.vendor ?? o.title })));
     return out;
   };
 
   return (
     <>
-      <PageHeader title={tr("shared.documents")} subtitle={`${ws.documents.length} Dateien`} actions={<>
+      <PageHeader title={tr("shared.documents")} subtitle={tr("documents.file_count", { count: ws.documents.length })} actions={<>
         <Button size="sm" variant="outline" onClick={() => setScanOpen(true)}><ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}</Button>
         <Button size="sm" onClick={() => { setScanned(null); setUploadOpen(true); }}><Upload className="h-4 w-4" /> {tr("shared.upload")}</Button>
       </>} />
@@ -115,14 +115,26 @@ function DocsPage() {
                 {d.tags && <div className="mt-2 flex flex-wrap gap-1">{d.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => <span key={t} className="max-w-full rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">#{t}</span>)}</div>}
                 {d.description && <p className="mt-2 text-sm text-muted-foreground">{d.description}</p>}
               </div>
-              <div className="col-span-2 flex flex-wrap items-center justify-end gap-1 border-t border-border pt-2 lg:col-span-1 lg:border-0 lg:pt-0">
-                {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
-                  <Button size="icon" variant="ghost" aria-label={tr("documents.recognize_assign_content")} title={tr("documents.recognize_assign_content")} onClick={() => setAssignId(d.id)}><ScanText className="h-4 w-4" /></Button>
-                )}
-                <Button size="icon" variant="ghost" aria-label={tr("documents.preview")} onClick={() => open(d, "preview")}><Eye className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" aria-label={tr("documents.download")} onClick={() => open(d, "download")}><Download className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setEdit(d)}><Pencil className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(`„${d.name}“ löschen?`) && remove.mutate({ table: "documents", id: d.id })}><Trash2 className="h-4 w-4" /></Button>
+              <div className="col-span-2 flex w-full items-center justify-between gap-2 border-t border-border pt-2 lg:col-span-1 lg:w-auto lg:justify-end lg:border-0 lg:pt-0">
+                <Button size="sm" variant="outline" className="lg:hidden" onClick={() => open(d, "preview")}><Eye className="h-4 w-4" /> {tr("documents.preview")}</Button>
+                <details className="relative lg:hidden">
+                  <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent [&::-webkit-details-marker]:hidden">{tr("shared.actions")}</summary>
+                  <div className="absolute right-0 top-full z-10 mt-1 flex min-w-44 flex-col rounded-md border bg-popover p-1 shadow-md">
+                    {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && <Button size="sm" variant="ghost" className="justify-start" onClick={() => setAssignId(d.id)}><ScanText className="h-4 w-4" /> {tr("documents.recognize_assign_content")}</Button>}
+                    <Button size="sm" variant="ghost" className="justify-start" onClick={() => open(d, "download")}><Download className="h-4 w-4" /> {tr("documents.download")}</Button>
+                    <Button size="sm" variant="ghost" className="justify-start" onClick={() => setEdit(d)}><Pencil className="h-4 w-4" /> {tr("shared.edit")}</Button>
+                    <Button size="sm" variant="ghost" className="justify-start text-destructive" onClick={() => confirm(tr("documents.delete_document", { name: d.name })) && remove.mutate({ table: "documents", id: d.id })}><Trash2 className="h-4 w-4" /> {tr("shared.delete")}</Button>
+                  </div>
+                </details>
+                <div className="hidden items-center gap-1 lg:flex">
+                  {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
+                    <Button size="icon" variant="ghost" aria-label={tr("documents.recognize_assign_content")} title={tr("documents.recognize_assign_content")} onClick={() => setAssignId(d.id)}><ScanText className="h-4 w-4" /></Button>
+                  )}
+                  <Button size="icon" variant="ghost" aria-label={tr("documents.preview")} onClick={() => open(d, "preview")}><Eye className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("documents.download")} onClick={() => open(d, "download")}><Download className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setEdit(d)}><Pencil className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("documents.delete_document", { name: d.name })) && remove.mutate({ table: "documents", id: d.id })}><Trash2 className="h-4 w-4" /></Button>
+                </div>
               </div>
             </li>
             );

@@ -112,6 +112,107 @@ describe("budget calculation", () => {
     expect(s.committed).toBe(0);
     expect(s.expected).toBe(4000);
   });
+
+  it("uses accepted offers as planned costs when no separate plan was entered", () => {
+    const offer = {
+      id: "roof-offer",
+      trade_id: "roof",
+      cost_item_id: "roof-item",
+      document_id: null,
+      contact_id: null,
+      requested_date: null,
+      contractor: "Dachdecker",
+      title: null,
+      amount: 30392,
+      offer_date: null,
+      status: "accepted" as const,
+      notes: null,
+    };
+    const s = summarize({
+      ...base,
+      cost_items: [
+        { id: "roof-item", trade_id: "roof", title: "Dach", description: null, planned: 0 },
+      ],
+      offers: [offer],
+      invoices: [],
+    });
+
+    expect(s.committed).toBe(30392);
+    expect(s.planned).toBe(30392);
+    expect(s.expected).toBe(30392);
+  });
+
+  it("keeps an explicitly entered plan when an accepted offer exists", () => {
+    const s = summarize({
+      ...base,
+      cost_items: [{ id: "c", trade_id: null, title: "Dach", description: null, planned: 35000 }],
+      offers: [
+        {
+          id: "o",
+          trade_id: null,
+          cost_item_id: "c",
+          document_id: null,
+          contact_id: null,
+          requested_date: null,
+          contractor: "Dachdecker",
+          title: null,
+          amount: 30392,
+          offer_date: null,
+          status: "accepted",
+          notes: null,
+        },
+      ],
+      invoices: [],
+    });
+
+    expect(s.planned).toBe(35000);
+    expect(s.expected).toBe(30392);
+  });
+
+  it("counts budget transactions only when they are assigned to a cost item", () => {
+    const s = summarize({
+      ...base,
+      cost_items: [],
+      offers: [
+        {
+          id: "orphan-offer",
+          trade_id: null,
+          cost_item_id: null,
+          document_id: null,
+          contact_id: null,
+          requested_date: null,
+          contractor: "Dachdecker",
+          title: null,
+          amount: 300,
+          offer_date: null,
+          status: "accepted",
+          notes: null,
+        },
+      ],
+      invoices: [],
+      expenses: [
+        {
+          id: "orphan-expense",
+          title: "Material",
+          vendor: null,
+          amount: 120,
+          expense_date: null,
+          category: null,
+          trade_id: null,
+          cost_item_id: null,
+          document_id: null,
+          status: "bezahlt",
+          notes: null,
+        },
+      ],
+    });
+
+    expect(s.expected).toBe(0);
+    expect(s.planned).toBe(0);
+    expect(s.committed).toBe(0);
+    expect(s.invoiced).toBe(0);
+    expect(s.paid).toBe(0);
+  });
 });
 
 describe("expenses", () => {
@@ -123,7 +224,7 @@ describe("expenses", () => {
     expense_date: null,
     category: null,
     trade_id: null,
-    cost_item_id: null,
+    cost_item_id: "c",
     document_id: null,
     status,
     notes: null,
@@ -131,7 +232,7 @@ describe("expenses", () => {
   it("deducts receipts from the remaining budget", () => {
     const s = summarize({
       ...base,
-      cost_items: [],
+      cost_items: [{ id: "c", trade_id: null, title: "Baumarkt", description: null, planned: 0 }],
       offers: [],
       invoices: [],
       expenses: [exp(120, "bezahlt"), exp(80, "offen")],
@@ -143,7 +244,7 @@ describe("expenses", () => {
   it("reimbursed expenses still count as spent", () => {
     const s = summarize({
       ...base,
-      cost_items: [],
+      cost_items: [{ id: "c", trade_id: null, title: "Baumarkt", description: null, planned: 0 }],
       offers: [],
       invoices: [],
       expenses: [exp(50, "erstattet")],
@@ -164,7 +265,6 @@ describe("payment sources", () => {
   const base = {
     cost_items: [],
     offers: [],
-    trades: [],
     projects: [
       { id: "p", name: "P", address: null, total_budget: 1000, start_date: null, end_date: null },
     ],
@@ -181,7 +281,7 @@ describe("payment sources", () => {
     expense_date: null,
     category: "Werkzeug",
     trade_id: null,
-    cost_item_id: null,
+    cost_item_id: "c",
     document_id: null,
     status: "bezahlt" as const,
     notes: null,
@@ -191,6 +291,7 @@ describe("payment sources", () => {
   it("Privat expenses are not deducted from the total budget, Bank and unassigned ones are", () => {
     const s = summarize({
       ...base,
+      cost_items: [{ id: "c", trade_id: null, title: "Werkzeug", description: null, planned: 0 }],
       invoices: [],
       expenses: [exp(100, "priv"), exp(50, "bank"), exp(20, null)],
       budget_pots: pots,
@@ -204,7 +305,7 @@ describe("payment sources", () => {
     const inv = {
       id: "i",
       trade_id: null,
-      cost_item_id: null,
+      cost_item_id: "c",
       document_id: null,
       contact_id: null,
       contractor: "A",
@@ -215,7 +316,13 @@ describe("payment sources", () => {
       paid: true,
       budget_pot_id: "priv",
     };
-    const s = summarize({ ...base, invoices: [inv], expenses: [], budget_pots: pots });
+    const s = summarize({
+      ...base,
+      cost_items: [{ id: "c", trade_id: null, title: "Werkzeug", description: null, planned: 0 }],
+      invoices: [inv],
+      expenses: [],
+      budget_pots: pots,
+    });
     expect(s.paid).toBe(0);
     expect(s.pots.find((p) => p.id === "priv")!.paid).toBe(200);
   });

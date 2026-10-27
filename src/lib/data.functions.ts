@@ -208,7 +208,28 @@ export const getWorkspaceSyncGeneration = createServerFn()
   .middleware([dataContext])
   .handler(async ({ context }) => context.repo.getSyncGeneration());
 
+export const getTaskAssignees = createServerFn()
+  .middleware([dataContext])
+  .handler(async () => {
+    const { listUsers } = await import("@/server/local-auth");
+    return (await listUsers())
+      .filter((user) => user.role === "admin" || user.role === "member")
+      .map((user) => ({
+        id: user.id,
+        label: user.name?.trim() || user.email,
+      }));
+  });
+
 const tableSchema = z.enum(TABLE_NAMES as [TableName, ...TableName[]]);
+
+async function validateTaskAssignee(value: unknown) {
+  if (value === undefined || value === null || value === "") return;
+  if (typeof value !== "string") throw new Error("tasks.assignee_not_available");
+  const { listUsers } = await import("@/server/local-auth");
+  const user = (await listUsers()).find((candidate) => candidate.id === value);
+  if (!user || (user.role !== "admin" && user.role !== "member"))
+    throw new Error("tasks.assignee_not_available");
+}
 
 export const createRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
@@ -216,6 +237,7 @@ export const createRow = createServerFn({ method: "POST" })
     z.object({ table: tableSchema, row: z.record(z.unknown()) }).parse(d),
   )
   .handler(async ({ context, data }) => {
+    if (data.table === "tasks") await validateTaskAssignee(data.row["assignee_id"]);
     const row = await context.repo.insert(data.table, cleanRow(data.table, data.row));
     return { id: String(row["id"]) };
   });
@@ -226,6 +248,8 @@ export const updateRow = createServerFn({ method: "POST" })
     z.object({ table: tableSchema, id: z.string(), patch: z.record(z.unknown()) }).parse(d),
   )
   .handler(async ({ context, data }) => {
+    if (data.table === "tasks" && "assignee_id" in data.patch)
+      await validateTaskAssignee(data.patch["assignee_id"]);
     await context.repo.update(data.table, data.id, cleanRow(data.table, data.patch));
     return { ok: true };
   });
@@ -273,6 +297,13 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
     const results = [];
     for (const change of data.changes) {
       const { syncGeneration: _syncGeneration, ...syncChange } = change;
+      if (
+        change.table === "tasks" &&
+        change.action !== "delete" &&
+        change.row &&
+        "assignee_id" in change.row
+      )
+        await validateTaskAssignee(change.row["assignee_id"]);
       const document =
         change.table === "documents" && change.action === "delete"
           ? (await context.repo.getAll()).documents.find((item) => item.id === change.rowId)

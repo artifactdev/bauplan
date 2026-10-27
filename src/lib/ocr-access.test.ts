@@ -9,8 +9,13 @@ const harness = vi.hoisted(() => {
   type Middleware = { steps: Step[] };
   const state = {
     user: null as { id: string; role: string } | null,
+    users: [
+      { id: "admin-1", email: "admin@example.test", name: "Admin", role: "admin" },
+      { id: "member-1", email: "member@example.test", name: "Member", role: "member" },
+      { id: "pending-1", email: "pending@example.test", name: "Pending", role: "pending" },
+    ],
     repo: {
-      readAppearance: vi.fn(async () => ({ palette: "current", mode: "system" })),
+      readAppearance: vi.fn(async () => ({ primaryColor: "#0e6375", mode: "system" })),
       writeAppearance: vi.fn(async () => {}),
       readOcrSettings: vi.fn(async (): Promise<string | null> => null),
       writeOcrSettings: vi.fn(async () => {}),
@@ -27,6 +32,11 @@ const harness = vi.hoisted(() => {
         contacts: [],
       })),
       readFile: vi.fn(async () => new Uint8Array([66, 77])),
+      insert: vi.fn(async (_table: string, row: Record<string, unknown>) => ({
+        id: "task-1",
+        ...row,
+      })),
+      update: vi.fn(async () => {}),
     },
   };
   return {
@@ -83,6 +93,7 @@ vi.mock("@/server/local-auth", () => ({
   SESSION_COOKIE: "bp_session",
   cookieFrom: () => null,
   userFromToken: async () => harness.state.user,
+  listUsers: async () => harness.state.users,
 }));
 vi.mock("@/server/ocr", () => ({
   processDocument: vi.fn(async () => ({
@@ -117,6 +128,9 @@ import {
   resetOcrSettings,
   getAppearance,
   saveAppearance,
+  getTaskAssignees,
+  createRow,
+  updateRow,
 } from "./data.functions";
 import { analyzeDocument } from "./ocr.functions";
 import { processDocument } from "@/server/ocr";
@@ -132,39 +146,78 @@ const draft = {
 beforeEach(() => {
   vi.clearAllMocks();
   harness.state.user = null;
+  harness.state.users = [
+    { id: "admin-1", email: "admin@example.test", name: "Admin", role: "admin" },
+    { id: "member-1", email: "member@example.test", name: "Member", role: "member" },
+    { id: "pending-1", email: "pending@example.test", name: "Pending", role: "pending" },
+  ];
   harness.state.repo.readOcrSettings.mockResolvedValue(null);
+});
+
+describe("Task assignment functions", () => {
+  it("only exposes active admin and member accounts to signed-in project users", async () => {
+    harness.state.user = { id: "member-1", role: "member" };
+    await expect(getTaskAssignees()).resolves.toEqual([
+      { id: "admin-1", label: "Admin" },
+      { id: "member-1", label: "Member" },
+    ]);
+    harness.state.user = { id: "pending-1", role: "pending" };
+    await expect(getTaskAssignees()).rejects.toThrow("Unauthorized");
+  });
+  it("validates active assignees before creating or updating tasks", async () => {
+    harness.state.user = { id: "member-1", role: "member" };
+    await expect(
+      createRow({
+        data: { table: "tasks", row: { title: "Check roof", assignee_id: "pending-1" } },
+      }),
+    ).rejects.toThrow("tasks.assignee_not_available");
+    expect(harness.state.repo.insert).not.toHaveBeenCalled();
+    await createRow({
+      data: { table: "tasks", row: { title: "Check roof", assignee_id: "member-1" } },
+    });
+    expect(harness.state.repo.insert).toHaveBeenCalledWith(
+      "tasks",
+      expect.objectContaining({ assignee_id: "member-1" }),
+    );
+    await expect(
+      updateRow({
+        data: { table: "tasks", id: "task-1", patch: { assignee_id: "deleted-user" } },
+      }),
+    ).rejects.toThrow("tasks.assignee_not_available");
+    expect(harness.state.repo.update).not.toHaveBeenCalled();
+  });
 });
 
 describe("Private account appearance server functions", () => {
   it.each([null, "pending"])("rejects appearance reads and writes for %s", async (role) => {
     harness.state.user = role ? { id: "blocked", role } : null;
     await expect(getAppearance()).rejects.toThrow("Unauthorized");
-    await expect(saveAppearance({ data: { palette: "blue", mode: "dark" } })).rejects.toThrow(
-      "Unauthorized",
-    );
+    await expect(
+      saveAppearance({ data: { primaryColor: "#295cc5", mode: "dark" } }),
+    ).rejects.toThrow("Unauthorized");
     expect(harness.state.repo.readAppearance).not.toHaveBeenCalled();
     expect(harness.state.repo.writeAppearance).not.toHaveBeenCalled();
   });
   it.each(["admin", "member"])("uses only the authenticated %s identity", async (role) => {
     harness.state.user = { id: "self", role };
-    expect(await getAppearance()).toEqual({ palette: "current", mode: "system" });
+    expect(await getAppearance()).toEqual({ primaryColor: "#0e6375", mode: "system" });
     expect(harness.state.repo.readAppearance).toHaveBeenCalledWith("self");
-    await saveAppearance({ data: { palette: "violet", mode: "light" } });
+    await saveAppearance({ data: { primaryColor: "#6d28d9", mode: "light" } });
     expect(harness.state.repo.writeAppearance).toHaveBeenCalledWith("self", {
-      palette: "violet",
+      primaryColor: "#6d28d9",
       mode: "light",
     });
   });
   it("rejects unknown values and identity overrides before writing", async () => {
     harness.state.user = { id: "self", role: "member" };
     for (const data of [
-      { palette: "invalid", mode: "dark" },
-      { palette: "blue", mode: "invalid" },
-      { palette: "blue", mode: "dark", userId: "other" },
+      { primaryColor: "invalid", mode: "dark" },
+      { primaryColor: "#295cc5", mode: "invalid" },
+      { primaryColor: "#295cc5", mode: "dark", userId: "other" },
     ]) {
       // Exercise runtime input validation, including untyped HTTP callers.
       await expect(
-        saveAppearance({ data: data as { palette: "blue"; mode: "dark" } }),
+        saveAppearance({ data: data as { primaryColor: string; mode: "dark" } }),
       ).rejects.toThrow();
     }
     expect(harness.state.repo.writeAppearance).not.toHaveBeenCalled();

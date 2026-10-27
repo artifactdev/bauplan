@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { DEFAULT_APPEARANCE } from "@/lib/appearance";
 import { DEFAULT_NAVIGATION } from "@/lib/navigation";
 import type { Repo, SqliteDb } from "./repo";
@@ -50,8 +50,17 @@ describe("Bauplan backups", () => {
       "oidc",
       JSON.stringify({ client_secret: "private-secret" }),
     );
-    await repo.writeAppearance("admin-1", { ...DEFAULT_APPEARANCE, palette: "blue" });
+    await repo.writeAppearance("admin-1", { ...DEFAULT_APPEARANCE, primaryColor: "#295cc5" });
     await repo.writeNavigation("admin-1", DEFAULT_NAVIGATION);
+    await repo.insert("tasks", { id: "legacy-task", title: "Check roof" });
+    await repo.insert("offers", {
+      id: "offer-1",
+      contractor: "Roofing",
+      status: "received",
+      offer_date: "2026-10-27",
+      valid_until: "2026-11-10",
+      amount: 30392,
+    });
     db.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
       "operation-1",
       "admin-1",
@@ -111,6 +120,7 @@ describe("Bauplan backups", () => {
     const workspace = await repo.getAll();
     expect(workspace.projects.map((item) => item.id)).toEqual([project["id"]]);
     expect(workspace.documents).toHaveLength(1);
+    expect(workspace.offers[0]).toMatchObject({ valid_until: "2026-11-10" });
     expect(await repo.readFile(storagePath)).toEqual(new Uint8Array([1, 2, 3]));
     expect(await repo.readFile(extraFile)).toBeNull();
     expect(db.prepare("SELECT * FROM app_sessions").all()).toEqual([]);
@@ -125,10 +135,21 @@ describe("Bauplan backups", () => {
   it("rejects corrupted or unsafe archives before changing the database", async () => {
     const archive = await createBackup(repo);
     const entries = unzipSync(archive);
-    const fileName = Object.keys(entries).find((name) => name.startsWith("uploads/"));
+    const manifest = JSON.parse(strFromU8(entries["backup.json"]!)) as {
+      database: { tables: { tasks: Record<string, unknown>[]; offers: Record<string, unknown>[] } };
+    };
+    delete manifest.database.tables.tasks[0]?.["assignee_id"];
+    delete manifest.database.tables.offers[0]?.["valid_until"];
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(parseBackup(zipSync(entries)).database.tables.tasks[0]?.["assignee_id"]).toBeNull();
+    expect(parseBackup(zipSync(entries)).database.tables.offers[0]?.["valid_until"]).toBeNull();
+
+    const currentArchive = await createBackup(repo);
+    const currentEntries = unzipSync(currentArchive);
+    const fileName = Object.keys(currentEntries).find((name) => name.startsWith("uploads/"));
     if (!fileName) throw new Error("Expected an uploaded file in the test archive.");
-    entries[fileName] = new Uint8Array([4, 5, 6]);
-    expect(() => parseBackup(zipSync(entries))).toThrow(/beschädigt/);
+    currentEntries[fileName] = new Uint8Array([4, 5, 6]);
+    expect(() => parseBackup(zipSync(currentEntries))).toThrow(/beschädigt/);
 
     const unsafe = zipSync({
       "backup.json": strToU8("{}"),

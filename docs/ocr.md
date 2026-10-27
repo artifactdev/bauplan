@@ -21,6 +21,9 @@ OCR runs in-process on the Bauplan server with `tesseract.js`; no OCR service, h
 | Vendor | matched contact → e-invoice seller → GiroCode recipient → retail chain list → letterhead rules |
 | Document date | e-invoice issue date → TSE QR end time (German local date) → printed TSE start/stop time → labelled date (`Rechnungsdatum`, `Datum`) |
 | Due date | e-invoice due date → explicit `zahlbar bis` date → relative terms (`innerhalb 14 Tagen`, `30 Tage netto`, `sofort`) from the document date |
+| Offer validity | Explicit `gültig bis`, `Bindefrist`, `Annahmefrist`, or `valid until` date (also on the following line); `gültig 14 Tage` / `gültig 2 Wochen` relative to the offer date |
+
+Offer uploads and scanning are available when creating **and editing** an offer, including after **Quote received**. Uploads prefill the amount, offer date, and validity date where recognized; review these values before saving. A newly uploaded file remains linked even if recognition fails. Validity is stored separately from invoice payment deadlines and shown on offer cards and in the table.
 
 Machine-readable sources (parsers in `src/lib/ocr-structured.ts`):
 

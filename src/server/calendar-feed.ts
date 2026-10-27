@@ -1,17 +1,22 @@
 // Secret token for the read-only iCal subscription link.
 // Server-only: never import from client code.
-import type { CalEvent, Task } from "@/lib/schema";
+import type { CalEvent, Offer, Task } from "@/lib/schema";
 
 export async function getFeedToken(): Promise<string | null> {
   const { getSqliteDb } = await import("@/server/repo");
   const db = await getSqliteDb();
-  return (db.prepare("SELECT value FROM app_settings WHERE key = 'ics_token'").get()?.["value"] as string | undefined) ?? null;
+  return (
+    (db.prepare("SELECT value FROM app_settings WHERE key = 'ics_token'").get()?.["value"] as
+      string | undefined) ?? null
+  );
 }
 
 export async function setFeedToken(token: string | null) {
   const { getSqliteDb } = await import("@/server/repo");
   const db = await getSqliteDb();
-  db.prepare("INSERT INTO app_settings (key, value) VALUES ('ics_token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(token);
+  db.prepare(
+    "INSERT INTO app_settings (key, value) VALUES ('ics_token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(token);
 }
 
 export function newToken() {
@@ -28,8 +33,18 @@ export function sameToken(a: string, b: string) {
 }
 
 /** Reads entries for the feed. Call only after the token was verified. */
-export async function feedData(): Promise<{ events: CalEvent[]; tasks: Task[]; name: string }> {
+export async function feedData(): Promise<{
+  events: CalEvent[];
+  tasks: Task[];
+  offers: Offer[];
+  name: string;
+}> {
   const { sqliteRepo } = await import("@/server/repo");
   const ws = await sqliteRepo().getAll();
-  return { events: ws.events, tasks: ws.tasks, name: ws.projects[0]?.name ?? "Bauplan" };
+  return {
+    events: ws.events,
+    tasks: ws.tasks,
+    offers: ws.offers,
+    name: ws.projects[0]?.name ?? "Bauplan",
+  };
 }

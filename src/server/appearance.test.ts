@@ -46,15 +46,30 @@ describe("Account appearance SQLite persistence", () => {
   });
   it("initializes additively without changing legacy project data", async () => {
     expect((await repo.getAll()).projects[0]?.name).toBe("Keep me");
-    expect(await repo.readAppearance("new")).toEqual({ palette: "current", mode: "system" });
+    expect(await repo.readAppearance("new")).toEqual({
+      primaryColor: "#0e6375",
+      mode: "system",
+    });
     expect(await repo.getAll()).not.toHaveProperty(USER_APPEARANCE_TABLE);
+    db.prepare(`INSERT INTO ${USER_APPEARANCE_TABLE} VALUES (?, ?, ?)`).run(
+      "legacy",
+      "blue",
+      "dark",
+    );
+    expect(await repo.readAppearance("legacy")).toEqual({
+      primaryColor: "#295cc5",
+      mode: "dark",
+    });
   });
   it("persists and updates only the selected user", async () => {
-    await repo.writeAppearance("alice", { palette: "blue", mode: "dark" });
-    await repo.writeAppearance("bob", { palette: "violet", mode: "system" });
-    await repo.writeAppearance("alice", { palette: "green", mode: "light" });
-    expect(await repo.readAppearance("alice")).toEqual({ palette: "green", mode: "light" });
-    expect(await repo.readAppearance("bob")).toEqual({ palette: "violet", mode: "system" });
+    await repo.writeAppearance("alice", { primaryColor: "#295cc5", mode: "dark" });
+    await repo.writeAppearance("bob", { primaryColor: "#6d28d9", mode: "system" });
+    await repo.writeAppearance("alice", { primaryColor: "#176b50", mode: "light" });
+    expect(await repo.readAppearance("alice")).toEqual({ primaryColor: "#176b50", mode: "light" });
+    expect(await repo.readAppearance("bob")).toEqual({
+      primaryColor: "#6d28d9",
+      mode: "system",
+    });
   });
   it("reports invalid stored data instead of pretending a default was saved", async () => {
     db.prepare(`INSERT INTO ${USER_APPEARANCE_TABLE} VALUES (?, ?, ?)`).run(
@@ -67,7 +82,7 @@ describe("Account appearance SQLite persistence", () => {
   it("cleans up private preferences through account deletion", async () => {
     const { createUser, deleteUser } = await import("./local-auth");
     const id = await createUser({ email: "delete@example.test", role: "member" });
-    await repo.writeAppearance(id, { palette: "blue", mode: "dark" });
+    await repo.writeAppearance(id, { primaryColor: "#295cc5", mode: "dark" });
     await repo.writeNavigation(id, DEFAULT_NAVIGATION);
     db.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
       "sync-delete-test",

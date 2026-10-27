@@ -335,35 +335,24 @@ export function CreditCalculator() {
         )}
         {calculation && (
           <div className="mt-6 grid gap-5">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-              <CreditMetric
-                label={tr("credit_calculator.actual_nominal_interest")}
-                value={eur(calculation.actualInterest, true)}
-              />
-              <CreditMetric
-                label={tr("credit_calculator.actual_commitment_interest_2")}
-                value={eur(calculation.actualCommitment, true)}
-              />
-              <CreditMetric
-                label={tr("credit_calculator.actual_total_interest")}
-                value={eur(calculation.actualInterest + calculation.actualCommitment, true)}
-              />
-              <CreditMetric
-                label={tr("credit_calculator.forecast_nominal_interest")}
-                value={eur(calculation.plannedInterest, true)}
-              />
-              <CreditMetric
-                label={tr("credit_calculator.forecast_commitment_interest_2")}
-                value={eur(calculation.plannedCommitment, true)}
-              />
-              <CreditMetric
-                label={tr("credit_calculator.forecast_total_interest")}
-                value={eur(calculation.plannedInterest + calculation.plannedCommitment, true)}
-              />
-              <CreditMetric
-                label={tr("credit_calculator.balance_repayment_start")}
-                value={eur(calculation.plannedBalance, true)}
-              />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="rounded-xl border p-4">
+                <h3 className="mb-3 text-sm font-semibold">{tr("credit_calculator.actual_date")}</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <CreditMetric label={tr("credit_calculator.actual_nominal_interest")} value={eur(calculation.actualInterest, true)} />
+                  <CreditMetric label={tr("credit_calculator.actual_commitment_interest_2")} value={eur(calculation.actualCommitment, true)} />
+                  <CreditMetric label={tr("credit_calculator.actual_total_interest")} value={eur(calculation.actualInterest + calculation.actualCommitment, true)} />
+                </div>
+              </section>
+              <section className="rounded-xl border border-primary/30 bg-accent/20 p-4">
+                <h3 className="mb-3 text-sm font-semibold">{tr("credit_calculator.forecast_group")}</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <CreditMetric label={tr("credit_calculator.forecast_nominal_interest")} value={eur(calculation.plannedInterest, true)} />
+                  <CreditMetric label={tr("credit_calculator.forecast_commitment_interest_2")} value={eur(calculation.plannedCommitment, true)} />
+                  <CreditMetric label={tr("credit_calculator.forecast_total_interest")} value={eur(calculation.plannedInterest + calculation.plannedCommitment, true)} />
+                  <CreditMetric label={tr("credit_calculator.balance_repayment_start")} value={eur(calculation.plannedBalance, true)} />
+                </div>
+              </section>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -379,15 +368,16 @@ export function CreditCalculator() {
             {repaymentRows.length > 0 && (
               <ul className="grid gap-2">
                 {repaymentRows.map((repayment) => (
-                  <li key={repayment.id} className="flex items-center gap-3 text-sm">
-                    <span className="text-muted-foreground">
+                  <li key={repayment.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg border p-3 text-sm sm:flex">
+                    <span className="text-xs text-muted-foreground sm:text-sm">
                       {fmtDate(repayment.repayment_date)}
                     </span>
-                    <span className="flex-1">{repayment.notes || tr("credit_calculator.repayment")}</span>
-                    <span className="tabular">{eur(repayment.amount, true)}</span>
+                    <span className="col-start-1 row-start-2 min-w-0 break-words sm:flex-1">{repayment.notes || tr("credit_calculator.repayment")}</span>
+                    <span className="col-start-2 row-start-1 text-right font-medium tabular sm:order-3">{eur(repayment.amount, true)}</span>
                     <Button
                       size="icon"
                       variant="ghost"
+                      className="col-start-2 row-start-2 sm:order-4"
                       aria-label={tr("credit_calculator.delete_repayment")}
                       onClick={() =>
                         confirm(tr("credit_calculator.delete_repayment_2")) &&

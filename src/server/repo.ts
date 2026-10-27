@@ -187,7 +187,7 @@ export function sqliteRepo(): Repo {
           `INSERT INTO ${USER_APPEARANCE_TABLE} (user_id, palette, mode) VALUES (?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET palette = excluded.palette, mode = excluded.mode`,
         )
-        .run(userId, valid.palette, valid.mode);
+        .run(userId, valid.primaryColor, valid.mode);
     },
     async deleteAppearance(userId) {
       (await db()).prepare(`DELETE FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).run(userId);
@@ -272,7 +272,8 @@ export function sqliteRepo(): Repo {
       let totalBytes = 0;
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
         if (entry.isDirectory() && entry.name.startsWith(".bauplan-restore-")) continue;
-        if (!entry.isFile()) throw new Error("Das Upload-Verzeichnis enthält einen ungültigen Eintrag.");
+        if (!entry.isFile())
+          throw new Error("Das Upload-Verzeichnis enthält einen ungültigen Eintrag.");
         const filePath = path.join(directory, entry.name);
         const fileStat = await fs.stat(filePath);
         totalBytes += fileStat.size;
@@ -289,12 +290,8 @@ export function sqliteRepo(): Repo {
           settings: d
             .prepare("SELECT * FROM app_settings WHERE key != ? ORDER BY key")
             .all(SYNC_GENERATION_SETTING),
-          appearances: d
-            .prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} ORDER BY user_id`)
-            .all(),
-          navigation: d
-            .prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} ORDER BY user_id`)
-            .all(),
+          appearances: d.prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} ORDER BY user_id`).all(),
+          navigation: d.prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} ORDER BY user_id`).all(),
           syncOperations: d.prepare("SELECT * FROM app_sync_operations ORDER BY id").all(),
         },
         files,

@@ -74,25 +74,29 @@ function CollectionsPage() {
         actions={<Button size="sm" onClick={() => setDlg({ initial: { collection: col ?? "" } })}><Plus className="h-4 w-4" /> {tr("collections.idea")}</Button>}
       />
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Chip active={!col} onClick={() => setCol(null)}>Alle ({ws.ideas.length})</Chip>
-        {collections.map(([c, n]) => <Chip key={c} active={col === c} onClick={() => setCol(col === c ? null : c)}>{c} ({n})</Chip>)}
-      </div>
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-52 flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
-        <select aria-label={tr("shared.trade")} className="h-9 rounded-md border bg-background px-2 text-sm" value={trade} onChange={(e) => setTrade(e.target.value)}>
-          <option value="">{tr("shared.all_trades")}</option>
-          {ws.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <Button variant={favOnly ? "default" : "outline"} size="sm" onClick={() => setFavOnly(!favOnly)}><Star className="h-4 w-4" /> {tr("collections.favorites")}</Button>
-      </div>
-      {tags.length > 0 && (
-        <div className="mb-5 flex flex-wrap gap-1.5">
-          {tags.map((t) => <Chip key={t} small active={tag === t} onClick={() => setTag(tag === t ? null : t)}>#{t}</Chip>)}
-        </div>
+      {ws.ideas.length > 0 && (
+        <>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <Chip active={!col} onClick={() => setCol(null)}>{tr("shared.all")} ({ws.ideas.length})</Chip>
+            {collections.map(([c, n]) => <Chip key={c} active={col === c} onClick={() => setCol(col === c ? null : c)}>{c} ({n})</Chip>)}
+          </div>
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <div className="relative min-w-52 flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-9" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <select aria-label={tr("shared.trade")} className="h-9 rounded-md border bg-background px-2 text-sm" value={trade} onChange={(e) => setTrade(e.target.value)}>
+              <option value="">{tr("shared.all_trades")}</option>
+              {ws.trades.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <Button variant={favOnly ? "default" : "outline"} size="sm" onClick={() => setFavOnly(!favOnly)}><Star className="h-4 w-4" /> {tr("collections.favorites")}</Button>
+          </div>
+          {tags.length > 0 && (
+            <div className="mb-5 flex flex-wrap gap-1.5">
+              {tags.map((t) => <Chip key={t} small active={tag === t} onClick={() => setTag(tag === t ? null : t)}>#{t}</Chip>)}
+            </div>
+          )}
+        </>
       )}
 
       {list.length ? (
@@ -132,7 +136,7 @@ function CollectionsPage() {
         initial={dlg?.initial}
         extra={
           <div className="grid gap-1.5">
-            <Label>Bild {dlg?.initial?.["document_id"] ? "(ersetzen)" : "(optional)"}</Label>
+            <Label>{tr(dlg?.initial?.["document_id"] ? "collections.replace_image" : "collections.image_optional")}</Label>
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}><ImagePlus className="h-4 w-4" /> {tr("collections.choose_image")}</Button>

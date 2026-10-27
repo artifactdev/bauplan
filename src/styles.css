@@ -92,6 +92,11 @@
   --chart-3: #215caa;
   --chart-4: #b42355;
   --chart-5: #7046b8;
+  --finance-budget: #667085;
+  --finance-planned: #215caa;
+  --finance-committed: #0e6375;
+  --finance-expected: #7046b8;
+  --finance-paid: #166747;
   --sidebar: #eff1f7;
   --sidebar-foreground: #51596d;
   --sidebar-primary: var(--primary);
@@ -104,96 +109,65 @@
 }
 
 :root.dark {
-  --background: #13141f;
-  --foreground: #f0f1f7;
-  --card: #1e202e;
-  --card-foreground: #f0f1f7;
-  --popover: #282b3b;
-  --popover-foreground: #f0f1f7;
-  --primary: #67d6ed;
-  --primary-foreground: #10242e;
-  --secondary: #2a2d3f;
-  --secondary-foreground: #e4e7f2;
-  --muted: #2a2d3f;
-  --muted-foreground: #aeb6cc;
-  --accent: #193b4a;
-  --accent-foreground: #9ee8f5;
-  --destructive: #ffabb5;
-  --destructive-foreground: #3e111b;
-  --destructive-subtle: #41212d;
-  --success: #7ce2b1;
-  --success-foreground: #102d22;
-  --success-subtle: #173a30;
-  --warning: #f3cf83;
-  --warning-foreground: #f3cf83;
-  --warning-subtle: #3c3020;
-  --info: #a4c8ff;
-  --info-subtle: #223451;
-  --border: #343749;
-  --input: #7d859e;
-  --chart-1: #67d6ed;
-  --chart-2: #f3cf83;
-  --chart-3: #a4c8ff;
-  --chart-4: #ffabb5;
-  --chart-5: #cbb2ff;
-  --sidebar: #1b1d2a;
-  --sidebar-foreground: #b7bfd4;
-  --sidebar-accent: #2b3045;
-  --sidebar-accent-foreground: #f0f1f7;
-  --sidebar-border: #343749;
-  --shadow-card: none;
+  --background: #171a28;
+  --foreground: #eeeff7;
+  --card: #222638;
+  --card-foreground: #eeeff7;
+  --popover: #2b3043;
+  --popover-foreground: #eeeff7;
+  --primary: #9c9cff;
+  --primary-foreground: #20213d;
+  --secondary: #2a2f43;
+  --secondary-foreground: #e2e4f0;
+  --muted: #2a2f43;
+  --muted-foreground: #b0b5c9;
+  --accent: #353653;
+  --accent-foreground: #d3d3ff;
+  --destructive: #f0a2b3;
+  --destructive-foreground: #3b202d;
+  --destructive-subtle: #402b3a;
+  --success: #68d6b3;
+  --success-foreground: #12392f;
+  --success-subtle: #203b3a;
+  --warning: #edc47a;
+  --warning-foreground: #f2ce88;
+  --warning-subtle: #40372d;
+  --info: #a4c4ef;
+  --info-subtle: #2c374f;
+  --border: #383d55;
+  --input: #898fae;
+  --chart-1: #69d7bd;
+  --chart-2: #edc47a;
+  --chart-3: #a4c4ef;
+  --chart-4: #f0a2b3;
+  --chart-5: #b9a2f5;
+  --finance-budget: #aeb5c8;
+  --finance-planned: #a4c4ef;
+  --finance-committed: #69d7bd;
+  --finance-expected: #b9a2f5;
+  --finance-paid: #68d6b3;
+  --sidebar: #191c2b;
+  --sidebar-foreground: #c2c6d8;
+  --sidebar-accent: #30354a;
+  --sidebar-accent-foreground: #eeeff7;
+  --sidebar-border: #30354a;
+  --shadow-card: 0 6px 20px -10px #080a18cc, 0 1px 2px #080a1840;
 }
 
-:root[data-theme="blue"],
-:root[data-theme="green"],
-:root[data-theme="violet"] {
-  --primary: var(--theme-primary);
-  --primary-foreground: var(--theme-on-primary);
-  --accent: var(--theme-accent);
-  --accent-foreground: var(--theme-on-accent);
-  --ring: var(--theme-primary);
+:root[data-theme="custom"] {
+  --primary: var(--user-primary-light);
+  --primary-foreground: var(--user-on-primary-light);
+  --accent: color-mix(in srgb, var(--user-primary-light) 6%, var(--background));
+  --accent-foreground: var(--user-primary-light);
+  --ring: var(--user-primary-light);
 }
 
-:root[data-theme="blue"] {
-  --theme-primary: #295cc5;
-  --theme-on-primary: #ffffff;
-  --theme-accent: #dbeafe;
-  --theme-on-accent: #1e3a8a;
-}
-
-:root.dark[data-theme="blue"] {
-  --theme-primary: #93c5fd;
-  --theme-on-primary: #172554;
-  --theme-accent: #1e3a8a;
-  --theme-on-accent: #dbeafe;
-}
-
-:root[data-theme="green"] {
-  --theme-primary: #176b50;
-  --theme-on-primary: #ffffff;
-  --theme-accent: #e3f5eb;
-  --theme-on-accent: #164d3b;
-}
-
-:root.dark[data-theme="green"] {
-  --theme-primary: #7ce2b1;
-  --theme-on-primary: #102d22;
-  --theme-accent: #173a30;
-  --theme-on-accent: #acf0ce;
-}
-
-:root[data-theme="violet"] {
-  --theme-primary: #6d28d9;
-  --theme-on-primary: #ffffff;
-  --theme-accent: #ede9fe;
-  --theme-on-accent: #4c1d95;
-}
-
-:root.dark[data-theme="violet"] {
-  --theme-primary: #c4b5fd;
-  --theme-on-primary: #2e1065;
-  --theme-accent: #4c1d95;
-  --theme-on-accent: #ede9fe;
+:root.dark[data-theme="custom"] {
+  --primary: var(--user-primary-dark);
+  --primary-foreground: var(--user-on-primary-dark);
+  --accent: color-mix(in srgb, var(--user-primary-dark) 8%, var(--background));
+  --accent-foreground: var(--user-primary-dark);
+  --ring: var(--user-primary-dark);
 }
 
 @layer base {
@@ -221,6 +195,50 @@
   main :where(p, li, code, h1, h2, h3) {
     overflow-wrap: anywhere;
   }
+}
+
+.metric-card {
+  --metric-accent: var(--muted-foreground);
+  background-color: color-mix(in srgb, var(--metric-accent) 7%, var(--card));
+  border-color: color-mix(in srgb, var(--metric-accent) 24%, var(--border));
+  color: var(--card-foreground);
+}
+
+.metric-card-value {
+  color: var(--metric-accent);
+}
+
+.metric-card[data-tone="neutral"] .metric-card-value {
+  color: var(--foreground);
+}
+
+.metric-card[data-tone="primary"] {
+  --metric-accent: var(--primary);
+}
+
+.metric-card[data-tone="success"] {
+  --metric-accent: var(--success);
+}
+
+.metric-card[data-tone="warning"] {
+  --metric-accent: var(--warning);
+}
+
+.metric-card[data-tone="danger"] {
+  --metric-accent: var(--destructive);
+}
+
+.metric-card[data-tone="info"] {
+  --metric-accent: var(--info);
+}
+
+.metric-card-icon {
+  background-color: color-mix(in srgb, var(--metric-accent) 18%, var(--card));
+  color: var(--metric-accent);
+}
+
+.metric-card-active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--metric-accent) 42%, transparent);
 }
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {

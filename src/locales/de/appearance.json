@@ -1,11 +1,8 @@
 {
   "title": "Darstellung",
-  "palette": "Farbschema",
+  "primaryColor": "Primärfarbe",
+  "primaryColorHint": "Akzentfarben werden passend für Hell- und Dunkelmodus abgeleitet.",
   "mode": "Anzeigemodus",
-  "current": "Original",
-  "blue": "Blau",
-  "green": "Grün",
-  "violet": "Violett",
   "light": "Hell",
   "dark": "Dunkel",
   "system": "System",

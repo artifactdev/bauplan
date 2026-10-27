@@ -10,11 +10,18 @@ import { AppearancePanel } from "./AppearanceControls";
 
 vi.mock("@/lib/data.functions", () => ({ getAppearance: vi.fn(), saveAppearance: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+const BLUE = "#295cc5";
+const GREEN = "#176b50";
+const VIOLET = "#6d28d9";
 let dark = false;
 let mediaListeners = new Set<() => void>();
 
 function ResolvedMode() {
   return <output data-testid="resolved">{useAppearance().resolvedMode}</output>;
+}
+
+function chooseColor(color: string) {
+  fireEvent.change(screen.getByLabelText("Primary color"), { target: { value: color } });
 }
 
 function mount(userId = "alice") {
@@ -65,7 +72,7 @@ beforeEach(async () => {
     dispatchEvent: vi.fn(),
   }));
   await i18n.changeLanguage("en");
-  vi.mocked(getAppearance).mockResolvedValue({ palette: "blue", mode: "system" });
+  vi.mocked(getAppearance).mockResolvedValue({ primaryColor: BLUE, mode: "system" });
   vi.mocked(saveAppearance).mockImplementation(async (options) =>
     appearanceSchema.parse(options?.data),
   );
@@ -76,15 +83,15 @@ afterEach(() => {
 });
 
 describe("Appearance account controller and settings", () => {
-  it("loads the account before controls, overriding another browser appearance", async () => {
+  it("loads the account color before controls, overriding another browser appearance", async () => {
     localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify({ palette: "violet", mode: "dark" }));
     mount();
-    expect(screen.queryByRole("radio", { name: "Blue" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("radio", { name: "Blue" })).toBeChecked();
-    expect(document.documentElement.dataset["theme"]).toBe("blue");
+    expect(screen.queryByLabelText("Primary color")).not.toBeInTheDocument();
+    expect(await screen.findByText(BLUE.toUpperCase())).toBeInTheDocument();
+    expect(document.documentElement.dataset["theme"]).toBe("custom");
     expect(screen.getByTestId("resolved")).toHaveTextContent("light");
   });
-  it("preserves the independent choice, saves immediately and caches only success", async () => {
+  it("saves a custom color immediately and caches only successful responses", async () => {
     let complete!: (value: Appearance) => void;
     vi.mocked(saveAppearance).mockImplementationOnce(
       () =>
@@ -93,23 +100,25 @@ describe("Appearance account controller and settings", () => {
         }),
     );
     mount();
-    fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
+    await screen.findByLabelText("Primary color");
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
     expect(document.documentElement).toHaveClass("dark");
-    expect(screen.getByRole("radio", { name: "Green" })).toBeEnabled();
+    await waitFor(() =>
+      expect(saveAppearance).toHaveBeenCalledWith({ data: { primaryColor: BLUE, mode: "dark" } }),
+    );
+    chooseColor(GREEN);
     expect(JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY)!)).toEqual({
-      palette: "blue",
+      primaryColor: BLUE,
       mode: "system",
     });
-    await waitFor(() =>
-      expect(saveAppearance).toHaveBeenCalledWith({ data: { palette: "blue", mode: "dark" } }),
-    );
-    await act(async () => complete({ palette: "blue", mode: "dark" }));
+    await act(async () => complete({ primaryColor: BLUE, mode: "dark" }));
     await waitFor(() =>
       expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
     );
-    fireEvent.click(screen.getByRole("radio", { name: "Green" }));
     await waitFor(() =>
-      expect(saveAppearance).toHaveBeenLastCalledWith({ data: { palette: "green", mode: "dark" } }),
+      expect(saveAppearance).toHaveBeenLastCalledWith({
+        data: { primaryColor: GREEN, mode: "dark" },
+      }),
     );
   });
   it("reacts to OS changes only in System and cleans up listeners", async () => {
@@ -139,27 +148,28 @@ describe("Appearance account controller and settings", () => {
     vi.mocked(saveAppearance).mockRejectedValue(new Error("offline"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     mount();
-    fireEvent.click(await screen.findByRole("radio", { name: "Violet" }));
+    await screen.findByLabelText("Primary color");
+    chooseColor(VIOLET);
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("could not be saved")),
     );
-    expect(screen.getByRole("radio", { name: "Blue" })).toBeChecked();
-    expect(document.documentElement.dataset["theme"]).toBe("blue");
+    expect(screen.getByText(BLUE.toUpperCase())).toBeInTheDocument();
+    expect(document.documentElement.dataset["theme"]).toBe("custom");
   });
   it("offers retry instead of displaying an unsynchronized workspace", async () => {
     vi.mocked(getAppearance).mockRejectedValueOnce(new Error("offline"));
     mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be loaded");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByRole("radio", { name: "Blue" })).toBeChecked();
+    expect(await screen.findByText(BLUE.toUpperCase())).toBeInTheDocument();
   });
   it("refreshes on focus without overriding a save in flight", async () => {
     let complete!: (value: Appearance) => void;
     mount();
-    await screen.findByRole("radio", { name: "Blue" });
-    vi.mocked(getAppearance).mockResolvedValue({ palette: "green", mode: "light" });
+    await screen.findByText(BLUE.toUpperCase());
+    vi.mocked(getAppearance).mockResolvedValue({ primaryColor: GREEN, mode: "light" });
     fireEvent.focus(window);
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Green" })).toBeChecked());
+    expect(await screen.findByText(GREEN.toUpperCase())).toBeInTheDocument();
     vi.mocked(saveAppearance).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -171,15 +181,14 @@ describe("Appearance account controller and settings", () => {
     const calls = vi.mocked(getAppearance).mock.calls.length;
     fireEvent.focus(window);
     expect(getAppearance).toHaveBeenCalledTimes(calls);
-    await act(async () => complete({ palette: "green", mode: "dark" }));
+    await act(async () => complete({ primaryColor: GREEN, mode: "dark" }));
     expect(document.documentElement).toHaveClass("dark");
   });
   it("does not apply a previous account's late save after switching or signing out", async () => {
     let complete!: (value: Appearance) => void;
     const app = mount();
     fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
-    vi.mocked(getAppearance).mockResolvedValue({ palette: "violet", mode: "light" });
-    // Begin a separate delayed write after the first save finishes.
+    vi.mocked(getAppearance).mockResolvedValue({ primaryColor: VIOLET, mode: "light" });
     await waitFor(() =>
       expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
     );
@@ -189,16 +198,17 @@ describe("Appearance account controller and settings", () => {
           complete = resolve;
         }),
     );
-    fireEvent.click(screen.getByRole("radio", { name: "Green" }));
+    chooseColor(GREEN);
     await waitFor(() => expect(saveAppearance).toHaveBeenCalledTimes(2));
     app.switchAccount("bob");
-    expect(await screen.findByRole("radio", { name: "Violet" })).toBeChecked();
-    await act(async () => complete({ palette: "green", mode: "dark" }));
-    expect(document.documentElement.dataset["theme"]).toBe("violet");
+    expect(await screen.findByText(VIOLET.toUpperCase())).toBeInTheDocument();
+    await act(async () => complete({ primaryColor: GREEN, mode: "dark" }));
+    expect(document.documentElement.dataset["theme"]).toBe("custom");
+    expect(document.documentElement).not.toHaveClass("dark");
     app.switchAccount(null);
     expect(app.client.getQueryCache().findAll({ queryKey: ["appearance"] })).toHaveLength(0);
     expect(JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY)!)).toEqual({
-      palette: "violet",
+      primaryColor: VIOLET,
       mode: "light",
     });
   });
@@ -213,11 +223,11 @@ describe("Appearance account controller and settings", () => {
     mount();
     fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
     await waitFor(() =>
-      expect(saveAppearance).toHaveBeenCalledWith({ data: { palette: "blue", mode: "dark" } }),
+      expect(saveAppearance).toHaveBeenCalledWith({ data: { primaryColor: BLUE, mode: "dark" } }),
     );
     expect(warning).toHaveBeenCalled();
   });
-  it("keeps radio focus and coalesces rapid keyboard choices without parallel writes", async () => {
+  it("coalesces rapid color and mode changes without parallel writes", async () => {
     let complete!: (value: Appearance) => void;
     vi.mocked(saveAppearance).mockImplementationOnce(
       () =>
@@ -226,24 +236,25 @@ describe("Appearance account controller and settings", () => {
         }),
     );
     mount();
-    const green = await screen.findByRole("radio", { name: "Green" });
-    green.focus();
-    fireEvent.click(green);
+    const input = await screen.findByLabelText("Primary color");
+    input.focus();
+    chooseColor(GREEN);
     await waitFor(() => expect(saveAppearance).toHaveBeenCalledTimes(1));
-    expect(green).toHaveFocus();
-    expect(green).toBeEnabled();
+    expect(input).toHaveFocus();
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Violet" }));
+    chooseColor(VIOLET);
     expect(saveAppearance).toHaveBeenCalledTimes(1);
-    expect(document.documentElement.dataset["theme"]).toBe("violet");
-    await act(async () => complete({ palette: "green", mode: "system" }));
+    expect(document.documentElement.dataset["theme"]).toBe("custom");
+    await act(async () => complete({ primaryColor: GREEN, mode: "system" }));
     await waitFor(() =>
       expect(screen.getByRole("status", { name: "Appearance" })).toBeEmptyDOMElement(),
     );
     expect(saveAppearance).toHaveBeenCalledTimes(2);
-    expect(saveAppearance).toHaveBeenLastCalledWith({ data: { palette: "violet", mode: "dark" } });
+    expect(saveAppearance).toHaveBeenLastCalledWith({
+      data: { primaryColor: VIOLET, mode: "dark" },
+    });
     expect(JSON.parse(localStorage.getItem(APPEARANCE_CACHE_KEY)!)).toEqual({
-      palette: "violet",
+      primaryColor: VIOLET,
       mode: "dark",
     });
   });
@@ -259,12 +270,13 @@ describe("Appearance account controller and settings", () => {
       )
       .mockRejectedValueOnce(new Error("offline"));
     mount();
-    fireEvent.click(await screen.findByRole("radio", { name: "Green" }));
+    await screen.findByLabelText("Primary color");
+    chooseColor(GREEN);
     await waitFor(() => expect(saveAppearance).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
-    await act(async () => complete({ palette: "green", mode: "system" }));
+    await act(async () => complete({ primaryColor: GREEN, mode: "system" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(screen.getByRole("radio", { name: "Green" })).toBeChecked();
+    expect(screen.getByText(GREEN.toUpperCase())).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "System" })).toBeChecked();
   });
 });

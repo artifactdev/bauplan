@@ -6,7 +6,7 @@ import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { eur, fmtDate, todayISO } from "@/lib/format";
 import { costItemOptions, docOptions, potName, potOptions, tradeName, tradeOptions } from "@/lib/options";
 import { EXPENSE_CATEGORIES, type ExpenseStatus } from "@/lib/schema";
-import { Empty, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
+import { Empty, MetricCard, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { EntityDialog } from "@/components/app/EntityDialog";
 import { QuickUpload } from "@/components/app/quick-actions";
 import { resolveFileUrl } from "@/components/app/doc-open";
@@ -78,9 +78,9 @@ function ExpensesPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label={tr("shared.total")} value={eur(total, true)} />
+        <Stat label={tr("shared.total")} value={eur(total, true)} tone="neutral" />
         {(Object.keys(EXPENSE_STATUS) as ExpenseStatus[]).map((st) => (
-          <Stat key={st} label={EXPENSE_STATUS[st].label} value={eur(sumBy(st), true)} active={status === st} onClick={() => setStatus(status === st ? "all" : st)} />
+          <Stat key={st} label={EXPENSE_STATUS[st].label} value={eur(sumBy(st), true)} tone={EXPENSE_STATUS[st].tone} active={status === st} onClick={() => setStatus(status === st ? "all" : st)} />
         ))}
       </div>
 
@@ -121,7 +121,7 @@ function ExpensesPage() {
       </div>
 
       <Panel>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow><TableHead>{tr("shared.date")}</TableHead><TableHead>{tr("shared.description")}</TableHead><TableHead>{tr("expenses.shop")}</TableHead><TableHead>{tr("shared.category")}</TableHead><TableHead>{tr("shared.trade")}</TableHead><TableHead>{tr("shared.paid_2")}</TableHead><TableHead className="text-right">{tr("shared.amount")}</TableHead><TableHead>{tr("shared.status")}</TableHead><TableHead>{tr("shared.receipt")}</TableHead><TableHead /></TableRow>
@@ -162,8 +162,39 @@ function ExpensesPage() {
               </TableFooter>
             )}
           </Table>
-          {!list.length && <Empty>{ws.expenses.length ? tr("shared.no_results") : tr("expenses.no_expenses_yet_upload")}</Empty>}
         </div>
+        <div className="grid gap-3 md:hidden">
+          {list.map((e) => (
+            <article key={e.id} className="rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="break-words font-medium">{e.title}</h3>
+                  {e.vendor && <p className="mt-0.5 text-sm text-muted-foreground">{e.vendor}</p>}
+                </div>
+                <span className="shrink-0 text-right font-semibold tabular">{eur(e.amount, true)}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <span>{fmtDate(e.expense_date)}</span>
+                {e.category && <span>· {tr(e.category)}</span>}
+                {tradeName(ws, e.trade_id) && <span>· {tradeName(ws, e.trade_id)}</span>}
+                {potName(ws, e.budget_pot_id) && <span>· {potName(ws, e.budget_pot_id)}</span>}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                <Select value={e.status} onValueChange={(v) => update.mutate({ table: "expenses", id: e.id, patch: { status: v } })}>
+                  <SelectTrigger className="h-8 w-40 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>{STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                </Select>
+                <div className="flex">
+                  {e.document_id && <Button size="icon" variant="ghost" aria-label={tr("expenses.open")} onClick={() => openDoc(e.document_id)}><FileText className="h-4 w-4" /></Button>}
+                  <Button size="icon" variant="ghost" aria-label={tr("shared.edit")} onClick={() => setDlg({ id: e.id, initial: { ...e } })}><Pencil className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("expenses.delete_expense_receipt_stays")) && remove.mutate({ table: "expenses", id: e.id })}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        {!list.length && <Empty>{ws.expenses.length ? tr("shared.no_results") : tr("expenses.no_expenses_yet_upload")}</Empty>}
+        {list.length > 0 && <div className="mt-3 flex justify-end border-t pt-3 text-sm font-medium tabular md:hidden">{tr("expenses.sum")}: {eur(listTotal, true)}</div>}
       </Panel>
 
       <QuickUpload open={uploadOpen} onOpenChange={setUploadOpen} initial={{ category: "Beleg", recognize: true }} />
@@ -193,11 +224,6 @@ function ExpensesPage() {
   );
 }
 
-function Stat({ label, value, active, onClick }: { label: string; value: string; active?: boolean; onClick?: () => void }) {
-  return (
-    <button type="button" onClick={onClick} disabled={!onClick} className={`rounded-xl border bg-card p-4 text-left shadow-card transition-colors ${active ? "border-primary ring-1 ring-primary" : ""} ${onClick ? "hover:border-primary/50" : ""}`}>
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 font-display text-xl font-semibold tabular">{value}</div>
-    </button>
-  );
+function Stat({ label, value, tone, active, onClick }: { label: string; value: string; tone: "neutral" | "warning" | "success" | "info" | "primary"; active?: boolean; onClick?: () => void }) {
+  return <MetricCard label={label} value={value} tone={tone} active={active} onClick={onClick} />;
 }

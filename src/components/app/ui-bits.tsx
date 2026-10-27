@@ -2,7 +2,15 @@ import { tr } from "@/i18n";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string | undefined; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string;
+  subtitle?: string | undefined;
+  actions?: ReactNode;
+}) {
   return (
     <div className="mb-7 flex min-w-0 flex-wrap items-center justify-between gap-4">
       <div>
@@ -14,7 +22,17 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-export function Panel({ title, action, children, className }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Panel({
+  title,
+  action,
+  children,
+  className,
+}: {
+  title?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <section className={cn("min-w-0 rounded-xl bg-card p-5 shadow-card md:p-6", className)}>
       {(title || action) && (
@@ -28,6 +46,63 @@ export function Panel({ title, action, children, className }: { title?: string; 
   );
 }
 
+type MetricTone = "neutral" | "primary" | "success" | "warning" | "danger" | "info";
+
+export function MetricCard({
+  label,
+  value,
+  hint,
+  tone = "neutral",
+  icon,
+  onClick,
+  active = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string | undefined;
+  tone?: MetricTone;
+  icon?: ReactNode;
+  onClick?: (() => void) | undefined;
+  active?: boolean | undefined;
+}) {
+  const className = cn(
+    "metric-card min-w-0 rounded-xl border p-4 shadow-card md:p-5",
+    onClick && "cursor-pointer text-left hover:brightness-105",
+    active && "metric-card-active",
+  );
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 text-sm font-medium text-muted-foreground">{label}</div>
+        {icon && (
+          <span aria-hidden="true" className="metric-card-icon shrink-0 rounded-lg p-2">
+            {icon}
+          </span>
+        )}
+      </div>
+      <div className="metric-card-value mt-3 break-words font-display text-2xl font-semibold tracking-tight tabular md:text-3xl">
+        {value}
+      </div>
+      {hint && <div className="mt-2 text-sm text-muted-foreground">{hint}</div>}
+    </>
+  );
+  return onClick ? (
+    <button
+      type="button"
+      className={className}
+      data-tone={tone}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={className} data-tone={tone}>
+      {content}
+    </div>
+  );
+}
+
 const tones = {
   neutral: "bg-muted text-muted-foreground",
   success: "bg-success-subtle text-success",
@@ -37,22 +112,61 @@ const tones = {
   primary: "bg-accent text-accent-foreground",
 };
 
-export function Pill({ tone = "neutral", children }: { tone?: keyof typeof tones | undefined; children: ReactNode }) {
-  return <span className={cn("inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium", tones[tone])}>{children}</span>;
+export function Pill({
+  tone = "neutral",
+  children,
+}: {
+  tone?: keyof typeof tones | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
+        tones[tone],
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
-export function Bar({ value, max, tone = "primary" }: { value: number; max: number; tone?: "primary" | "danger" | "warning" }) {
+export function Bar({
+  value,
+  max,
+  tone = "primary",
+  color,
+}: {
+  value: number;
+  max: number;
+  tone?: "primary" | "danger" | "warning";
+  color?: "budget" | "planned" | "committed" | "expected" | "paid";
+}) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
-  const color = tone === "danger" ? "bg-destructive" : tone === "warning" ? "bg-warning" : "bg-primary";
+  const fillClass =
+    tone === "danger" ? "bg-destructive" : tone === "warning" ? "bg-warning" : "bg-primary";
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-      <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${pct}%` }} />
+      <div
+        className={cn(
+          "h-full rounded-full transition-all",
+          color && tone === "primary" ? "" : fillClass,
+        )}
+        style={{
+          width: `${pct}%`,
+          ...(color && tone === "primary" ? { backgroundColor: `var(--finance-${color})` } : {}),
+        }}
+      />
     </div>
   );
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{children}</p>;
+  return (
+    <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+      {children}
+    </p>
+  );
 }
 
 export const OFFER_STATUS: Record<string, { label: string; tone: keyof typeof tones }> = {

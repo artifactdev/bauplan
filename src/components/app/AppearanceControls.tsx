@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { MODES, PALETTES, appearanceSchema } from "@/lib/appearance";
+import { MODES, appearanceSchema } from "@/lib/appearance";
 import { useAppearance } from "./AppearanceProvider";
 import { Panel } from "./ui-bits";
 import { Button } from "@/components/ui/button";
@@ -13,56 +13,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const MODE_ICONS = { light: Sun, dark: Moon, system: Monitor };
-const SWATCHES = { current: "#0e6375", blue: "#295cc5", green: "#176b50", violet: "#6d28d9" };
-
 export function AppearancePanel() {
   const { t } = useTranslation("appearance");
   const { appearance, saving, setAppearance } = useAppearance();
   return (
     <Panel title={t("title")}>
-      <fieldset className="space-y-5" aria-describedby="appearance-account-hint">
+      <fieldset className="flex flex-col gap-5" aria-describedby="appearance-account-hint">
         <legend className="sr-only">{t("title")}</legend>
         <fieldset>
-          <legend className="mb-2 text-sm font-medium">{t("palette")}</legend>
-          <div className="grid grid-cols-2 gap-2">
-            {PALETTES.map((palette) => (
-              <label
-                key={palette}
-                className="theme-choice min-w-0 cursor-pointer rounded-xl border border-input p-3 text-sm has-[:checked]:ring-2 has-[:checked]:ring-ring has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-ring"
-              >
-                <span
-                  aria-hidden="true"
-                  className="mb-3 flex h-16 overflow-hidden rounded-md border border-border bg-background"
-                >
-                  <span className="w-1/4 bg-sidebar p-1.5">
-                    <span
-                      className="mb-1 block h-1 rounded"
-                      style={{ backgroundColor: SWATCHES[palette] }}
-                    />
-                    <span className="block h-1 rounded bg-input" />
-                  </span>
-                  <span className="grid flex-1 grid-cols-2 gap-1.5 p-2">
-                    <span className="rounded bg-card" />
-                    <span className="rounded bg-card" />
-                    <span
-                      className="col-span-2 rounded opacity-70"
-                      style={{ backgroundColor: SWATCHES[palette] }}
-                    />
-                  </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="appearance-palette"
-                    value={palette}
-                    checked={appearance.palette === palette}
-                    onChange={() => setAppearance({ ...appearance, palette })}
-                    className="accent-primary"
-                  />
-                  {t(palette)}
-                </span>
-              </label>
-            ))}
+          <legend className="mb-2 text-sm font-medium">{t("primaryColor")}</legend>
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
+            <label
+              className="flex size-12 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-input focus-within:ring-2 focus-within:ring-ring"
+              style={{ backgroundColor: appearance.primaryColor }}
+            >
+              <input
+                type="color"
+                aria-label={t("primaryColor")}
+                value={appearance.primaryColor}
+                onChange={(event) =>
+                  setAppearance({ ...appearance, primaryColor: event.currentTarget.value })
+                }
+                className="size-14 cursor-pointer opacity-0"
+              />
+            </label>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">{appearance.primaryColor.toUpperCase()}</div>
+              <p className="text-sm text-muted-foreground">{t("primaryColorHint")}</p>
+            </div>
+            <div className="flex gap-1.5" aria-hidden="true">
+              <span className="size-5 rounded" style={{ backgroundColor: "var(--primary)" }} />
+              <span className="size-5 rounded" style={{ backgroundColor: "var(--accent)" }} />
+            </div>
           </div>
         </fieldset>
         <fieldset>

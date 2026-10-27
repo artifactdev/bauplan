@@ -10,10 +10,16 @@ import { Button } from "@/components/ui/button";
 import { DocumentScanner } from "./DocumentScanner";
 
 const CATEGORY: Record<ScanTarget, string> = {
-  offer: "Angebot", invoice: "Rechnung", expense: "Beleg", task: "Sonstiges", event: "Sonstiges", cost: "Angebot", trade: "Sonstiges",
+  offer: "Angebot",
+  invoice: "Rechnung",
+  expense: "Beleg",
+  task: "Sonstiges",
+  event: "Sonstiges",
+  cost: "Angebot",
+  trade: "Sonstiges",
 };
 
-/** Photo/upload step at the top of a create form: stores the file, reads it, pre-fills the form. */
+/** Stores a document, reads it, and pre-fills a create or edit form. */
 export function ScanBar({
   target,
   onFill,
@@ -24,7 +30,7 @@ export function ScanBar({
   onFill: (v: Record<string, unknown>) => void;
   /** Called as soon as the file is stored, so the form can offer to delete it on cancel. */
   onUploaded?: (doc: { id: string; name: string }) => void;
-  /** True while a file is being stored (not during recognition). */
+  /** True while a file is being stored or recognized. */
   onBusyChange?: (uploading: boolean) => void;
 }) {
   const { ws } = useWorkspace();
@@ -43,41 +49,97 @@ export function ScanBar({
       ({ id } = await upload.mutateAsync({ file, meta: { category: CATEGORY[target] } }));
       // Registered before busy ends, so a pending "close?" question sees the stored file.
       onUploaded?.({ id, name: file.name });
+      if (LINKS_DOCUMENT[target]) onFill({ document_id: id });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : tr("scan_bar.upload_failed"));
       setState({ busy: false });
-      return;
-    } finally {
       onBusyChange?.(false);
+      return;
     }
     try {
       const canRead = file.type === "application/pdf" || file.type.startsWith("image/");
-      const r = canRead ? await analyzeDocument({ data: { documentId: id } }) : { result: null, error: "unsupported", warnings: [] };
+      const r = canRead
+        ? await analyzeDocument({ data: { documentId: id } })
+        : { result: null, error: "unsupported", warnings: [] };
       logOcrResult(file.name, r);
       const vals = mapExtraction(target, r.result, file.name, ws.trades);
       onFill(LINKS_DOCUMENT[target] ? { ...vals, document_id: id } : vals);
       if (r.error) toast.info(tr("scan_bar.file_saved_error_fill", { error: ocrText(r.error) }));
       for (const warning of r.warnings) toast.warning(ocrText(warning));
     } catch {
-      toast.info(tr("scan_bar.file_saved_error_fill", { error: tr("assign_dialog.document_not_read") }));
+      toast.info(
+        tr("scan_bar.file_saved_error_fill", { error: tr("assign_dialog.document_not_read") }),
+      );
     }
     setState({ busy: false, done: file.name });
+    onBusyChange?.(false);
   }
 
   return (
     <div className="rounded-lg border border-dashed bg-muted/40 p-3">
-      <input ref={cam} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { handle(e.target.files?.[0]); e.target.value = ""; }} />
-      <input ref={pick} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => { handle(e.target.files?.[0]); e.target.value = ""; }} />
+      <input
+        ref={cam}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          handle(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={pick}
+        type="file"
+        accept="application/pdf,image/*"
+        className="hidden"
+        onChange={(e) => {
+          handle(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" disabled={state.busy} onClick={() => setScanOpen(true)}><ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}</Button>
-        <Button type="button" size="sm" variant="outline" disabled={state.busy} onClick={() => cam.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
-        <Button type="button" size="sm" variant="outline" disabled={state.busy} onClick={() => pick.current?.click()}><Upload className="h-4 w-4" /> {tr("scan_bar.upload_file")}</Button>
-        {state.busy && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {tr("scan_bar.reading")}</span>}
-        {state.done && !state.busy && <span className="flex items-center gap-1 text-xs text-muted-foreground"><CheckCircle2 className="h-3 w-3 text-success" /> {state.done}</span>}
+        <Button type="button" size="sm" disabled={state.busy} onClick={() => setScanOpen(true)}>
+          <ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={state.busy}
+          onClick={() => cam.current?.click()}
+        >
+          <Camera className="h-4 w-4" /> {tr("shared.take_photo")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={state.busy}
+          onClick={() => pick.current?.click()}
+        >
+          <Upload className="h-4 w-4" /> {tr("scan_bar.upload_file")}
+        </Button>
+        {state.busy && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" /> {tr("scan_bar.reading")}
+          </span>
+        )}
+        {state.done && !state.busy && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <CheckCircle2 className="h-3 w-3 text-success" /> {state.done}
+          </span>
+        )}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{tr("scan_bar.optional_photograph_upload_receipt")}</p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {tr("scan_bar.optional_photograph_upload_receipt")}
+      </p>
       {/* The scanner hands over the PDF before closing; uploading continues in the background. */}
-      <DocumentScanner open={scanOpen} onOpenChange={setScanOpen} onComplete={(file) => void handle(file)} />
+      <DocumentScanner
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        onComplete={(file) => void handle(file)}
+      />
     </div>
   );
 }

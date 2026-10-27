@@ -27,6 +27,7 @@ export const TABLES = {
     "title",
     "amount",
     "offer_date",
+    "valid_until",
     "status",
     "notes",
   ],
@@ -58,6 +59,7 @@ export const TABLES = {
   ],
   tasks: [
     "title",
+    "assignee_id",
     "trade_id",
     "phase",
     "priority",
@@ -179,6 +181,7 @@ export type Offer = Base & {
   title: string | null;
   amount: number;
   offer_date: string | null;
+  valid_until?: string | null;
   status: OfferStatus;
   notes: string | null;
 };
@@ -210,6 +213,7 @@ export type Doc = Base & {
 };
 export type Task = Base & {
   title: string;
+  assignee_id: string | null;
   trade_id: string | null;
   phase: string | null;
   priority: "niedrig" | "mittel" | "hoch";

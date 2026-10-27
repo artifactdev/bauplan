@@ -1,11 +1,8 @@
 {
   "title": "Appearance",
-  "palette": "Color theme",
+  "primaryColor": "Primary color",
+  "primaryColorHint": "Matching accents are derived for light and dark mode.",
   "mode": "Display mode",
-  "current": "Current",
-  "blue": "Blue",
-  "green": "Green",
-  "violet": "Violet",
   "light": "Light",
   "dark": "Dark",
   "system": "System",

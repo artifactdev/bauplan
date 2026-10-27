@@ -29,6 +29,7 @@ export type Extraction = {
   amount: number | null;
   date: string | null;
   due_date: string | null;
+  valid_until: string | null;
   trade: string | null;
   expense_category: string | null;
   summary: string | null;
@@ -385,7 +386,7 @@ export function findDates(text: string): string[] {
 
 const DATE_LABEL = /(rechnungs|beleg|angebots|bestell|kauf)?datum\b|\bdate\b/i;
 const NOT_DOC_DATE =
-  /(liefer|leistung|geburt|f[äa]llig|zahlbar|g[üu]ltig|\bbis\b|offen|valuta|seit\b|auftrag erteilt)/i;
+  /(liefer|leistung|geburt|f[äa]llig|zahlbar|g[üu]ltig|bindefrist|annahmefrist|\bbis\b|offen|valuta|seit\b|auftrag erteilt)/i;
 
 /** Document date: a labelled date ("Rechnungsdatum", "Datum") first, else the first unrelated date. */
 export function findDocDate(text: string, due: string | null = null): string | null {
@@ -408,6 +409,29 @@ function addDays(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** Offer validity is separate from an invoice's payment deadline. */
+export function findOfferValidity(text: string, docDate: string | null = null): string | null {
+  const lines = text.split(/\r?\n/);
+  const label = /g[üu]ltig(?:keit)?|bindefrist|annahmefrist|valid\s+until/i;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const match = label.exec(line);
+    if (!match) continue;
+    const value = line.slice(match.index);
+    const date = findDates(value)[0] ?? findDates(lines[i + 1] ?? "")[0];
+    if (date) {
+      const parsed = new Date(`${date}T00:00:00Z`);
+      if (parsed.toISOString().slice(0, 10) === date) return date;
+    }
+    const relative = value.match(/(?:g[üu]ltig(?:keit)?)[^\d\n]{0,30}(\d{1,3})\s*(tage?|wochen?)/i);
+    if (relative && docDate) {
+      const days = Number(relative[1]) * (/woche/i.test(relative[2]!) ? 7 : 1);
+      if (days > 0 && days <= 365) return addDays(docDate, days);
+    }
+  }
+  return null;
 }
 
 /** Due date: explicit ("zahlbar bis 16.04.") or relative to the document date ("zahlbar innerhalb 14 Tagen"). */
@@ -764,7 +788,7 @@ export function extractFromText(text: string, context: ExtractContext | string[]
     invoice?.issueDate ??
     tse?.date ??
     (doc_type === "kassenzettel" ? parseTseText(text) : null) ??
-    findDocDate(text, findDueDate(text));
+    findDocDate(text, findOfferValidity(text) ?? findDueDate(text));
   const due = explicitDue ?? findDueDate(text, date);
   const category = detectCategory(`${vendor ?? ""}\n${text}`);
   const title = vendor ? `${LABEL[doc_type]} ${vendor}` : LABEL[doc_type];
@@ -776,6 +800,7 @@ export function extractFromText(text: string, context: ExtractContext | string[]
     amount,
     date,
     due_date: due,
+    valid_until: doc_type === "angebot" ? findOfferValidity(text, date) : null,
     trade: findTrade(text, ctx.trades ?? []) ?? contact?.trade ?? null,
     expense_category: doc_type === "kassenzettel" || doc_type === "rechnung" ? category : null,
     summary: null,

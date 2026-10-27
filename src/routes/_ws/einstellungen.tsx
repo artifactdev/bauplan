@@ -405,13 +405,13 @@ function PaymentSourcesPanel() {
       <p className="mb-3 text-xs text-muted-foreground">{tr("settings.selectable_expenses_invoices_only")}</p>
       <ul className="grid gap-2">
         {ws.budget_pots.map((p) => (
-          <li key={p.id} className="flex items-center gap-3 rounded-lg border p-2">
-            <span className="flex-1 font-medium">{p.name}</span>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border p-3 sm:flex">
+            <span className="col-span-2 min-w-0 break-words font-medium sm:flex-1">{p.name}</span>
+            <label className="col-span-2 flex items-center justify-between gap-3 text-xs text-muted-foreground sm:col-span-1 sm:justify-end">
               {tr("settings.deduct_total_budget")}
               <Switch checked={p.deducts_from_budget} onCheckedChange={(c) => update.mutate({ table: "budget_pots", id: p.id, patch: { deducts_from_budget: c } })} />
             </label>
-            <Button size="icon" variant="ghost" aria-label={tr("shared.delete")} onClick={() => confirm(tr("settings.delete_payment_source")) && remove.mutate({ table: "budget_pots", id: p.id })}><Trash2 className="h-4 w-4" /></Button>
+            <Button size="icon" variant="ghost" className="col-start-2 row-start-2 sm:order-last" aria-label={tr("shared.delete")} onClick={() => confirm(tr("settings.delete_payment_source")) && remove.mutate({ table: "budget_pots", id: p.id })}><Trash2 className="h-4 w-4" /></Button>
           </li>
         ))}
       </ul>
