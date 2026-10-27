@@ -36,6 +36,14 @@ if (!i18n.isInitialized) {
     interpolation: { escapeValue: false },
     returnNull: false,
   });
+} else {
+  // The i18next singleton survives dev-server module reloads; refresh its resources so SSR and client agree.
+  for (const [lang, namespaces] of Object.entries(resources)) {
+    for (const [ns, data] of Object.entries(namespaces)) {
+      i18n.removeResourceBundle(lang, ns);
+      i18n.addResourceBundle(lang, ns, data);
+    }
+  }
 }
 
 /**
