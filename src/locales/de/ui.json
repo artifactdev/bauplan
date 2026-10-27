@@ -1,4 +1,5 @@
 {
+  "offline.saved_for_sync": "Lokal gespeichert. Die Änderung wird automatisch synchronisiert, sobald du wieder online bist.",
   "pdf.loading": "PDF wird geladen…",
   "pdf.failed": "PDF nicht verfügbar",
   "pdf.pages_one": "{{count}} Seite",

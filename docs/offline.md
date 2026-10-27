@@ -14,6 +14,8 @@ Shared files are temporarily held in a separate, browser-profile-local Cache Sto
 
 ## Before going offline
 
+Offline creates, edits, deletions, and uploads complete after being saved to the local queue. Save dialogs close normally and a success toast explains that the change will synchronize automatically when the connection returns. If local persistence fails, saving fails visibly instead; the form remains open and no queued-success message is shown.
+
 1. Open Bauplan while online and sign in on the browser profile and device you will use offline.
 2. Allow the service worker to finish installing, then open the project once so its workspace snapshot is saved.
 3. Reopen the app online after updates so the latest static app shell is installed.

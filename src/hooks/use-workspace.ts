@@ -69,13 +69,20 @@ export function useMutations() {
   const qc = useQueryClient();
   const userId = getOfflineAccount()?.id;
   const key = ["ws", userId];
-  const done = () => {
+  const done = (result: unknown) => {
     signalOfflineQueueChange();
+    const queued =
+      typeof result === "object" && result !== null && "queued" in result && result.queued === true;
+    if (queued) {
+      toast.success(tr("offline.saved_for_sync"));
+      return qc.invalidateQueries({ queryKey: ["ws"], refetchType: "none" });
+    }
     return qc.invalidateQueries({ queryKey: ["ws"] });
   };
   const onError = (e: Error) => toast.error(tr(e.message));
 
   const create = useMutation({
+    networkMode: "always",
     mutationFn: async (v: { table: TableName; row: Record<string, unknown> }) => {
       if (navigator.onLine) return createRow({ data: v });
       const account = requireAccount(userId);
@@ -100,13 +107,14 @@ export function useMutations() {
       const next = applyChange(current, change);
       await persistChange(account.id, next, change);
       qc.setQueryData(key, next);
-      return { id: rowId };
+      return { id: rowId, queued: true };
     },
     onSuccess: done,
     onError,
   });
 
   const update = useMutation({
+    networkMode: "always",
     mutationFn: async (v: { table: TableName; id: string; patch: Record<string, unknown> }) => {
       if (navigator.onLine) return updateRow({ data: v });
       const account = requireAccount(userId);
@@ -127,13 +135,14 @@ export function useMutations() {
       const next = applyChange(current, change);
       await persistChange(account.id, next, change);
       qc.setQueryData(key, next);
-      return { ok: true };
+      return { ok: true, queued: true };
     },
     onSuccess: done,
     onError,
   });
 
   const remove = useMutation({
+    networkMode: "always",
     mutationFn: async (v: { table: TableName; id: string }) => {
       if (navigator.onLine) return deleteRow({ data: v });
       const account = requireAccount(userId);
@@ -153,13 +162,14 @@ export function useMutations() {
       const next = applyChange(current, change);
       await persistChange(account.id, next, change);
       qc.setQueryData(key, next);
-      return { ok: true };
+      return { ok: true, queued: true };
     },
     onSuccess: done,
     onError,
   });
 
   const upload = useMutation({
+    networkMode: "always",
     mutationFn: async (v: { file: File; meta: Record<string, unknown> }) => {
       if (v.file.size > MAX_UPLOAD_BYTES)
         throw new Error(tr("offline.file_too_large", { max: MAX_UPLOAD_MB }));
@@ -205,7 +215,7 @@ export function useMutations() {
         syncGeneration: account.syncGeneration,
       });
       qc.setQueryData(key, next);
-      return { id };
+      return { id, queued: true };
     },
     onSuccess: done,
     onError,
