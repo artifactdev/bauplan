@@ -410,10 +410,9 @@ function Shell() {
 
       <nav
         aria-label={t("navigation")}
-        className="fixed inset-x-3 z-30 grid rounded-xl border bg-card/60 shadow-card backdrop-blur-xl md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid gap-1 border-t bg-card/60 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 shadow-card backdrop-blur-xl md:hidden"
         style={{
           gridTemplateColumns: `repeat(${primaryNav.length + 1}, minmax(0, 1fr))`,
-          bottom: "max(0.75rem, env(safe-area-inset-bottom))",
         }}
       >
         {primaryNav.map((n) => (
@@ -421,8 +420,8 @@ function Shell() {
             key={n.to}
             to={n.to}
             activeOptions={{ exact: n.to === "/" }}
-            className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-0.5 py-2 text-xs text-muted-foreground"
-            activeProps={{ className: "bg-accent text-accent-foreground font-semibold" }}
+            className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-xs text-muted-foreground transition-colors"
+            activeProps={{ className: "bg-primary/10 text-primary font-semibold" }}
           >
             <n.icon className="h-5 w-5" /> {n.label}
           </Link>
@@ -431,8 +430,8 @@ function Shell() {
           <DropdownMenuTrigger asChild>
             <button
               className={cn(
-                "flex min-h-16 flex-col items-center justify-center gap-1 py-2 text-xs text-muted-foreground",
-                moreActive && "font-medium text-primary",
+                "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-xs text-muted-foreground transition-colors",
+                moreActive && "bg-primary/10 font-semibold text-primary",
               )}
             >
               <MoreHorizontal className="h-5 w-5" />
