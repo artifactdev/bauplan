@@ -1,4 +1,5 @@
 import { tr } from "@/i18n";
+import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
@@ -56,6 +57,7 @@ function TasksPage() {
       : null,
   );
 
+  usePushTarget(ws.tasks, (task) => setDlg({ id: task.id, initial: { ...task } }));
   const done = ws.tasks.filter((t) => t.status === "erledigt").length;
 
   const groups = useMemo(() => {

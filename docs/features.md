@@ -65,6 +65,8 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 
 ## Tasks
 
+- **Push notifications:** assigning a task to another approved user sends a generic notification to their opted-in devices after the server saves it, including offline sync. Open tasks remind the assignee; open quote/payment deadlines and timed calendar appointments remind all opted-in members. Device activation and a test button are in personal Settings. See [push setup and reminder rules](operations.md#push-notifications).
+
 - Title, trade, phase, priority, status, due date, notes.
 - Open tasks with due dates appear in the calendar and the calendar subscription.
 

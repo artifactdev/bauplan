@@ -13,6 +13,7 @@ import {
 import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
+import { pushSubscriptionSchema } from "./push";
 
 /** CalDAV uses HTTP Basic authentication rather than browser sessions. Never expose as an RPC. */
 export async function calendarAccess(authorization: string | null) {
@@ -55,6 +56,60 @@ export const adminDataContext = createMiddleware({ type: "function" })
   .server(async ({ next, context }) => {
     if (context.user.role !== "admin") throw new Error("Unauthorized");
     return next();
+  });
+
+export const getPushConfiguration = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) => {
+    const { pushConfiguration } = await import("@/server/push");
+    const configuration = await pushConfiguration();
+    const { pushRepo } = await import("@/server/repo");
+    return {
+      publicKey: configuration?.publicKey ?? null,
+      endpoints: (await pushRepo.devices(context.user.id)).map(
+        (device) => device.subscription.endpoint,
+      ),
+    };
+  });
+
+export const subscribePush = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) =>
+    z.object({ subscription: pushSubscriptionSchema, language: z.enum(["de", "en"]) }).parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { pushConfiguration } = await import("@/server/push");
+    if (!(await pushConfiguration())) throw new Error("push.not_configured");
+    const { sha256 } = await import("@/server/auth-core");
+    const { cookieFrom, SESSION_COOKIE } = await import("@/server/local-auth");
+    const token = cookieFrom(getRequest().headers.get("cookie"), SESSION_COOKIE);
+    if (!token) throw new Error("Unauthorized");
+    const { pushRepo } = await import("@/server/repo");
+    await pushRepo.subscribe(
+      context.user.id,
+      await sha256(token),
+      data.subscription,
+      data.language,
+    );
+    return { ok: true };
+  });
+
+export const unsubscribePush = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => z.object({ endpoint: z.string().max(2048) }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { pushRepo } = await import("@/server/repo");
+    await pushRepo.unsubscribe(context.user.id, data.endpoint);
+    return { ok: true };
+  });
+
+export const sendTestPush = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => z.object({ endpoint: z.string().max(2048) }).parse(data))
+  .handler(async ({ context, data }) => {
+    const { testPush } = await import("@/server/push");
+    await testPush(context.user.id, data.endpoint);
+    return { ok: true };
   });
 
 export const getAppearance = createServerFn()
@@ -259,7 +314,12 @@ export const createRow = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     if (data.table === "tasks") await validateTaskAssignee(data.row["assignee_id"]);
-    const row = await context.repo.insert(data.table, cleanRow(data.table, data.row));
+    const row = await context.repo.insert(
+      data.table,
+      cleanRow(data.table, data.row),
+      context.user.id,
+    );
+    if (data.table === "tasks") (await import("@/server/push")).wakePush();
     return { id: String(row["id"]) };
   });
 
@@ -271,7 +331,13 @@ export const updateRow = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.table === "tasks" && "assignee_id" in data.patch)
       await validateTaskAssignee(data.patch["assignee_id"]);
-    await context.repo.update(data.table, data.id, cleanRow(data.table, data.patch));
+    await context.repo.update(
+      data.table,
+      data.id,
+      cleanRow(data.table, data.patch),
+      context.user.id,
+    );
+    if (data.table === "tasks") (await import("@/server/push")).wakePush();
     return { ok: true };
   });
 
@@ -334,6 +400,7 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
         await context.repo.deleteFile(document.storage_path);
       results.push({ id: change.id, ...result });
     }
+    (await import("@/server/push")).wakePush();
     return results;
   });
 

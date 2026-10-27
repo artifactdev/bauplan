@@ -30,6 +30,7 @@ export default defineConfig({
       routeRules: {
         "/sw.js": { headers: { "cache-control": "no-cache" } },
         "/share-target.js": { headers: { "cache-control": "no-cache" } },
+        "/push.js": { headers: { "cache-control": "no-cache" } },
         "/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },
       },
     }),
@@ -93,7 +94,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        importScripts: ["/share-target.js"],
+        importScripts: ["/share-target.js", "/push.js"],
         skipWaiting: true,
         clientsClaim: true,
         globDirectory: ".output/public",

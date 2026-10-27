@@ -6,6 +6,7 @@ import {
   SYNC_OPERATIONS_DDL,
   USER_APPEARANCE_DDL,
   USER_NAVIGATION_DDL,
+  PUSH_DDL,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
 import { legacyInvoiceExpense } from "@/lib/expenses";
@@ -48,6 +49,13 @@ const MIGRATIONS: readonly Migration[] = [
     name: "additional-funding-ledger",
     // The shared schema creates the ledger; versioning prevents older builds from ignoring it.
     up() {},
+  },
+  {
+    version: 4,
+    name: "web-push-notifications",
+    up(db) {
+      db.exec(PUSH_DDL);
+    },
   },
 ];
 

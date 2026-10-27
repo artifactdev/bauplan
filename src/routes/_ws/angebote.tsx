@@ -1,4 +1,5 @@
 import { tr } from "@/i18n";
+import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
@@ -84,6 +85,7 @@ const daysSince = (iso: string | null) =>
 function OffersPage() {
   const { ws } = useWorkspace();
   const { update, remove } = useMutations();
+  usePushTarget(ws.offers, (offer) => setOfferDlg({ id: offer.id, initial: { ...offer } }));
   const [offerDlg, setOfferDlg] = useState<{
     id?: string;
     initial?: Record<string, unknown>;

@@ -33,9 +33,9 @@ describe("database migrations", () => {
         );
       }
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(3);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(4);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'app_%'").all()).toHaveLength(
-      6,
+      10,
     );
   });
 
@@ -88,7 +88,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(3);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(4);
   });
 
   it("applies ordered data migrations once", () => {
@@ -122,7 +122,7 @@ describe("database migrations", () => {
     migrateDatabase(db);
     expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
     expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(3);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(4);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

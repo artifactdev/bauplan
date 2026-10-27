@@ -8,6 +8,8 @@ The versioned archive contains the SQLite application data, project and personal
 
 OCR language models are stored separately under `DATA_DIR/ocr-models` and are not included. Download them again from OCR settings if needed. Environment variables and external identity-provider configuration are also not part of the archive.
 
+Web Push VAPID keys are sensitive application settings and are included. Device subscriptions and notification jobs/delivery history are excluded from portable backups and cleared on restore. Users must explicitly enable push again on each device after signing in.
+
 The application accepts ZIP backups up to 128 MB and limits expanded archive contents to 256 MB. Only archives created with a supported Bauplan backup format version are accepted.
 
 ## Restore

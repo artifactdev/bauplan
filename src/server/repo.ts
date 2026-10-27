@@ -11,6 +11,7 @@ import {
   type CalEvent,
 } from "@/lib/schema";
 import { TABLES } from "@/lib/schema";
+import type { PushJob, PushSubscriptionData } from "@/lib/push";
 import { calendarEtag, checkConditions, DavError, type DavConditions } from "./caldav-calendar";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_TABLE } from "@/lib/schema";
@@ -40,8 +41,17 @@ export interface Repo {
     files: BackupFile[],
     requireNoUsers?: boolean,
   ): Promise<void>;
-  insert(table: TableName, row: Record<string, unknown>): Promise<Record<string, unknown>>;
-  update(table: TableName, id: string, patch: Record<string, unknown>): Promise<void>;
+  insert(
+    table: TableName,
+    row: Record<string, unknown>,
+    actorId?: string,
+  ): Promise<Record<string, unknown>>;
+  update(
+    table: TableName,
+    id: string,
+    patch: Record<string, unknown>,
+    actorId?: string,
+  ): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
   putFile(name: string, mime: string, bytes: Uint8Array): Promise<string>;
   fileUrl(path: string): Promise<string>;
@@ -244,14 +254,18 @@ export function sqliteRepo(): Repo {
           await this.remove(change.table, change.rowId);
         } else if (change.action === "create") {
           if (!change.row) throw new Error("Sync create requires a row");
-          await this.insert(change.table, {
-            ...cleanRow(change.table, change.row),
-            id: change.rowId,
-            created_at: change.row["created_at"],
-          });
+          await this.insert(
+            change.table,
+            {
+              ...cleanRow(change.table, change.row),
+              id: change.rowId,
+              created_at: change.row["created_at"],
+            },
+            userId,
+          );
         } else {
           if (!change.row) throw new Error("Sync update requires a row");
-          await this.update(change.table, change.rowId, cleanRow(change.table, change.row));
+          await this.update(change.table, change.rowId, cleanRow(change.table, change.row), userId);
         }
         d.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
           change.id,
@@ -375,6 +389,9 @@ export function sqliteRepo(): Repo {
         d.prepare(`DELETE FROM ${USER_NAVIGATION_TABLE}`).run();
         d.prepare("DELETE FROM app_sync_operations").run();
         d.prepare("DELETE FROM app_sessions").run();
+        d.exec(
+          "DELETE FROM app_push_deliveries; DELETE FROM app_push_jobs; DELETE FROM app_push_subscriptions;",
+        );
 
         const insertRows = (table: string, rows: Record<string, unknown>[]) => {
           for (const row of rows) {
@@ -451,19 +468,30 @@ export function sqliteRepo(): Repo {
         );
       }
     },
-    async insert(table, row) {
+    async insert(table, row, actorId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       if (table === "funding_entries") validateFundingEntry(row, fundingSources(d));
       const id = (row["id"] as string) || crypto.randomUUID();
       const full = { ...row, id, created_at: row["created_at"] ?? new Date().toISOString() };
       const keys = Object.keys(full);
-      d.prepare(
-        `INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,
-      ).run(...keys.map((k) => toSql((full as Record<string, unknown>)[k])));
-      return full;
+      if (table === "tasks" && actorId) d.exec("SAVEPOINT task_notification");
+      try {
+        d.prepare(
+          `INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,
+        ).run(...keys.map((k) => toSql((full as Record<string, unknown>)[k])));
+        if (table === "tasks" && actorId) {
+          queueAssignment(d, null, full, actorId);
+          d.exec("RELEASE task_notification");
+        }
+        return full;
+      } catch (error) {
+        if (table === "tasks" && actorId)
+          d.exec("ROLLBACK TO task_notification; RELEASE task_notification");
+        throw error;
+      }
     },
-    async update(table, id, patch) {
+    async update(table, id, patch, actorId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       if (table === "funding_entries") {
@@ -480,10 +508,25 @@ export function sqliteRepo(): Repo {
         throw new Error("funding.source_in_use");
       const keys = Object.keys(patch);
       if (!keys.length) return;
-      d.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(
-        ...keys.map((k) => toSql(patch[k])),
-        id,
-      );
+      if (table === "tasks" && actorId) d.exec("SAVEPOINT task_notification");
+      try {
+        const previous =
+          table === "tasks" && actorId
+            ? d.prepare("SELECT * FROM tasks WHERE id = ?").get(id)
+            : undefined;
+        d.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(
+          ...keys.map((k) => toSql(patch[k])),
+          id,
+        );
+        if (table === "tasks" && actorId) {
+          if (previous) queueAssignment(d, previous, { ...previous, ...patch }, actorId);
+          d.exec("RELEASE task_notification");
+        }
+      } catch (error) {
+        if (table === "tasks" && actorId)
+          d.exec("ROLLBACK TO task_notification; RELEASE task_notification");
+        throw error;
+      }
     },
     async remove(table, id) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
@@ -595,3 +638,236 @@ function serializeRow(row: Record<string, unknown>) {
 function safeName(n: string) {
   return n.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
 }
+
+function queueAssignment(
+  db: SqliteDb,
+  previous: Record<string, unknown> | null,
+  next: Record<string, unknown>,
+  actorId: string,
+) {
+  const recipient = next["assignee_id"];
+  if (recipient === previous?.["assignee_id"]) return;
+  db.prepare(
+    "DELETE FROM app_push_deliveries WHERE job_id IN (SELECT id FROM app_push_jobs WHERE kind = 'assignment' AND resource_id = ?)",
+  ).run(next["id"]);
+  db.prepare("DELETE FROM app_push_jobs WHERE kind = 'assignment' AND resource_id = ?").run(
+    next["id"],
+  );
+  if (
+    typeof recipient !== "string" ||
+    !recipient ||
+    recipient === actorId ||
+    next["status"] === "erledigt"
+  )
+    return;
+  const now = new Date();
+  insertPushJob(
+    db,
+    {
+      id: crypto.randomUUID(),
+      kind: "assignment",
+      table: "tasks",
+      resourceId: String(next["id"]),
+      recipient,
+      version: crypto.randomUUID(),
+      dueAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 86_400_000).toISOString(),
+    },
+    now,
+  );
+}
+
+function insertPushJob(db: SqliteDb, job: PushJob, now: Date) {
+  db.prepare(
+    `INSERT OR IGNORE INTO app_push_jobs
+    (id, kind, resource_table, resource_id, recipient, version, due_at, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    job.id,
+    job.kind,
+    job.table,
+    job.resourceId,
+    job.recipient,
+    job.version,
+    job.dueAt,
+    job.expiresAt,
+    now.toISOString(),
+  );
+}
+
+export type PushDevice = {
+  id: string;
+  userId: string;
+  subscription: PushSubscriptionData;
+  language: "de" | "en";
+};
+export type PushDelivery = { job: PushJob; device: PushDevice; attempts: number };
+
+/** Private push state never enters the shared workspace or backup subscription lists. */
+export const pushRepo = {
+  async contactEmail(): Promise<string | null> {
+    const row = (await getSqliteDb())
+      .prepare("SELECT email FROM app_users WHERE role = 'admin' ORDER BY created_at, id LIMIT 1")
+      .get();
+    return typeof row?.["email"] === "string" ? row["email"] : null;
+  },
+  async keys(generate: () => { publicKey: string; privateKey: string }) {
+    const db = await getSqliteDb();
+    if (!db.prepare("SELECT key FROM app_settings WHERE key = 'push_vapid'").get())
+      db.prepare("INSERT OR IGNORE INTO app_settings(key, value) VALUES ('push_vapid', ?)").run(
+        JSON.stringify(generate()),
+      );
+    const value = String(
+      db.prepare("SELECT value FROM app_settings WHERE key = 'push_vapid'").get()?.["value"],
+    );
+    const parsed: unknown = JSON.parse(value);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("publicKey" in parsed) ||
+      !("privateKey" in parsed) ||
+      typeof parsed.publicKey !== "string" ||
+      typeof parsed.privateKey !== "string"
+    )
+      throw new Error("Invalid stored Web Push keys");
+    return { publicKey: parsed.publicKey, privateKey: parsed.privateKey };
+  },
+  async subscribe(
+    userId: string,
+    sessionHash: string,
+    subscription: PushSubscriptionData,
+    language: "de" | "en",
+  ) {
+    const db = await getSqliteDb();
+    const existing = db
+      .prepare("SELECT id FROM app_push_subscriptions WHERE endpoint = ?")
+      .get(subscription.endpoint);
+    if (existing) {
+      db.prepare("DELETE FROM app_push_deliveries WHERE subscription_id = ?").run(existing["id"]);
+      db.prepare("DELETE FROM app_push_subscriptions WHERE id = ?").run(existing["id"]);
+    }
+    db.prepare(
+      "INSERT INTO app_push_subscriptions(id, user_id, session_hash, endpoint, subscription, language, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(
+      crypto.randomUUID(),
+      userId,
+      sessionHash,
+      subscription.endpoint,
+      JSON.stringify(subscription),
+      language,
+      new Date().toISOString(),
+    );
+  },
+  async unsubscribe(userId: string, endpoint: string) {
+    const db = await getSqliteDb();
+    const device = db
+      .prepare("SELECT id FROM app_push_subscriptions WHERE user_id = ? AND endpoint = ?")
+      .get(userId, endpoint);
+    if (device) await this.removeDevice(String(device["id"]));
+  },
+  async removeDevice(id: string) {
+    const db = await getSqliteDb();
+    db.prepare("DELETE FROM app_push_deliveries WHERE subscription_id = ?").run(id);
+    db.prepare("DELETE FROM app_push_subscriptions WHERE id = ?").run(id);
+  },
+  async devices(userId?: string): Promise<PushDevice[]> {
+    const now = new Date().toISOString();
+    const rows = (await getSqliteDb())
+      .prepare(
+        `SELECT p.* FROM app_push_subscriptions p
+      JOIN app_users u ON u.id = p.user_id
+      JOIN app_sessions s ON s.token_hash = p.session_hash AND s.user_id = p.user_id
+      WHERE u.role IN ('admin', 'member') AND s.expires_at > ? ${userId ? "AND p.user_id = ?" : ""}`,
+      )
+      .all(...(userId ? [now, userId] : [now]));
+    return rows.map((row) => ({
+      id: String(row["id"]),
+      userId: String(row["user_id"]),
+      subscription: JSON.parse(String(row["subscription"])) as PushSubscriptionData,
+      language: row["language"] === "en" ? "en" : "de",
+    }));
+  },
+  async prepare(jobs: PushJob[], now: Date) {
+    const db = await getSqliteDb();
+    for (const job of jobs) insertPushJob(db, job, now);
+    db.prepare(
+      `INSERT OR IGNORE INTO app_push_deliveries(job_id, subscription_id, next_attempt)
+      SELECT j.id, s.id, j.due_at FROM app_push_jobs j JOIN app_push_subscriptions s
+      ON (j.recipient IS NULL OR s.user_id = j.recipient) AND s.created_at <= j.created_at
+      WHERE j.expires_at > ?`,
+    ).run(now.toISOString());
+    db.prepare(
+      "DELETE FROM app_push_deliveries WHERE job_id IN (SELECT id FROM app_push_jobs WHERE expires_at < ?)",
+    ).run(new Date(now.getTime() - 7 * 86_400_000).toISOString());
+    db.prepare("DELETE FROM app_push_jobs WHERE expires_at < ?").run(
+      new Date(now.getTime() - 7 * 86_400_000).toISOString(),
+    );
+    // Logouts, deleted users and expired sessions revoke their subscriptions.
+    db.exec(`DELETE FROM app_push_subscriptions WHERE NOT EXISTS (
+      SELECT 1 FROM app_users u JOIN app_sessions s ON s.user_id = u.id
+      WHERE u.id = app_push_subscriptions.user_id AND s.token_hash = app_push_subscriptions.session_hash
+      AND u.role IN ('admin', 'member') AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    db.exec(
+      "DELETE FROM app_push_deliveries WHERE subscription_id NOT IN (SELECT id FROM app_push_subscriptions)",
+    );
+  },
+  async claim(now: Date): Promise<PushDelivery | null> {
+    const db = await getSqliteDb();
+    db.exec("BEGIN IMMEDIATE");
+    let transactionOpen = true;
+    try {
+      const row = db
+        .prepare(
+          `SELECT j.*, d.subscription_id, d.attempts FROM app_push_deliveries d
+        JOIN app_push_jobs j ON j.id = d.job_id WHERE d.sent = 0 AND d.attempts < 8
+        AND d.next_attempt <= ? AND (d.lease_until IS NULL OR d.lease_until <= ?)
+        AND j.due_at <= ? AND j.expires_at > ? ORDER BY j.due_at LIMIT 1`,
+        )
+        .get(now.toISOString(), now.toISOString(), now.toISOString(), now.toISOString());
+      if (!row) {
+        db.exec("COMMIT");
+        return null;
+      }
+      db.prepare(
+        "UPDATE app_push_deliveries SET lease_until = ? WHERE job_id = ? AND subscription_id = ?",
+      ).run(new Date(now.getTime() + 120_000).toISOString(), row["id"], row["subscription_id"]);
+      db.exec("COMMIT");
+      transactionOpen = false;
+      const device = (await this.devices()).find((item) => item.id === row["subscription_id"]);
+      if (!device) {
+        await this.finish(String(row["id"]), String(row["subscription_id"]), true, 0, now);
+        return null;
+      }
+      return {
+        device,
+        attempts: Number(row["attempts"]),
+        job: {
+          id: String(row["id"]),
+          kind: String(row["kind"]) as PushJob["kind"],
+          table: String(row["resource_table"]) as PushJob["table"],
+          resourceId: String(row["resource_id"]),
+          recipient: row["recipient"] ? String(row["recipient"]) : null,
+          version: String(row["version"]),
+          dueAt: String(row["due_at"]),
+          expiresAt: String(row["expires_at"]),
+        },
+      };
+    } catch (error) {
+      if (transactionOpen) db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  async finish(jobId: string, deviceId: string, sent: boolean, attempts: number, now: Date) {
+    (await getSqliteDb())
+      .prepare(
+        "UPDATE app_push_deliveries SET sent = ?, attempts = ?, next_attempt = ?, lease_until = NULL WHERE job_id = ? AND subscription_id = ?",
+      )
+      .run(
+        sent ? 1 : 0,
+        attempts,
+        new Date(now.getTime() + Math.min(3_600_000, 30_000 * 2 ** attempts)).toISOString(),
+        jobId,
+        deviceId,
+      );
+  },
+};

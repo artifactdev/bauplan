@@ -1,6 +1,23 @@
 // Shared data model; SQLite creates and updates these tables at startup.
 
 // Private account metadata must not be included in TABLES or Workspace.
+export const PUSH_DDL = `
+CREATE TABLE IF NOT EXISTS app_push_subscriptions (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_hash TEXT NOT NULL,
+  endpoint TEXT UNIQUE NOT NULL, subscription TEXT NOT NULL, language TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS app_push_jobs (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, resource_table TEXT NOT NULL, resource_id TEXT NOT NULL,
+  recipient TEXT, version TEXT NOT NULL, due_at TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS app_push_deliveries (
+  job_id TEXT NOT NULL, subscription_id TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0, next_attempt TEXT NOT NULL, lease_until TEXT,
+  PRIMARY KEY (job_id, subscription_id)
+);
+CREATE INDEX IF NOT EXISTS app_push_user ON app_push_subscriptions(user_id);
+`;
 export const USER_APPEARANCE_TABLE = "app_user_appearance";
 export const USER_NAVIGATION_TABLE = "app_user_navigation";
 export const USER_NAVIGATION_DDL = `CREATE TABLE IF NOT EXISTS ${USER_NAVIGATION_TABLE} (

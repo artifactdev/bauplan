@@ -32,6 +32,7 @@ import { AppearancePanel } from "@/components/app/AppearanceControls";
 import { NavigationPanel } from "@/components/app/NavigationPanel";
 import { PasswordDialog } from "@/components/app/PasswordDialog";
 import { CalendarSyncPanel } from "@/components/app/CalendarSyncPanel";
+import { PushSettingsPanel } from "@/components/app/PushSettingsPanel";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
@@ -82,6 +83,7 @@ function SettingsPage() {
             </Panel>
           </div>
           <NavigationPanel userId={auth.user!.id} />
+          <PushSettingsPanel userId={auth.user!.id} />
         </div>
       </TabsContent>
       <TabsContent value="calendar" forceMount hidden={tab !== "calendar"}>

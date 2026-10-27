@@ -1,4 +1,5 @@
 import { tr } from "@/i18n";
+import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
@@ -82,6 +83,7 @@ function ExpensesPage() {
         }
       : null,
   );
+  usePushTarget(ws.expenses, (expense) => setDlg({ id: expense.id, initial: { ...expense } }));
   const today = todayISO();
   const vendor = (expense: Expense) => {
     const linked = ws.contacts.find((item) => item.id === expense.contact_id);

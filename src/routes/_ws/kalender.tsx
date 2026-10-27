@@ -1,4 +1,5 @@
 import { tr } from "@/i18n";
+import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
@@ -92,6 +93,10 @@ function CalendarPage() {
     null,
   );
 
+  usePushTarget(ws.events, (event) => {
+    setDlg({ id: event.id, initial: { ...event } });
+    setCursor({ y: Number(event.event_date.slice(0, 4)), m: Number(event.event_date.slice(5, 7)) - 1 });
+  });
   const items: Item[] = useMemo(
     () =>
       [
