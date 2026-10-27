@@ -1,19 +1,20 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>bauplan</Name>
-  <Repository>ghcr.io/OWNER/bauplan:latest</Repository>
-  <Registry>https://github.com/OWNER/bauplan/pkgs/container/bauplan</Registry>
+  <Repository>ghcr.io/artifactdev/bauplan:latest</Repository>
+  <Registry>https://github.com/artifactdev/bauplan/pkgs/container/bauplan</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/OWNER/bauplan/issues</Support>
-  <Project>https://github.com/OWNER/bauplan</Project>
+  <Support>https://github.com/artifactdev/bauplan/issues</Support>
+  <Project>https://github.com/artifactdev/bauplan</Project>
+  <TemplateURL>https://raw.githubusercontent.com/artifactdev/bauplan/main/unraid/bauplan.xml</TemplateURL>
+  <Beta>true</Beta>
   <Overview>Local renovation planner. SQLite database and uploaded documents use separate persistent path mappings.</Overview>
   <Category>Productivity:</Category>
   <WebUI>http://[IP]:[PORT:3000]</WebUI>
   <Config Name="Web UI Port (host)" Target="3000" Default="3000" Mode="tcp" Description="Host port for the Bauplan web interface. The container listens internally on port 3000." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
   <Config Name="Database and OCR models" Target="/data" Default="/mnt/user/appdata/bauplan" Mode="rw" Description="Persistent directory for the SQLite database and locally downloaded OCR language models." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/bauplan</Config>
   <Config Name="Documents" Target="/uploads" Default="/mnt/user/appdata/bauplan-documents" Mode="rw" Description="Separate persistent directory for uploaded documents. Can be on another Unraid share or disk." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/bauplan-documents</Config>
-  <Config Name="Uploads directory" Target="UPLOADS_DIR" Default="/uploads" Mode="" Description="Container path for uploaded documents." Type="Variable" Display="always" Required="true" Mask="false">/uploads</Config>
 </Container>

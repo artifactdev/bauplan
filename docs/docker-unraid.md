@@ -32,26 +32,25 @@ For OCR, an administrator downloads German and/or English language models in **S
 
 The repository includes [`unraid/bauplan.xml`](../unraid/bauplan.xml), which maps persistent data, documents, and the web port.
 
-### 1. Make the app image available
+### 1. App image
 
-Unraid's Docker template pulls a container image; it does not build the repository's Dockerfile. Build the image on a machine with Docker, then publish it to a registry reachable by Unraid. For example, after replacing the placeholders with your registry namespace:
+Unraid's Docker template pulls a container image; it does not build the repository's Dockerfile. Pushing a `v*` tag runs the `Publish Bauplan` GitHub Actions workflow (`.github/workflows/publish.yml`), which builds a `linux/amd64` image and publishes it as `ghcr.io/artifactdev/bauplan:<tag>` and `ghcr.io/artifactdev/bauplan:latest`:
 
 ```sh
-docker build -t ghcr.io/OWNER/bauplan:latest .
-docker push ghcr.io/OWNER/bauplan:latest
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-For a private registry, configure its credentials in Unraid before installing the template. Alternatively, build the image directly on Unraid after copying the project there and use the local image name in the template; image updates then need to be built manually.
+If the GHCR package is private, either make it public in the package settings on GitHub or configure registry credentials in Unraid before installing the template.
 
 ### 2. Install the Bauplan template
 
-1. Copy `unraid/bauplan.xml` to `/boot/config/plugins/dockerMan/templates-user/my-bauplan.xml` on Unraid.
-2. Edit the `Repository` value in the XML to your published image, such as `ghcr.io/OWNER/bauplan:latest`.
-3. In Unraid, open **Docker → Add Container → Template**, select **bauplan**, and review its settings.
-4. Set **Database and OCR models** to a persistent host path, for example `/mnt/user/appdata/bauplan`. This maps to `/data` and stores `renovierung.db` and downloaded language models.
-5. Set **Documents** to a separate persistent host path. The example defaults to `/mnt/user/appdata/bauplan-documents`; this maps to `/uploads`.
-6. Set **Web UI Port (host)** to an unused host port (3000 by default) and apply. The container port stays at 3000.
-7. Open `http://<unraid-ip>:<host-port>` and create the initial admin account.
+1. Copy `unraid/bauplan.xml` to `/boot/config/plugins/dockerMan/templates-user/my-bauplan.xml` on Unraid. The template already points to `ghcr.io/artifactdev/bauplan:latest`.
+2. In Unraid, open **Docker → Add Container → Template**, select **bauplan**, and review its settings.
+3. Set **Database and OCR models** to a persistent host path, for example `/mnt/user/appdata/bauplan`. This maps to `/data` and stores `renovierung.db` and downloaded language models.
+4. Set **Documents** to a separate persistent host path. The example defaults to `/mnt/user/appdata/bauplan-documents`; this maps to `/uploads`.
+5. Set **Web UI Port (host)** to an unused host port (3000 by default) and apply. The container port stays at 3000.
+6. Open `http://<unraid-ip>:<host-port>` and create the initial admin account.
 
 Back up the database/model and document paths independently. Recreating or updating the container preserves them as long as both host paths remain mapped.
 
