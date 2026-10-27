@@ -8,12 +8,13 @@ export function offerDecisionTitle(offer: Offer): string {
 }
 
 /** Derived from the offer so date/status edits never leave stale calendar entries. */
-export function offerDeadlines(offers: Offer[]): CalEvent[] {
+export function offerDeadlines(offers: Offer[]): (CalEvent & { offer_id: string })[] {
   return offers.flatMap((offer) =>
     offer.status === "received" && offer.valid_until
       ? [
           {
             id: `offer-${offer.id}`,
+            offer_id: offer.id,
             title: offerDecisionTitle(offer),
             event_date: offer.valid_until,
             end_date: null,

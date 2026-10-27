@@ -24,6 +24,7 @@ describe("offer decision deadlines", () => {
     expect(offerDeadlines([offer])).toEqual([
       {
         id: "offer-quote-1",
+        offer_id: "quote-1",
         title: offerDecisionTitle(offer),
         event_date: "2026-11-10",
         end_date: null,

@@ -56,6 +56,8 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Open tasks with due dates appear in the calendar and the calendar subscription.
 
 ## Calendar
+- Clicking an entry opens its original record in a modal without leaving the calendar: tasks open the task editor, offer decision deadlines open the quote editor, and appointments open the appointment editor. This works in both month and list views; saving updates the original record rather than creating a separate calendar copy.
+- Existing appointments can also be deleted from their editor after confirmation, including when opened from the month view. The editor closes only after deletion succeeds.
 - Event types: **Event**, **Deadline**, **Work**.
 - Start date required; **start time, end date, end time optional**. Without an end date, an entry lasts one day.
 - Multi-day entries appear on each day (following days marked "↳").

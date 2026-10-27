@@ -19,17 +19,10 @@ import {
 } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { eur, fmtDate, todayISO } from "@/lib/format";
-import {
-  contactLabel,
-  contactOptions,
-  costItemOptions,
-  docOptions,
-  tradeName,
-  tradeOptions,
-} from "@/lib/options";
-import type { Offer, Workspace } from "@/lib/schema";
+import { contactLabel, contactOptions, tradeName, tradeOptions } from "@/lib/options";
+import type { Offer } from "@/lib/schema";
 import { Empty, OFFER_STATUS, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
-import { EntityDialog, type Field } from "@/components/app/EntityDialog";
+import { OfferDialog } from "@/components/app/OfferDialog";
 import { resolveFileUrl } from "@/components/app/doc-open";
 import { QuickTask } from "@/components/app/quick-actions";
 import { offerDecisionTitle } from "@/lib/offer-deadlines";
@@ -63,47 +56,6 @@ export const Route = createFileRoute("/_ws/angebote")({
   component: OffersPage,
 });
 
-const offerFields = (ws: Workspace): Field[] => [
-  { name: "contact_id", label: tr("quotes.contact"), type: "select", options: contactOptions(ws) },
-  { name: "contractor", label: tr("quotes.company_no_contact") },
-  { name: "title", label: tr("shared.service") },
-  { name: "amount", label: tr("shared.gross_amount"), type: "number" },
-  { name: "requested_date", label: tr("quotes.requested"), type: "date" },
-  { name: "offer_date", label: tr("quotes.quote_date"), type: "date" },
-  { name: "valid_until", label: tr("quotes.valid_until"), type: "date" },
-  { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
-  {
-    name: "cost_item_id",
-    label: tr("shared.cost_item"),
-    type: "select",
-    options: costItemOptions(ws),
-  },
-  {
-    name: "status",
-    label: tr("shared.status"),
-    type: "select",
-    required: true,
-    options: Object.entries(OFFER_STATUS).map(([value, s]) => ({ value, label: s.label })),
-  },
-  {
-    name: "document_id",
-    label: tr("quotes.pdf_document"),
-    type: "select",
-    options: docOptions(ws),
-  },
-  { name: "notes", label: tr("shared.notes"), type: "textarea" },
-];
-
-/** Fill contractor from the chosen contact and default a missing amount to 0. */
-function normalize(ws: Workspace, v: Record<string, unknown>) {
-  const out = { ...v };
-  const c = ws.contacts.find((x) => x.id === out["contact_id"]);
-  if (c && !String(out["contractor"] ?? "").trim()) out["contractor"] = c.company ?? c.name;
-  if (!String(out["contractor"] ?? "").trim()) throw new Error(tr("quotes.enter_contact_company"));
-  if (out["amount"] === "" || out["amount"] == null) out["amount"] = 0;
-  return out;
-}
-
 const ALL = "__all";
 type SortKey = "firm" | "title" | "place" | "requested" | "offer" | "amount" | "status";
 const COLS: { key: SortKey; label: string }[] = [
@@ -131,7 +83,7 @@ const daysSince = (iso: string | null) =>
 
 function OffersPage() {
   const { ws } = useWorkspace();
-  const { create, update, remove } = useMutations();
+  const { update, remove } = useMutations();
   const [offerDlg, setOfferDlg] = useState<{
     id?: string;
     initial?: Record<string, unknown>;
@@ -587,18 +539,11 @@ function OffersPage() {
         )}
       </div>
 
-      <EntityDialog
+      <OfferDialog
         open={!!offerDlg}
         onOpenChange={(o) => !o && setOfferDlg(null)}
-        title={offerDlg?.id ? tr("quotes.edit_quote") : tr("quotes.new_quote")}
-        fields={offerFields(ws)}
-        scan="offer"
+        editId={offerDlg?.id}
         initial={offerDlg?.initial}
-        onSubmit={(v) =>
-          offerDlg?.id
-            ? update.mutateAsync({ table: "offers", id: offerDlg.id, patch: normalize(ws, v) })
-            : create.mutateAsync({ table: "offers", row: normalize(ws, v) })
-        }
       />
       <QuickTask
         open={!!decisionTask}

@@ -1,5 +1,5 @@
 import { tr } from "@/i18n";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { coversDay, eventEnd, rangeError, rangeLabel } from "@/lib/events";
 import { offerDeadlines } from "@/lib/offer-deadlines";
+import { QuickTask } from "@/components/app/quick-actions";
+import { OfferDialog } from "@/components/app/OfferDialog";
 
 export const Route = createFileRoute("/_ws/kalender")({
   head: () => ({
@@ -35,8 +37,7 @@ type Item = {
   start_time: string | null;
   kind: "termin" | "frist" | "arbeit" | "aufgabe";
   trade_id: string | null;
-  isEvent: boolean;
-  offerDeadline?: boolean;
+  source: { type: "event" | "task" | "offer"; id: string };
   done?: boolean;
 };
 const KIND: Record<
@@ -66,7 +67,6 @@ const MONTHS = [
 const pad = (n: number) => String(n).padStart(2, "0");
 
 function CalendarPage() {
-  const navigate = useNavigate();
   const { ws } = useWorkspace();
   const { create, update, remove } = useMutations();
   const today = todayISO();
@@ -80,6 +80,12 @@ function CalendarPage() {
       : "month",
   );
   const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(null);
+  const [taskDlg, setTaskDlg] = useState<{ id: string; initial: Record<string, unknown> } | null>(
+    null,
+  );
+  const [offerDlg, setOfferDlg] = useState<{ id: string; initial: Record<string, unknown> } | null>(
+    null,
+  );
 
   const items: Item[] = useMemo(
     () =>
@@ -93,7 +99,7 @@ function CalendarPage() {
           start_time: e.start_time,
           kind: e.kind,
           trade_id: e.trade_id,
-          isEvent: true,
+          source: { type: "event" as const, id: e.id },
         })),
         ...ws.tasks
           .filter((t) => t.due_date)
@@ -106,7 +112,7 @@ function CalendarPage() {
             start_time: null,
             kind: "aufgabe" as const,
             trade_id: t.trade_id,
-            isEvent: false,
+            source: { type: "task" as const, id: t.id },
             done: t.status === "erledigt",
           })),
         ...offerDeadlines(ws.offers).map((e) => ({
@@ -118,8 +124,7 @@ function CalendarPage() {
           start_time: null,
           kind: e.kind,
           trade_id: e.trade_id,
-          isEvent: false,
-          offerDeadline: true,
+          source: { type: "offer" as const, id: e.offer_id },
         })),
       ].sort(
         (a, b) =>
@@ -142,30 +147,41 @@ function CalendarPage() {
     });
 
   const upcoming = items.filter((i) => i.end >= today && !i.done);
-  const overdue = items.filter((i) => i.date < today && !i.isEvent && !i.done);
+  const overdue = items.filter((i) => i.date < today && i.source.type !== "event" && !i.done);
 
   const editEvent = (id: string) => {
     const e = ws.events.find((x) => x.id === id);
     if (e) setDlg({ id, initial: { ...e } });
+  };
+  const openItem = (item: Item) => {
+    const { type, id } = item.source;
+    if (type === "event") return editEvent(id);
+    if (type === "task") {
+      const task = ws.tasks.find((record) => record.id === id);
+      if (task) setTaskDlg({ id, initial: { ...task } });
+    } else {
+      const offer = ws.offers.find((record) => record.id === id);
+      if (offer) setOfferDlg({ id, initial: { ...offer } });
+    }
   };
 
   const Row = ({ i }: { i: Item }) => (
     <li className="flex flex-wrap items-center gap-2 py-3 text-sm sm:gap-3">
       <span className="w-full tabular text-xs text-muted-foreground sm:w-44">{i.label}</span>
       <Pill tone={KIND[i.kind].tone}>{KIND[i.kind].label}</Pill>
-      {i.offerDeadline ? (
-        <Link to="/angebote" className="min-w-0 flex-1 break-words hover:underline">
-          {i.title}
-        </Link>
-      ) : (
-        <span className="min-w-0 flex-1 break-words">{i.title}</span>
-      )}
+      <button
+        type="button"
+        className="min-w-0 flex-1 break-words text-left hover:underline"
+        onClick={() => openItem(i)}
+      >
+        {i.title}
+      </button>
       {i.trade_id && (
         <span className="w-full text-xs text-muted-foreground sm:w-auto">
           {tradeName(ws, i.trade_id)}
         </span>
       )}
-      {i.isEvent && (
+      {i.source.type === "event" && (
         <span className="flex">
           <Button
             size="icon"
@@ -260,16 +276,16 @@ function CalendarPage() {
                     <div className="grid gap-0.5">
                       {its.slice(0, 3).map((i) => (
                         <button
-                          key={i.id}
-                          onClick={() =>
-                            i.offerDeadline
-                              ? void navigate({ to: "/angebote" })
-                              : i.isEvent && editEvent(i.id)
-                          }
+                          key={`${i.source.type}-${i.id}`}
+                          onClick={() => openItem(i)}
+                          aria-label={`${i.title} · ${i.label}`}
                           className={cn(
                             "flex items-center gap-1 truncate rounded px-1 text-left hover:bg-muted",
                             i.done && "line-through opacity-50",
-                            !i.isEvent && i.date < today && !i.done && "text-destructive",
+                            i.source.type !== "event" &&
+                              i.date < today &&
+                              !i.done &&
+                              "text-destructive",
                           )}
                           title={`${i.title} · ${i.label}`}
                         >
@@ -306,7 +322,7 @@ function CalendarPage() {
             <Panel title={tr("shared.overdue")} className="border-destructive/30">
               <ul className="divide-y">
                 {overdue.map((i) => (
-                  <Row key={i.id} i={i} />
+                  <Row key={`${i.source.type}-${i.id}`} i={i} />
                 ))}
               </ul>
             </Panel>
@@ -314,13 +330,25 @@ function CalendarPage() {
           <Panel title={tr("calendar.upcoming")}>
             <ul className="divide-y">
               {upcoming.map((i) => (
-                <Row key={i.id} i={i} />
+                <Row key={`${i.source.type}-${i.id}`} i={i} />
               ))}
             </ul>
             {!upcoming.length && <Empty>{tr("calendar.nothing_planned")}</Empty>}
           </Panel>
         </TabsContent>
       </Tabs>
+      <QuickTask
+        open={!!taskDlg}
+        onOpenChange={(open) => !open && setTaskDlg(null)}
+        editId={taskDlg?.id}
+        initial={taskDlg?.initial}
+      />
+      <OfferDialog
+        open={!!offerDlg}
+        onOpenChange={(open) => !open && setOfferDlg(null)}
+        editId={offerDlg?.id}
+        initial={offerDlg?.initial}
+      />
       <EntityDialog
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}
@@ -352,6 +380,22 @@ function CalendarPage() {
           { name: "notes", label: tr("shared.notes"), type: "textarea" },
         ]}
         initial={dlg?.initial}
+        extra={
+          dlg?.id ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (dlg.id && confirm(tr("calendar.delete_appointment")))
+                  remove.mutate({ table: "events", id: dlg.id }, { onSuccess: () => setDlg(null) });
+              }}
+            >
+              <Trash2 data-icon="inline-start" />
+              {tr("shared.delete")}
+            </Button>
+          ) : undefined
+        }
         onSubmit={(v) => {
           const rawErr = rangeError(v as { event_date: string });
           const err = rawErr ? tr(rawErr) : null;
