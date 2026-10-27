@@ -27,7 +27,7 @@ import { resolveFileUrl } from "@/components/app/doc-open";
 import { AssignDialog } from "@/components/app/AssignDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DocumentPreview } from "@/components/app/DocumentPreview";
 
 export const Route = createFileRoute("/_ws/dokumente")({
   head: () => ({
@@ -373,27 +373,14 @@ function DocsPage() {
         initial={edit ? { ...edit } : undefined}
         onSubmit={(v) => update.mutateAsync({ table: "documents", id: edit!.id, patch: v })}
       />
-      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle className="truncate pr-6">{preview?.doc.name}</DialogTitle>
-          </DialogHeader>
-          {preview &&
-            (preview.doc.mime_type === "application/pdf" ? (
-              <iframe
-                src={preview.url}
-                title={preview.doc.name}
-                className="h-[75vh] w-full rounded-md border"
-              />
-            ) : (
-              <img
-                src={preview.url}
-                alt={preview.doc.name}
-                className="max-h-[75vh] w-full rounded-md object-contain"
-              />
-            ))}
-        </DialogContent>
-      </Dialog>
+      {preview && (
+        <DocumentPreview
+          name={preview.doc.name}
+          mime={preview.doc.mime_type}
+          url={preview.url}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </>
   );
 }

@@ -5,6 +5,7 @@ import { defineConfig } from "vite";
 import { nitro } from "nitro/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import deUi from "./src/locales/de/ui.json";
+import { pdfjsAssets } from "./scripts/pdfjs-assets";
 
 // Changes on every build so the precached HTML shell ("/") is refreshed with each deployment.
 const buildId = Date.now().toString(36);
@@ -16,6 +17,7 @@ export default defineConfig({
   // The document scanner runs OpenCV.js in a module worker.
   worker: { format: "es" },
   plugins: [
+    pdfjsAssets(),
     tanstackStart({
       server: { entry: "server" },
     }),
@@ -96,9 +98,20 @@ export default defineConfig({
         clientsClaim: true,
         globDirectory: ".output/public",
         globPatterns: ["**/*.{js,css,html,ico,svg,png,woff2}"],
-        // OpenCV.js (≈ 15 MB) is not precached for every install; it is cached on the first scan instead.
-        globIgnores: ["**/scan.worker-*.js"],
+        // Large processing workers and PDF resources are cached as used, not at installation.
+        globIgnores: ["**/scan.worker-*.js", "pdfjs/**", "**/pdf.worker*.mjs"],
         runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              /\/pdfjs\//.test(url.pathname) ||
+              /\/assets\/pdf\.worker(?:\.min)?-[\w-]+\.mjs$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "bauplan-pdf-reader",
+              expiration: { maxEntries: 250 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
           {
             urlPattern: ({ url }) => /\/assets\/scan\.worker-[\w-]+\.js$/.test(url.pathname),
             handler: "CacheFirst",

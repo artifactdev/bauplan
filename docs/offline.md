@@ -22,6 +22,8 @@ The app shell and versioned static assets are cached. Authenticated API response
 
 The document scanner's image-processing worker (about 16 MB) is not precached; it is cached the first time the scanner is used online. Scanning offline works only after that.
 
+The PDF reader's worker and supporting fonts, character maps, and image decoders are hosted locally and cached as used, rather than all being precached at installation. Previewing a PDF still requires access to the document itself; authenticated document responses are not cached for offline use. The full-screen preview fills the app viewport on iOS without requiring native browser fullscreen support.
+
 The scanner's local edge detection and optional automatic capture work without a server connection once its assets are available. Automatic capture starts off and always opens the crop/review step, not a save operation. Detection pauses while processing, when the page is hidden, and when leaving the scanner. Camera readiness and browser capabilities are checked at runtime; on iPhone, the home-screen PWA still uses WebKit's camera APIs, not Apple's native document-scanning APIs.
 
 ### Checking scanner improvements
