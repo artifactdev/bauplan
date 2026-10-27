@@ -2,7 +2,7 @@ import { tr } from "@/i18n";
 import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { version as appVersion } from "../../../package.json";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import {
   Hammer,
@@ -15,6 +15,8 @@ import {
   Wifi,
   WifiOff,
   Download,
+  Info,
+  CircleArrowUp,
 } from "lucide-react";
 import { getBackendInfo, getWorkspaceSyncGeneration } from "@/lib/data.functions";
 import { getAuthState, logoutLocal } from "@/lib/auth.functions";
@@ -31,9 +33,11 @@ import {
   setOfflineAccount,
 } from "@/lib/offline-store";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { getUpdateReady, subscribeUpdateReady } from "@/lib/sw-update";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
 import { AppearanceModeMenu } from "@/components/app/AppearanceControls";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
@@ -157,6 +161,7 @@ function Shell() {
   const workspace = useWorkspace();
   const { ws, isLoading } = workspace;
   const sync = useOfflineSync(auth.user!.id);
+  const updateReady = useSyncExternalStore(subscribeUpdateReady, getUpdateReady, () => false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const project = ws.projects[0];
   const [projectOpen, setProjectOpen] = useState(false);
@@ -265,6 +270,18 @@ function Shell() {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {updateReady && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("updateAvailable")}
+                title={t("updateAvailable")}
+                onClick={() => window.location.reload()}
+                className="text-primary"
+              >
+                <CircleArrowUp className="h-5 w-5" />
+              </Button>
+            )}
             <div
               className="flex items-center gap-1 text-xs text-muted-foreground"
               role="status"
@@ -295,6 +312,16 @@ function Shell() {
                 <span className="hidden sm:inline">{t("installApp")}</span>
               </Button>
             )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={t("appInfo")} className="md:hidden">
+                  <Info className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto px-3 py-2 text-sm">
+                {t("appVersion", { version: appVersion })}
+              </PopoverContent>
+            </Popover>
             <AppearanceModeMenu />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -25,5 +25,7 @@
   "keepOfflineChanges": "Offline-Änderungen behalten",
   "workspaceUnavailable": "Der gespeicherte Arbeitsbereich ist nicht verfügbar. Stelle eine Verbindung zum Server her und versuche es erneut.",
   "installApp": "App installieren",
-  "appVersion": "Version {{version}}"
+  "appVersion": "Version {{version}}",
+  "appInfo": "App-Informationen",
+  "updateAvailable": "Neue Version verfügbar – jetzt aktualisieren"
 }

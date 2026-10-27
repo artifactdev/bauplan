@@ -5,6 +5,9 @@ import { defineConfig } from "vite";
 import { nitro } from "nitro/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Changes on every build so the precached HTML shell ("/") is refreshed with each deployment.
+const buildId = Date.now().toString(36);
+
 export default defineConfig({
   optimizeDeps: {
     exclude: ["@napi-rs/canvas"],
@@ -20,6 +23,10 @@ export default defineConfig({
       // tesseract.js and pdf.js locate their worker scripts and WASM/core files at runtime
       // (__dirname, dynamic imports), so they must stay unbundled packages in .output/server/node_modules.
       traceDeps: ["tesseract.js*", "tesseract.js-core*", "pdfjs-dist*"],
+      routeRules: {
+        "/sw.js": { headers: { "cache-control": "no-cache" } },
+        "/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },
+      },
     }),
     react(),
     tailwindcss(),
@@ -63,7 +70,7 @@ export default defineConfig({
             },
           },
         ],
-        additionalManifestEntries: [{ url: "/", revision: null }],
+        additionalManifestEntries: [{ url: "/", revision: buildId }],
         navigateFallback: "/",
         navigateFallbackDenylist: [/^\/api\//],
       },
