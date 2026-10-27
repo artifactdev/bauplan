@@ -16,7 +16,10 @@ beforeEach(async () => {
     navigationSchema.parse(options?.data),
   );
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function mount() {
   const client = new QueryClient({
@@ -61,4 +64,62 @@ it("retains the draft and confirmed navigation after a failed save", async () =>
   );
   expect(screen.getByRole("checkbox", { name: "Overview" })).not.toBeChecked();
   expect(client.getQueryData(["navigation", "alice"])).toEqual(DEFAULT_NAVIGATION);
+});
+
+function mockRowPositions() {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const row = this.closest("li");
+    const index = row ? Array.from(row.parentElement!.children).indexOf(row) : 0;
+    return {
+      x: 0,
+      y: index * 64,
+      top: index * 64,
+      bottom: index * 64 + 56,
+      left: 0,
+      right: 400,
+      width: 400,
+      height: 56,
+      toJSON: () => ({}),
+    };
+  });
+}
+
+it("reorders with the keyboard drag handle and saves the same order while preserving hidden entries", async () => {
+  vi.mocked(getNavigation).mockResolvedValue({ ...DEFAULT_NAVIGATION, hidden: ["/budget"] });
+  mockRowPositions();
+  mount();
+  const handle = await screen.findByRole("button", { name: "Drag Overview to reorder" });
+  handle.focus();
+  fireEvent.keyDown(handle, { key: " ", code: "Space" });
+  await waitFor(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
+  fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown" });
+  await waitFor(() => expect(screen.getByText("Position 2 of 10.")).toBeInTheDocument());
+  fireEvent.keyDown(handle, { key: " ", code: "Space" });
+  await waitFor(() => expect(screen.getAllByRole("checkbox")[0]).toHaveAccessibleName("Budget"));
+  expect(saveNavigation).not.toHaveBeenCalled();
+  expect(screen.getByRole("checkbox", { name: "Budget" })).not.toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "Save navigation" }));
+  await waitFor(() =>
+    expect(saveNavigation).toHaveBeenCalledWith({
+      data: { order: ["/budget", "/", ...DEFAULT_NAVIGATION.order.slice(2)], hidden: ["/budget"] },
+    }),
+  );
+});
+
+it("cancels dragging without changing the order or creating an unsaved draft", async () => {
+  mockRowPositions();
+  mount();
+  const handle = await screen.findByRole("button", { name: "Drag Overview to reorder" });
+  handle.focus();
+  fireEvent.keyDown(handle, { key: " ", code: "Space" });
+  await waitFor(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
+  fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown" });
+  await screen.findByText("Position 2 of 10.");
+  fireEvent.keyDown(handle, { key: "Escape", code: "Escape" });
+  await waitFor(() => expect(handle).not.toHaveAttribute("aria-pressed", "true"));
+  expect(screen.getAllByRole("checkbox")[0]).toHaveAccessibleName("Overview");
+  expect(screen.getByRole("button", { name: "Save navigation" })).toBeDisabled();
+  expect(saveNavigation).not.toHaveBeenCalled();
 });

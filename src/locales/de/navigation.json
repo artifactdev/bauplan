@@ -1,6 +1,12 @@
 {
   "title": "Navigation",
-  "hint": "Wähle die angezeigten Seiten und ändere ihre Reihenfolge mit den Pfeilen. Die ersten vier sichtbaren Seiten erscheinen in der mobilen Leiste, die übrigen unter Mehr. Einstellungen bleiben immer erreichbar. Speichern übernimmt die Auswahl auf deinen Geräten. Ausblenden entfernt nur den Navigationslink und beschränkt nicht den Zugriff.",
+  "hint": "Wähle die angezeigten Seiten und ziehe sie am Griff in die gewünschte Reihenfolge oder nutze die Pfeile. Die ersten vier sichtbaren Seiten erscheinen in der mobilen Leiste, die übrigen unter Mehr. Einstellungen bleiben immer erreichbar. Speichern übernimmt die Auswahl auf deinen Geräten. Ausblenden entfernt nur den Navigationslink und beschränkt nicht den Zugriff.",
+  "drag": "{{name}} ziehen zum Sortieren",
+  "dragInstructions": "Drücke die Leertaste, um einen Eintrag aufzunehmen. Verschiebe ihn mit den Pfeiltasten. Drücke erneut die Leertaste zum Ablegen oder Escape zum Abbrechen.",
+  "dragStarted": "{{name}} aufgenommen.",
+  "dragPosition": "Position {{position}} von {{count}}.",
+  "dragDropped": "Auf Position {{position}} von {{count}} abgelegt.",
+  "dragCancelled": "Verschieben abgebrochen.",
   "up": "{{name}} nach oben verschieben",
   "down": "{{name}} nach unten verschieben",
   "save": "Navigation speichern",

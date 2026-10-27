@@ -441,6 +441,8 @@
   "settings.new_source_grant": "Neue Quelle, z. B. Förderung",
   "settings.no_local_password": "Du meldest dich bisher nur per OIDC an. Hier kannst du zusätzlich ein lokales Passwort festlegen.",
   "settings.password_changed": "Passwort geändert",
+  "settings.password_state_failed": "Der Passwortstatus konnte nicht geladen werden. Bitte öffne die Einstellungen erneut.",
+  "settings.password_state_loading": "Passwortstatus wird geladen …",
   "settings.password_min_8": "Passwort (mind. 8)",
   "settings.payment_sources": "Zahlungsquellen",
   "settings.pending": "Wartet",

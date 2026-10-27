@@ -441,6 +441,8 @@
   "settings.new_source_grant": "New source, e.g. grant",
   "settings.no_local_password": "You currently sign in with OIDC only. You can also set a local password here.",
   "settings.password_changed": "Password changed",
+  "settings.password_state_failed": "Could not load the password status. Please reopen Settings.",
+  "settings.password_state_loading": "Loading password status …",
   "settings.password_min_8": "Password (min. 8)",
   "settings.payment_sources": "Payment sources",
   "settings.pending": "Pending",

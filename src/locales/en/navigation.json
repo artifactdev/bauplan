@@ -1,6 +1,12 @@
 {
   "title": "Navigation",
-  "hint": "Choose which pages appear and use the arrows to reorder them. The first four visible pages appear in the mobile bar; the rest are under More. Settings is always available. Save to apply across your devices. Hiding a page only removes its navigation link; it does not restrict access.",
+  "hint": "Choose which pages appear and drag their handles to reorder them, or use the arrows. The first four visible pages appear in the mobile bar; the rest are under More. Settings is always available. Save to apply across your devices. Hiding a page only removes its navigation link; it does not restrict access.",
+  "drag": "Drag {{name}} to reorder",
+  "dragInstructions": "Press Space to pick up an entry. Use the arrow keys to move it. Press Space again to drop it, or Escape to cancel.",
+  "dragStarted": "Picked up {{name}}.",
+  "dragPosition": "Position {{position}} of {{count}}.",
+  "dragDropped": "Dropped at position {{position}} of {{count}}.",
+  "dragCancelled": "Reordering cancelled.",
   "up": "Move {{name}} up",
   "down": "Move {{name}} down",
   "save": "Save navigation",
