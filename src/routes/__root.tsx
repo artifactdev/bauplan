@@ -85,6 +85,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  loader: () => ({ appearanceBootstrap }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -122,10 +123,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  const { appearanceBootstrap: bootstrap } = Route.useLoaderData();
   return (
     <html lang="de" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
+        <script dangerouslySetInnerHTML={{ __html: bootstrap }} />
         <HeadContent />
       </head>
       <body>
