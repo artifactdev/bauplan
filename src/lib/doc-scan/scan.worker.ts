@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import cvModule from "@techstark/opencv-js";
-import { detectDocument, processDocument, resolveCv, type Raster } from "./cv-ops";
+import { detectDocumentDetails, processDocument, resolveCv, type Raster } from "./cv-ops";
 import type { ScanRequest, ScanResponse } from "./scan-engine";
 
 // OpenCV (≈ 10 MB incl. WASM) is only loaded inside this worker, i.e. once the scanner opens.
@@ -21,7 +21,7 @@ scope.onmessage = async (event: MessageEvent<ScanRequest>) => {
         id: request.id,
         ok: true,
         type: "detect",
-        quad: detectDocument(cv, request.image),
+        detection: detectDocumentDetails(cv, request.image),
       });
     const image: Raster = processDocument(cv, request.image, request.options);
     reply({ id: request.id, ok: true, type: "process", image }, [image.data.buffer]);

@@ -1,7 +1,14 @@
 // @vitest-environment node
 import { createRequire } from "node:module";
 import { beforeAll, describe, expect, it } from "vitest";
-import { detectDocument, processDocument, resolveCv, type Cv, type Raster } from "./cv-ops";
+import {
+  detectDocument,
+  detectDocumentDetails,
+  processDocument,
+  resolveCv,
+  type Cv,
+  type Raster,
+} from "./cv-ops";
 import { fullQuad, type Point, type Quad } from "./geometry";
 
 let cv: Cv;
@@ -30,7 +37,13 @@ function noise(seed: number) {
 }
 
 /** A light "sheet of paper" with text-like lines on a darker, noisy desk. */
-function photo(width: number, height: number, doc: Quad | null, seed = 1): Raster {
+function photo(
+  width: number,
+  height: number,
+  doc: Quad | null,
+  seed = 1,
+  options: { paper?: number; desk?: number; shadow?: boolean; clutter?: boolean } = {},
+): Raster {
   const rnd = noise(seed);
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
@@ -38,7 +51,9 @@ function photo(width: number, height: number, doc: Quad | null, seed = 1): Raste
       const i = (y * width + x) * 4;
       const onDoc = doc && insidePolygon(x, y, doc);
       const textLine = onDoc && y % 24 < 3 && x % 90 > 15;
-      const base = onDoc ? (textLine ? 40 : 232) : 70 + ((x >> 4) % 2) * 8;
+      const base = onDoc
+        ? (textLine ? 40 : (options.paper ?? 232)) - (options.shadow ? 65 * (x / width) : 0)
+        : (options.desk ?? 70) + ((x >> 4) % 2) * 8 + (options.clutter && y % 60 < 4 ? 65 : 0);
       const v = base + (rnd() - 0.5) * 16;
       data[i] = v + (onDoc ? 0 : 20);
       data[i + 1] = v + (onDoc ? 0 : 8);
@@ -49,6 +64,68 @@ function photo(width: number, height: number, doc: Quad | null, seed = 1): Raste
   return { data, width, height };
 }
 
+const reference: Quad = [
+  { x: 150, y: 90 },
+  { x: 620, y: 60 },
+  { x: 690, y: 520 },
+  { x: 110, y: 540 },
+];
+const scenes = [
+  { name: "perspective", quad: reference, options: {} },
+  { name: "shadow", quad: reference, options: { shadow: true } },
+  { name: "low-contrast", quad: reference, options: { paper: 155, desk: 125 } },
+  { name: "clutter", quad: reference, options: { clutter: true } },
+  {
+    name: "near-border",
+    quad: [
+      { x: 20, y: 30 },
+      { x: 760, y: 20 },
+      { x: 775, y: 570 },
+      { x: 15, y: 580 },
+    ] as Quad,
+    options: {},
+  },
+  {
+    name: "rotated",
+    quad: [
+      { x: 300, y: 30 },
+      { x: 680, y: 220 },
+      { x: 500, y: 570 },
+      { x: 100, y: 360 },
+    ] as Quad,
+    options: {},
+  },
+];
+
+it("measures deterministic detection scenes without retaining images", () => {
+  const measurements = scenes.map(({ name, quad, options }) => {
+    const image = photo(800, 600, quad, 7, options);
+    const timings: number[] = [];
+    let found: Quad | null = null;
+    for (let i = 0; i < 10; i++) {
+      const start = performance.now();
+      found = detectDocument(cv, image);
+      if (i >= 2) timings.push(performance.now() - start);
+    }
+    timings.sort((a, b) => a - b);
+    const errors = found
+      ?.map((point, index) => Math.hypot(point.x - quad[index]!.x, point.y - quad[index]!.y) / 1000)
+      .sort((a, b) => a - b);
+    return {
+      name,
+      detected: !!found,
+      medianCornerError: errors ? (errors[1]! + errors[2]!) / 2 : null,
+      medianMs: timings[4],
+      p95Ms: timings[7],
+    };
+  });
+  if (process.env["SCAN_BENCHMARK"]) console.info(JSON.stringify(measurements));
+  for (const result of measurements) {
+    expect(result.detected, result.name).toBe(true);
+    expect(result.medianCornerError, result.name).toBeLessThanOrEqual(0.02);
+  }
+});
+
 function expectNear(actual: Quad, expected: Quad, tolerance: number) {
   actual.forEach((p, i) => {
     expect(Math.abs(p.x - expected[i]!.x)).toBeLessThan(tolerance);
@@ -57,6 +134,53 @@ function expectNear(actual: Quad, expected: Quad, tolerance: number) {
 }
 
 describe("detectDocument", () => {
+  it("prefers supported paper edges over a larger faint background rectangle", () => {
+    const image = photo(800, 600, reference, 8);
+    for (let y = 15; y < 585; y++)
+      for (let x = 15; x < 785; x++) {
+        if (x > 18 && x < 781 && y > 18 && y < 581) continue;
+        const i = (y * 800 + x) * 4;
+        image.data[i] = 105;
+        image.data[i + 1] = 93;
+        image.data[i + 2] = 85;
+      }
+    const found = detectDocumentDetails(cv, image);
+    expect(found).not.toBeNull();
+    expectNear(found!.quad, reference, 15);
+  });
+
+  it("does not mark a page clipped by the image border as complete", () => {
+    const clipped: Quad = [
+      { x: -50, y: 45 },
+      { x: 650, y: 45 },
+      { x: 650, y: 560 },
+      { x: -50, y: 560 },
+    ];
+    const found = detectDocumentDetails(cv, photo(800, 600, clipped));
+    expect(found?.complete ?? false).toBe(false);
+  });
+
+  it("distinguishes readable interior detail from a blurred page", () => {
+    const image = photo(800, 600, reference);
+    const sharp = detectDocumentDetails(cv, image);
+    const src = cv.matFromImageData(image);
+    const blurred = new cv.Mat();
+    try {
+      cv.GaussianBlur(src, blurred, new cv.Size(31, 31), 10);
+      const soft = detectDocumentDetails(cv, {
+        width: 800,
+        height: 600,
+        data: new Uint8ClampedArray(blurred.data),
+      });
+      expect(sharp!.sharpness).toBeGreaterThan(40);
+      expect(soft).not.toBeNull();
+      expect(soft!.sharpness).toBeLessThan(40);
+    } finally {
+      src.delete();
+      blurred.delete();
+    }
+  });
+
   it("finds the four corners of a skewed document", () => {
     const doc: Quad = [
       { x: 150, y: 90 },

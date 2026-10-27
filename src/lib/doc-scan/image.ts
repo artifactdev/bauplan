@@ -26,7 +26,11 @@ function drawToRaster(
 }
 
 /** Decodes an image file (respecting EXIF orientation) and downscales it to maxSide / maxPixels. */
-export async function decodeImage(blob: Blob, maxSide: number, maxPixels = Infinity): Promise<Raster> {
+export async function decodeImage(
+  blob: Blob,
+  maxSide: number,
+  maxPixels = Infinity,
+): Promise<Raster> {
   const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
   try {
     return drawToRaster(bitmap, bitmap.width, bitmap.height, maxSide, maxPixels);
@@ -35,9 +39,33 @@ export async function decodeImage(blob: Blob, maxSide: number, maxPixels = Infin
   }
 }
 
-export function grabVideoFrame(video: HTMLVideoElement, maxSide: number, maxPixels = Infinity): Raster | null {
+export function grabVideoFrame(
+  video: HTMLVideoElement,
+  maxSide: number,
+  maxPixels = Infinity,
+): Raster | null {
   if (!video.videoWidth || !video.videoHeight) return null;
   return drawToRaster(video, video.videoWidth, video.videoHeight, maxSide, maxPixels);
+}
+
+/** A reusable readback surface, separate from the full-resolution still capture. */
+export function createVideoReader() {
+  const { canvas, ctx } = canvas2d(1, 1);
+  return {
+    read(video: HTMLVideoElement, maxSide: number): Raster | null {
+      if (!video.videoWidth || !video.videoHeight || video.readyState < 2) return null;
+      const scale = fitScale(video.videoWidth, video.videoHeight, maxSide);
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+      ctx.drawImage(video, 0, 0, width, height);
+      return ctx.getImageData(0, 0, width, height);
+    },
+    dispose() {
+      canvas.width = canvas.height = 0;
+    },
+  };
 }
 
 export async function encodeJpeg(image: Raster, quality = 0.85): Promise<Blob> {

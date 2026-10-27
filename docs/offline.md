@@ -22,6 +22,14 @@ The app shell and versioned static assets are cached. Authenticated API response
 
 The document scanner's image-processing worker (about 16 MB) is not precached; it is cached the first time the scanner is used online. Scanning offline works only after that.
 
+The scanner's local edge detection and optional automatic capture work without a server connection once its assets are available. Automatic capture starts off and always opens the crop/review step, not a save operation. Detection pauses while processing, when the page is hidden, and when leaving the scanner. Camera readiness and browser capabilities are checked at runtime; on iPhone, the home-screen PWA still uses WebKit's camera APIs, not Apple's native document-scanning APIs.
+
+### Checking scanner improvements
+
+Compare the same pages, lighting, distance, and device orientation before and after an update, with warmed scanner assets. Include both light/dark desks, shadows, skewed pages, text detail, and a scene without a document. Check preview smoothness, outline jitter, manual capture responsiveness, false automatic captures, and the saved PDF's legibility separately. Desktop emulation cannot certify iPhone camera performance.
+
+For development, `SCAN_BENCHMARK=1 npm test -- src/lib/doc-scan/cv-ops.test.ts --reporter=verbose --silent=false` reports deterministic synthetic detection latency and corner error. In a development browser console, `(await import('/src/lib/doc-scan/live.ts')).readScanTimings()` returns at most 120 recent image-free samples: main-thread readback time, worker round-trip time, observation age, analysis size, and presented-frame count differences between sampled frames. Those count differences include intentionally skipped frames and are **not** a dropped-camera-frame measurement. Samples remain in memory only, are not collected in production, and are not sent anywhere. Use actual device measurements before asserting a performance percentage or native-scanner parity.
+
 ## Updates
 
 After a new version is deployed, the app checks for it whenever it returns to the foreground and every 30 minutes. The new service worker activates immediately. If the app is in the background, it reloads by itself; if it is open, an update icon appears in the header to the left of the connection status, and tapping it loads the new version. If a page from the old version can no longer load its code, the app reloads once automatically instead of showing an error. The current version is shown at the bottom of the sidebar, and on phones via the info icon in the header.

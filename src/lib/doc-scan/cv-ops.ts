@@ -70,60 +70,161 @@ function quadFromContour(cv: Cv, contour: Mat, mats: Mat[]): Quad | null {
 }
 
 /** Candidate binary maps: edges (Canny) and brightness segmentation (Otsu, both polarities). */
-function edgeMaps(cv: Cv, gray: Mat, mats: Mat[]): Mat[] {
+function* edgeMaps(cv: Cv, gray: Mat, mats: Mat[]): Generator<Mat> {
   const kernel = track(mats, cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5)));
   const canny = track(mats, new cv.Mat());
-  cv.Canny(gray, canny, 40, 120);
+  cv.Canny(gray, canny, 8, 24);
   cv.dilate(canny, canny, kernel);
+  yield canny;
   const otsu = track(mats, new cv.Mat());
   cv.threshold(gray, otsu, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
   cv.morphologyEx(otsu, otsu, cv.MORPH_CLOSE, kernel);
+  yield otsu;
   const inverted = track(mats, new cv.Mat());
   cv.bitwise_not(otsu, inverted);
-  return [canny, otsu, inverted];
+  yield inverted;
 }
 
 /**
  * Finds the four corners of the dominant document in the image.
  * Returns null when no plausible quadrilateral (convex, ≥ 10 % of the image) is found.
  */
-export function detectDocument(cv: Cv, image: Raster): Quad | null {
+export type DocumentDetection = {
+  quad: Quad;
+  /** Heuristic ranking, not a probability. */
+  score: number;
+  complete: boolean;
+  /** Variance of the sampled interior Laplacian, before blur. */
+  sharpness: number;
+};
+
+function boundaryContrast(gray: Mat, quad: Quad): number {
+  const center = quad.reduce((p, q) => ({ x: p.x + q.x / 4, y: p.y + q.y / 4 }), { x: 0, y: 0 });
+  const sample = (x: number, y: number) =>
+    gray.data[
+      Math.min(gray.rows - 1, Math.max(0, Math.round(y))) * gray.cols +
+        Math.min(gray.cols - 1, Math.max(0, Math.round(x)))
+    ] as number;
+  let contrast = 0;
+  for (let edge = 0; edge < 4; edge++) {
+    const a = quad[edge]!;
+    const b = quad[(edge + 1) % 4]!;
+    let supported = 0;
+    for (let i = 1; i < 10; i++) {
+      const x = a.x + ((b.x - a.x) * i) / 10;
+      const y = a.y + ((b.y - a.y) * i) / 10;
+      const length = Math.hypot(center.x - x, center.y - y);
+      const dx = ((center.x - x) / length) * 5;
+      const dy = ((center.y - y) / length) * 5;
+      supported += Math.abs(sample(x + dx, y + dy) - sample(x - dx, y - dy));
+    }
+    contrast += Math.min(1, supported / 9 / 35);
+  }
+  return contrast / 4;
+}
+
+function interiorSharpness(gray: Mat, quad: Quad): number {
+  let sum = 0;
+  let square = 0;
+  let count = 0;
+  // Sample inside the page, excluding its boundary so a sharp desk edge cannot mask blurred text.
+  for (let v = 0.1; v < 0.9; v += 0.015) {
+    for (let u = 0.1; u < 0.9; u += 0.015) {
+      const [a, b, c, d] = quad;
+      const x = Math.round((1 - v) * (a.x * (1 - u) + b.x * u) + v * (d.x * (1 - u) + c.x * u));
+      const y = Math.round((1 - v) * (a.y * (1 - u) + b.y * u) + v * (d.y * (1 - u) + c.y * u));
+      if (x < 1 || y < 1 || x >= gray.cols - 1 || y >= gray.rows - 1) continue;
+      const i = y * gray.cols + x;
+      const laplacian =
+        gray.data[i - 1] +
+        gray.data[i + 1] +
+        gray.data[i - gray.cols] +
+        gray.data[i + gray.cols] -
+        4 * gray.data[i];
+      sum += laplacian;
+      square += laplacian * laplacian;
+      count++;
+    }
+  }
+  return count ? square / count - (sum / count) ** 2 : 0;
+}
+
+export function detectDocumentDetails(cv: Cv, image: Raster): DocumentDetection | null {
   const mats: Mat[] = [];
   try {
     const src = track(mats, cv.matFromImageData(image));
     const scale = fitScale(image.width, image.height, DETECT_SIDE);
-    const small = track(mats, new cv.Mat());
+    const small = scale === 1 ? src : track(mats, new cv.Mat());
     const width = Math.max(1, Math.round(image.width * scale));
     const height = Math.max(1, Math.round(image.height * scale));
-    cv.resize(src, small, new cv.Size(width, height), 0, 0, cv.INTER_AREA);
+    if (scale !== 1) cv.resize(src, small, new cv.Size(width, height), 0, 0, cv.INTER_AREA);
     const gray = track(mats, new cv.Mat());
     cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+    const rawGray = track(mats, gray.clone());
     cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
 
     const imageArea = width * height;
-    let best: { quad: Quad; area: number } | null = null;
+    let best: { quad: Quad; score: number; complete: boolean } | null = null;
     for (const map of edgeMaps(cv, gray, mats)) {
       const contours = track(mats, new cv.MatVector());
       const hierarchy = track(mats, new cv.Mat());
-      cv.findContours(map, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      cv.findContours(map, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+      const candidates: { index: number; area: number }[] = [];
       for (let i = 0; i < contours.size(); i++) {
-        const contour = track(mats, contours.get(i));
-        const area = cv.contourArea(contour);
-        if (area < imageArea * 0.1) continue;
-        const quad = quadFromContour(cv, contour, mats);
-        if (!quad || !isPlausibleDocument(quad, width, height)) continue;
-        const qArea = quadArea(quad);
-        // Background regions that span the whole frame are not a document outline.
-        if (qArea > imageArea * 0.97) continue;
-        // The contour must actually fill its quadrilateral (rejects merged clutter).
-        if (area / qArea < 0.8) continue;
-        if (!best || qArea > best.area) best = { quad, area: qArea };
+        const contour = contours.get(i);
+        try {
+          const area = cv.contourArea(contour);
+          if (area >= imageArea * 0.1) candidates.push({ index: i, area });
+        } finally {
+          contour.delete();
+        }
       }
+      // Only a bounded number of large candidates need hull/quad approximation.
+      for (const { index, area } of candidates.sort((a, b) => b.area - a.area).slice(0, 12)) {
+        const temporary: Mat[] = [];
+        try {
+          const contour = track(temporary, contours.get(index));
+          const quad = quadFromContour(cv, contour, temporary);
+          if (!quad || !isPlausibleDocument(quad, width, height)) continue;
+          const qArea = quadArea(quad);
+          if (qArea > imageArea * 0.97 || area / qArea < 0.8) continue;
+          const complete = quad.every(
+            (p) =>
+              p.x > width * 0.015 &&
+              p.x < width * 0.985 &&
+              p.y > height * 0.015 &&
+              p.y < height * 0.985,
+          );
+          const edges = boundaryContrast(rawGray, quad);
+          const score =
+            0.35 * Math.min(1, qArea / imageArea / 0.65) +
+            0.2 * Math.min(1, area / qArea) +
+            0.35 * edges +
+            (complete ? 0.1 : 0);
+          if (edges < 0.12) continue;
+          if (!best || score > best.score) best = { quad, score, complete };
+        } finally {
+          release(temporary);
+        }
+      }
+      // A well-supported complete outline does not need the other segmentation passes.
+      if (best && best.complete && best.score >= 0.9) break;
     }
-    return best ? scaleQuad(best.quad, 1 / scale) : null;
+    return best
+      ? {
+          quad: scaleQuad(best.quad, 1 / scale),
+          score: best.score,
+          complete: best.complete,
+          sharpness: interiorSharpness(rawGray, best.quad),
+        }
+      : null;
   } finally {
     release(mats);
   }
+}
+
+export function detectDocument(cv: Cv, image: Raster): Quad | null {
+  return detectDocumentDetails(cv, image)?.quad ?? null;
 }
 
 const ROTATE_CODES: Record<Exclude<Rotation, 0>, string> = {

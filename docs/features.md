@@ -3,12 +3,15 @@
 Visible areas appear in the left navigation in the account's chosen order. On mobile, the bottom bar offers the first four visible areas and a **More** menu for the remaining areas and Settings. The shared top bar provides appearance and account controls. All approved users work on the **same project**.
 
 ## Installable app & offline use
+
 Bauplan can be installed from a supported browser and used offline after signing in and opening the workspace on that device. Workspace edits are saved locally and synchronized when online; document uploads are queued. Conflicting server edits require a manual choice, and sign-out explicitly warns before discarding pending work. See [offline use](offline.md) for setup and limitations.
 
 ## Backups
+
 Admins can export and restore a complete database-and-documents backup from Settings. A backup can also be imported during initial setup. Restoring replaces existing data and invalidates sessions; see [backups and restore](backups.md).
 
 ## Overview (dashboard)
+
 - Metrics: total budget, expected costs, remaining budget, already paid.
 - Paid and open expense totals, upcoming events and tasks.
 - Quick actions: upload a document (also via camera), create a task or cost item.
@@ -16,6 +19,7 @@ Admins can export and restore a complete database-and-documents backup from Sett
 - Edit the shared project's name, address, initial bank budget, and dates from the sidebar project card or the account menu (also on mobile). The Budget page opens the same editor. The overall budget is calculated from this initial amount plus additional funding.
 
 ## Budget
+
 - **Additional funding:** separately record received money from family or grants, with source, amount, date, and optional notes. The total budget includes these receipts without changing the initial bank budget or the bank loan. Multiple receipts per source, editing, and deletion are supported. Source cards show received funds, assigned expenses, and the remaining amount. Select the corresponding payment source when recording an expense; expenses are deducted once, not again when recording income. See [budget logic](budget.md).
 - **Trades** (e.g. roofing, electrical) with their own budget and color.
 - **Cost items** per trade with planned amounts.
@@ -24,6 +28,7 @@ Admins can export and restore a complete database-and-documents backup from Sett
 - **Payment sources** (e.g. Bank, Private, managed in Settings): each source decides whether its expenses are deducted from the total budget; the expenses page filters and totals by source.
 
 ## Quotes
+
 - Status: **Requested** → **Received** → **Accepted** / **Rejected**.
 - "Record request": company/contact, work, request date — without an amount. Shows "requested N days ago" and a count of open requests.
 - "Quote received" opens the request to add amount and quote date (never prefilled).
@@ -33,7 +38,9 @@ Admins can export and restore a complete database-and-documents backup from Sett
 - Linkable to a contact, trade, cost item, and document.
 
 ## Expenses
+
 All invoices and receipts, including contractor invoices, partial invoices, hardware store purchases, and fees, are recorded here. There is no separate invoice workflow.
+
 - **Create expense** opens one form, with or without a receipt. Optionally select an existing document or expand **Add document** to upload, photograph, or scan a receipt; recognized values prefill the editable fields. The same document options are available when editing an expense. No separate manual/upload workflow or assignment step is needed on this page.
 - Status: **open**, **paid**, **submitted**, **reimbursed**.
 - Optional invoice due date, planned/actual payment date, payment source, contact, and related quote. Choosing a quote prefills its company, contact, trade, and cost item, but never replaces the expense amount or dates. These assignments remain editable. Multiple expenses can reference the same quote for installments.
@@ -45,17 +52,22 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Existing invoices are migrated automatically to expenses at startup, preserving their amount, dates, payment state/source, and document/contact/cost-item links. The same conversion is applied when importing older backups.
 
 ## Documents
+
 - Upload images and PDFs (up to 100 MB), also directly from the camera.
 - **Scan document**: wherever documents or receipts are uploaded, scan paper with the camera or import photos. Bauplan detects the page edges, corrects perspective, and lets you adjust the four corners, rotate, and apply filters (color, grayscale, contrast, black & white). Scan up to 20 pages, reorder, retake, or remove them; the result is saved as one PDF through the normal upload. Processing runs entirely in the browser (OpenCV.js in a Web Worker); images are never sent to external services. The camera needs HTTPS (or localhost); image import works everywhere. Text recognition reads at most the first 10 pages.
+- **Live scan assistance:** analysis reuses a low-resolution canvas and transfers disposable frames to the worker, with only one detection in flight. Supported browsers schedule analysis against fresh video frames; others use a paced fallback. Only analysis resolution/cadence adapts on slower devices, not the saved scan's resolution. Candidate ranking uses edge support and geometry, and the outline is smoothed and expires when observations become stale.
+- **Automatic capture:** optional and off when opening the scanner. Enable the switch to photograph a fully visible, sufficiently large document after several consistent detections held for at least 1.2 seconds with adequate estimated detail. Movement, blur, weak edges, clipped pages, backgrounding, and old observations reset eligibility. The photo opens the existing crop/review step; nothing is automatically saved. The choice lasts for the current scanner session, including adding another page. Manual capture and image import remain available if detection fails. This is a browser-based heuristic, not Apple's native document scanner; feature support and actual camera performance must be checked on the target device.
 - Categories, tags, description; assign to trade, task, or cost item.
 - Responsive document rows keep filenames readable, put related records on separate lines, and place actions in a dedicated lower toolbar on smaller screens. Desktop keeps actions beside the document details; touch targets remain at least 44 × 44 CSS pixels.
 - After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, quote, or just store). Recognized invoices are filed as expenses. See [ocr.md](ocr.md).
 
 ## Tasks
+
 - Title, trade, phase, priority, status, due date, notes.
 - Open tasks with due dates appear in the calendar and the calendar subscription.
 
 ## Calendar
+
 - Clicking an entry opens its original record in a modal without leaving the calendar: tasks open the task editor, offer decision deadlines open the quote editor, and appointments open the appointment editor. This works in both month and list views; saving updates the original record rather than creating a separate calendar copy.
 - Existing appointments can also be deleted from their editor after confirmation, including when opened from the month view. The editor closes only after deletion succeeds.
 - Event types: **Event**, **Deadline**, **Work**.
@@ -69,14 +81,17 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   remains available: [calendar integration](calendar-feed.md).
 
 ## Collections
+
 Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, image, notes, tags, room, trade, price, favorite; filterable.
 
 ## Contacts
+
 - Person, company, trade, phone, email, website, address, notes; search and trade filter.
 - Each card lists linked quotes with status; selectable in quote and expense forms.
 - **Save to phone contacts** exports one contact as a UTF-8 vCard (`.vcf`), including person, company, phone, email, website, address, and notes. Open the file on Android or iPhone and confirm adding it in the device's contacts app; some browsers save it to Downloads first. No direct address-book access, automatic saving, or ongoing synchronization is involved. Export runs locally and also works with the cached workspace offline.
 
 ## Forms (throughout the app)
+
 - **Scan receipt** above each create form: photo or file → fields are prefilled, the document is saved and linked. Cancelling the form afterwards (Cancel, Escape or clicking the background) asks whether to delete the uploaded document or keep it in Documents; the same applies to the assign step right after "Upload document" with recognition, and to closing while the upload is still running.
 - **"+ New"** next to trade, cost item, and contact to create and select an entry directly.
 

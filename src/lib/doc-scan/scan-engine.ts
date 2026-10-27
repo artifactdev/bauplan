@@ -1,4 +1,4 @@
-import type { ProcessOptions, Raster } from "./cv-ops";
+import type { DocumentDetection, ProcessOptions, Raster } from "./cv-ops";
 import type { Quad } from "./geometry";
 
 export type ScanRequest =
@@ -8,7 +8,7 @@ export type ScanRequest =
 
 export type ScanResponse =
   | { id: number; ok: true; type: "init" }
-  | { id: number; ok: true; type: "detect"; quad: Quad | null }
+  | { id: number; ok: true; type: "detect"; detection: DocumentDetection | null }
   | { id: number; ok: true; type: "process"; image: Raster }
   | { id: number; ok: false; error: string };
 
@@ -44,11 +44,19 @@ function getWorker(): Worker {
   return w;
 }
 
-function call(request: DistributiveOmit<ScanRequest, "id">): Promise<ScanResponse> {
+function call(
+  request: DistributiveOmit<ScanRequest, "id">,
+  transfer: Transferable[] = [],
+): Promise<ScanResponse> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    getWorker().postMessage({ ...request, id });
+    try {
+      getWorker().postMessage({ ...request, id }, transfer);
+    } catch (error) {
+      pending.delete(id);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }
 
@@ -59,7 +67,15 @@ export async function warmUpScanner(): Promise<void> {
 
 export async function detectQuad(image: Raster): Promise<Quad | null> {
   const r = await call({ type: "detect", image });
-  return r.ok && r.type === "detect" ? r.quad : null;
+  if (!r.ok || r.type !== "detect") throw new Error("Unexpected scanner response");
+  return r.detection?.quad ?? null;
+}
+
+/** Live rasters are disposable; ownership moves to the worker instead of copying pixels. */
+export async function detectLiveFrame(image: Raster): Promise<DocumentDetection | null> {
+  const r = await call({ type: "detect", image }, [image.data.buffer]);
+  if (!r.ok || r.type !== "detect") throw new Error("Unexpected scanner response");
+  return r.detection;
 }
 
 export async function processScan(image: Raster, options: ProcessOptions): Promise<Raster> {

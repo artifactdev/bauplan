@@ -4,9 +4,12 @@ import { PDFDocument } from "pdf-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { Raster } from "@/lib/doc-scan/cv-ops";
-import { decodeImage, encodeJpeg } from "@/lib/doc-scan/image";
+import { decodeImage, encodeJpeg, grabVideoFrame } from "@/lib/doc-scan/image";
 import { detectQuad, disposeScanner, processScan } from "@/lib/doc-scan/scan-engine";
 import { DocumentScanner } from "./DocumentScanner";
+import { startLiveScanner, type LiveOutline } from "@/lib/doc-scan/live";
+
+vi.mock("@/lib/doc-scan/live", () => ({ startLiveScanner: vi.fn(() => vi.fn()) }));
 
 vi.mock("@/lib/doc-scan/scan-engine", () => ({
   warmUpScanner: vi.fn(async () => {}),
@@ -72,6 +75,54 @@ beforeEach(async () => {
 afterEach(() => cleanup());
 
 describe("DocumentScanner", () => {
+  async function camera() {
+    const stop = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop }] }) },
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.mocked(grabVideoFrame).mockReturnValue(raster(100, 150));
+    render(<DocumentScanner open onOpenChange={() => {}} onComplete={() => {}} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /take photo/i })).toBeEnabled());
+    await waitFor(() => expect(startLiveScanner).toHaveBeenCalled());
+    return stop;
+  }
+
+  it("defaults to manual capture and only auto-captures after opting in", async () => {
+    await camera();
+    const callbacks = () => vi.mocked(startLiveScanner).mock.calls.at(-1)![1];
+    const stable: LiveOutline = { quad: [...quad], width: 100, height: 150, stable: true };
+    act(() => callbacks().onOutline(stable));
+    expect(grabVideoFrame).not.toHaveBeenCalled();
+    const toggle = screen.getByRole("switch", { name: "Automatic capture" });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    act(() => {
+      callbacks().onOutline({ ...stable, stable: false });
+    });
+    expect(grabVideoFrame).not.toHaveBeenCalled();
+    act(() => {
+      callbacks().onOutline(stable);
+      callbacks().onOutline(stable);
+      fireEvent.click(screen.getByRole("button", { name: /take photo/i }));
+    });
+    await screen.findByRole("img", { name: "Result" });
+    expect(grabVideoFrame).toHaveBeenCalledTimes(1);
+    expect(detectQuad).toHaveBeenCalledTimes(1);
+    expect(processScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports failed live detection but keeps manual capture available", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await camera();
+    act(() => vi.mocked(startLiveScanner).mock.calls.at(-1)![1].onError(new Error("worker")));
+    expect(await screen.findByText(/automatic detection is unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Automatic capture" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /take photo/i }));
+    expect(await screen.findByRole("img", { name: "Result" })).toBeInTheDocument();
+    log.mockRestore();
+  });
   it("falls back to image import when no camera API is available", async () => {
     render(<DocumentScanner open onOpenChange={() => {}} onComplete={() => {}} />);
     expect(await screen.findByText(/camera is not available here/i)).toBeInTheDocument();

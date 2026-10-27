@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import type { Raster } from "@/lib/doc-scan/cv-ops";
 import {
-  DETECT_SIDE,
   MAX_SCAN_PAGES,
   MAX_SOURCE_PIXELS,
   MAX_SOURCE_SIDE,
@@ -33,6 +32,7 @@ import {
 import { decodeImage, encodeJpeg, grabVideoFrame } from "@/lib/doc-scan/image";
 import { createScanFile, scanTimestamp } from "@/lib/doc-scan/pdf";
 import { detectQuad, disposeScanner, processScan, warmUpScanner } from "@/lib/doc-scan/scan-engine";
+import { startLiveScanner, type LiveOutline } from "@/lib/doc-scan/live";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,7 +45,8 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
-
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 type Rendered = { blob: Blob; url: string; width: number; height: number };
 export type ScanPage = {
@@ -142,6 +143,7 @@ function ScannerDialog({ onOpenChange, onComplete }: DocumentScannerProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [automatic, setAutomatic] = useState(false);
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
   const draftRef = useRef(draft);
@@ -287,6 +289,8 @@ function ScannerDialog({ onOpenChange, onComplete }: DocumentScannerProps) {
           {step.kind === "capture" && (
             <CameraCapture
               busy={!!busy}
+              automatic={automatic}
+              onAutomaticChange={setAutomatic}
               pageCount={pages.length}
               onCapture={(pixels) => addPixels([pixels], step.replace)}
               onImport={(files) => importFiles(files, step.replace)}
@@ -371,12 +375,16 @@ const CAMERA_MESSAGES: Partial<Record<CameraState, string>> = {
 
 function CameraCapture({
   busy,
+  automatic,
+  onAutomaticChange,
   pageCount,
   onCapture,
   onImport,
   onCancel,
 }: {
   busy: boolean;
+  automatic: boolean;
+  onAutomaticChange: (enabled: boolean) => void;
   pageCount: number;
   onCapture: (pixels: Raster) => void;
   onImport: (files: File[]) => void;
@@ -386,13 +394,20 @@ function CameraCapture({
   const fileRef = useRef<HTMLInputElement>(null);
   const [camera, setCamera] = useState<CameraState>("starting");
   const [engineReady, setEngineReady] = useState(false);
-  const [live, setLive] = useState<{ quad: Quad; width: number; height: number } | null>(null);
+  const [engineFailed, setEngineFailed] = useState(false);
+  const [live, setLive] = useState<LiveOutline | null>(null);
+  const capturing = useRef(false);
+  const captureRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let cancelled = false;
     warmUpScanner().then(
       () => !cancelled && setEngineReady(true),
-      () => {},
+      (error) => {
+        if (cancelled) return;
+        console.error("Could not initialize document scanner", error);
+        setEngineFailed(true);
+      },
     );
     return () => {
       cancelled = true;
@@ -424,10 +439,16 @@ function CameraCapture({
         stream = s;
         if (!video) return;
         video.srcObject = s;
-        await video.play().catch(() => {});
-        setCamera("ready");
+        await video.play();
+        if (!cancelled) setCamera("ready");
       })
-      .catch((e) => !cancelled && setCamera(cameraError(e)));
+      .catch((e) => {
+        stream?.getTracks().forEach((t) => t.stop());
+        if (!cancelled) {
+          console.error("Could not start scanner camera", e);
+          setCamera(cameraError(e));
+        }
+      });
     return () => {
       cancelled = true;
       stream?.getTracks().forEach((t) => t.stop());
@@ -435,37 +456,39 @@ function CameraCapture({
     };
   }, []);
 
-  // Live contour preview on small frames; one detection at a time.
   useEffect(() => {
-    if (camera !== "ready" || !engineReady) return;
-    let stopped = false;
-    let running = false;
-    const timer = window.setInterval(async () => {
-      const video = videoRef.current;
-      if (running || stopped || !video || document.hidden) return;
-      const frame = grabVideoFrame(video, DETECT_SIDE);
-      if (!frame) return;
-      running = true;
-      try {
-        const quad = await detectQuad(frame);
-        if (!stopped) setLive(quad ? { quad, width: frame.width, height: frame.height } : null);
-      } catch {
-        if (!stopped) setLive(null);
-      } finally {
-        running = false;
-      }
-    }, 350);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [camera, engineReady]);
+    if (busy) return;
+    capturing.current = false;
+    const video = videoRef.current;
+    if (camera !== "ready" || !engineReady || engineFailed || !video) return;
+    return startLiveScanner(video, {
+      onOutline: (outline) => {
+        setLive(outline);
+        if (automatic && outline?.stable) captureRef.current();
+      },
+      onError: (error) => {
+        console.error("Document edge detection failed", error);
+        setEngineFailed(true);
+      },
+    });
+  }, [camera, engineReady, engineFailed, busy, automatic]);
 
   const capture = () => {
+    if (capturing.current || busy || camera !== "ready" || document.hidden) return;
     const video = videoRef.current;
-    const frame = video && grabVideoFrame(video, MAX_SOURCE_SIDE, MAX_SOURCE_PIXELS);
-    if (frame) onCapture(frame);
+    if (!video) return;
+    capturing.current = true;
+    try {
+      const frame = grabVideoFrame(video, MAX_SOURCE_SIDE, MAX_SOURCE_PIXELS);
+      if (!frame) throw new Error("No camera frame available");
+      onCapture(frame);
+    } catch (error) {
+      capturing.current = false;
+      console.error("Could not capture scanner frame", error);
+      setCamera("failed");
+    }
   };
+  captureRef.current = capture;
 
   const message = CAMERA_MESSAGES[camera];
   return (
@@ -505,18 +528,32 @@ function CameraCapture({
           </p>
         )}
         {camera === "ready" && (
-          <span
-            className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white"
-            aria-live="polite"
-          >
-            {!engineReady
-              ? tr("scanner.loading_engine")
-              : live
-                ? tr("scanner.document_detected")
-                : tr("scanner.fit_document")}
+          <span className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
+            {engineFailed
+              ? tr("scanner.engine_failed")
+              : !engineReady
+                ? tr("scanner.loading_engine")
+                : automatic && live
+                  ? tr(live.stable ? "scanner.auto_capturing" : "scanner.hold_steady")
+                  : live
+                    ? tr("scanner.document_detected")
+                    : tr("scanner.fit_document")}
           </span>
         )}
       </div>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="scanner-auto-capture"
+          checked={automatic}
+          disabled={busy || !engineReady || engineFailed}
+          onCheckedChange={onAutomaticChange}
+          aria-describedby="scanner-auto-hint"
+        />
+        <Label htmlFor="scanner-auto-capture">{tr("scanner.auto_capture")}</Label>
+      </div>
+      <p id="scanner-auto-hint" className="text-xs text-muted-foreground">
+        {tr("scanner.auto_hint")}
+      </p>
       <input
         ref={fileRef}
         type="file"
