@@ -20,6 +20,7 @@ export default defineConfig({
     }),
     nitro({
       preset: "node-server",
+      plugins: ["./src/server/plugins/database.ts"],
       // tesseract.js and pdf.js locate their worker scripts and WASM/core files at runtime
       // (__dirname, dynamic imports), so they must stay unbundled packages in .output/server/node_modules.
       traceDeps: ["tesseract.js*", "tesseract.js-core*", "pdfjs-dist*", "zxing-wasm*"],

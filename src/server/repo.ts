@@ -5,15 +5,13 @@ import {
   cleanRow,
   NUMERIC_COLS,
   TABLE_NAMES,
-  TABLES,
-  SYNC_OPERATIONS_DDL,
-  USER_APPEARANCE_DDL,
   USER_APPEARANCE_TABLE,
   type TableName,
   type Workspace,
 } from "@/lib/schema";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
-import { USER_NAVIGATION_DDL, USER_NAVIGATION_TABLE } from "@/lib/schema";
+import { USER_NAVIGATION_TABLE } from "@/lib/schema";
+import { migrateDatabase } from "./migrations";
 import {
   parseNavigation,
   navigationSchema,
@@ -106,43 +104,18 @@ function uploadsDir(path: typeof import("node:path")) {
 async function openDb(): Promise<SqliteDb> {
   const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
   const path = await nodeImport<typeof import("node:path")>("node:" + "path");
-  const { DatabaseSync } = await nodeImport<{ DatabaseSync: new (f: string) => SqliteDb }>(
-    "node:" + "sqlite",
-  );
+  const { DatabaseSync } = await nodeImport<{
+    DatabaseSync: new (f: string) => SqliteDb & { close(): void };
+  }>("node:" + "sqlite");
   fs.mkdirSync(dataDir(), { recursive: true });
   fs.mkdirSync(uploadsDir(path), { recursive: true });
   const db = new DatabaseSync(path.join(dataDir(), "renovierung.db"));
-  for (const t of TABLE_NAMES) {
-    const cols = (TABLES[t] as readonly string[])
-      .map((c) => `${c} ${NUMERIC_COLS.has(c) ? "REAL" : BOOL_COLS.has(c) ? "INTEGER" : "TEXT"}`)
-      .join(", ");
-    db.exec(
-      `CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, ${cols})`,
-    );
-    // Add columns introduced after the table was first created.
-    const have = new Set(
-      db
-        .prepare(`PRAGMA table_info(${t})`)
-        .all()
-        .map((r) => String(r["name"])),
-    );
-    for (const c of TABLES[t] as readonly string[]) {
-      if (!have.has(c))
-        db.exec(
-          `ALTER TABLE ${t} ADD COLUMN ${c} ${NUMERIC_COLS.has(c) ? "REAL" : BOOL_COLS.has(c) ? "INTEGER" : "TEXT"}`,
-        );
-    }
+  try {
+    migrateDatabase(db);
+  } catch (error) {
+    db.close();
+    throw error;
   }
-  db.exec(
-    `CREATE TABLE IF NOT EXISTS app_users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT, password_hash TEXT, role TEXT NOT NULL, oidc_sub TEXT UNIQUE, created_at TEXT NOT NULL)`,
-  );
-  db.exec(
-    `CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL)`,
-  );
-  db.exec(`CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)`);
-  db.exec(USER_APPEARANCE_DDL);
-  db.exec(USER_NAVIGATION_DDL);
-  db.exec(SYNC_OPERATIONS_DDL);
   return db;
 }
 

@@ -26,7 +26,7 @@ The service worker precaches the generic app shell and versioned static assets o
 Queued row changes include the complete row seen before editing. The server applies each operation in a SQLite `BEGIN IMMEDIATE` transaction only if the current row still matches that base snapshot. `app_sync_operations` makes retries idempotent. A mismatch is retained as a conflict rather than overwritten; the user can discard it or explicitly rebase the local version. Uploads use a stable document ID so retries after a lost response do not create duplicate document rows. Sign-out clears the account's snapshot, changes, and queued files; pending work requires an explicit discard confirmation.
 
 ## Data model (`src/lib/schema.ts`)
-The single source of truth for tables and columns. The SQLite schema is generated from it; missing columns are added at startup using `ALTER TABLE`.
+The single source of truth for workspace tables and columns. Before the production server listens, a Nitro startup plugin opens SQLite and runs `src/server/migrations.ts`. Workspace tables are created and missing columns added from the shared schema; ordered private-schema/data migrations are tracked with SQLite `PRAGMA user_version`. Schema changes, backfills, and the version update commit in one `BEGIN IMMEDIATE` transaction. Repository initialization uses the same migration gate for development and tests. A migration failure rolls back the transaction and prevents startup; databases with a newer version are rejected rather than downgraded.
 
 | Table | Purpose |
 | --- | --- |

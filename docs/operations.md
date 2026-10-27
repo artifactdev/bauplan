@@ -21,6 +21,16 @@ The Compose setup stores the database and OCR models in `./daten` and uploaded f
 
 Admins can also create a portable application backup in Settings and import it during setup or from Settings. It contains the database and uploaded documents, but not OCR language models; the archive includes sensitive user credentials and application settings. The in-app ZIP limit is 128 MB. See [backups and restore](backups.md) for expanded-size limits and restore behavior.
 
+### Updates and database migrations
+
+Updates migrate the persistent SQLite database automatically **before the production server starts listening**. No separate migration command is required. Deploy the new image/build and restart the app; do not run old and new app versions against the same database simultaneously.
+
+- New workspace tables/columns are derived from `src/lib/schema.ts` on every startup, including for existing installations that predate migration versioning. Existing rows and files are preserved; new columns start as `NULL`.
+- Private-schema changes and data backfills use consecutively numbered migrations in `src/server/migrations.ts`, recorded by SQLite `PRAGMA user_version`. Append a migration for a rename, type conversion, backfill, or other non-additive change; do not edit an already released migration. Keep the shared schema as the only workspace column registry.
+- All startup schema changes, pending migrations, and the version update run in one transaction. SQLite waits up to five seconds for another writer. Failure is logged, changes are rolled back, and startup fails instead of serving requests against a partially migrated database. Fix the cause and restart.
+- A database version newer than the running build supports is rejected. Rolling back application code is not a database downgrade mechanism.
+- Take a backup **before deploying an update**. For a rollback, restore a matching pre-update database and app version. Migrations do not create an automatic backup and cannot undo a successfully committed update.
+
 ### Reverse proxy
 Put HTTPS in front of the app (cookies are `secure` under `https`). For OIDC, enter the public address in Settings.
 Allow a 100 MiB upload plus multipart overhead (for example `client_max_body_size 110m;` in nginx) and OCR processing durations up to 180 seconds in the proxy.
