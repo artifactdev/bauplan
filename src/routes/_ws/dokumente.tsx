@@ -28,6 +28,13 @@ import { AssignDialog } from "@/components/app/AssignDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DocumentPreview } from "@/components/app/DocumentPreview";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_ws/dokumente")({
   head: () => ({
@@ -223,51 +230,43 @@ function DocsPage() {
                   >
                     <Eye className="h-4 w-4" /> {tr("documents.preview")}
                   </Button>
-                  <details className="relative lg:hidden">
-                    <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-accent [&::-webkit-details-marker]:hidden">
-                      {tr("shared.actions")}
-                    </summary>
-                    <div className="absolute right-0 top-full z-10 mt-1 flex min-w-44 flex-col rounded-md border bg-popover p-1 shadow-md">
-                      {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="justify-start"
-                          onClick={() => setAssignId(d.id)}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" className="lg:hidden">
+                        {tr("shared.actions")}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-44 lg:hidden">
+                      <DropdownMenuGroup>
+                        {(d.mime_type === "application/pdf" ||
+                          d.mime_type?.startsWith("image/")) && (
+                          <DropdownMenuItem className="min-h-11" onSelect={() => setAssignId(d.id)}>
+                            <ScanText /> {tr("documents.recognize_assign_content")}
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          className="min-h-11"
+                          onSelect={() => {
+                            void open(d, "download");
+                          }}
                         >
-                          <ScanText className="h-4 w-4" />{" "}
-                          {tr("documents.recognize_assign_content")}
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="justify-start"
-                        onClick={() => open(d, "download")}
-                      >
-                        <Download className="h-4 w-4" /> {tr("documents.download")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="justify-start"
-                        onClick={() => setEdit(d)}
-                      >
-                        <Pencil className="h-4 w-4" /> {tr("shared.edit")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="justify-start text-destructive"
-                        onClick={() =>
-                          confirm(tr("documents.delete_document", { name: d.name })) &&
-                          remove.mutate({ table: "documents", id: d.id })
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" /> {tr("shared.delete")}
-                      </Button>
-                    </div>
-                  </details>
+                          <Download /> {tr("documents.download")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="min-h-11" onSelect={() => setEdit(d)}>
+                          <Pencil /> {tr("shared.edit")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="min-h-11 text-destructive"
+                          onSelect={() => {
+                            if (confirm(tr("documents.delete_document", { name: d.name })))
+                              remove.mutate({ table: "documents", id: d.id });
+                          }}
+                        >
+                          <Trash2 /> {tr("shared.delete")}
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <div className="hidden items-center gap-1 lg:flex">
                     {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
                       <Button

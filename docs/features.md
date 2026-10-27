@@ -60,6 +60,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - **Automatic capture:** optional and off when opening the scanner. Enable the switch to photograph a fully visible, sufficiently large document after several consistent detections held for at least 1.2 seconds with adequate estimated detail. Movement, blur, weak edges, clipped pages, backgrounding, and old observations reset eligibility. The photo opens the existing crop/review step; nothing is automatically saved. The choice lasts for the current scanner session, including adding another page. Manual capture and image import remain available if detection fails. This is a browser-based heuristic, not Apple's native document scanner; feature support and actual camera performance must be checked on the target device.
 - Categories, tags, description; assign to trade, task, or cost item.
 - Responsive document rows keep filenames readable, put related records on separate lines, and place actions in a dedicated lower toolbar on smaller screens. Desktop keeps actions beside the document details; touch targets remain at least 44 × 44 CSS pixels.
+- The mobile document actions menu closes when selecting an action, clicking outside, or pressing Escape; cancelling the delete confirmation also leaves the menu closed.
 - After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, quote, or just store). Recognized invoices are filed as expenses. See [ocr.md](ocr.md).
 
 ## Tasks
