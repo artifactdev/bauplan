@@ -34,7 +34,7 @@ The repository includes [`unraid/bauplan.xml`](../unraid/bauplan.xml), which map
 
 ### 1. App image
 
-Unraid's Docker template pulls a container image; it does not build the repository's Dockerfile. Pushing a `v*` tag runs the `Publish Bauplan` GitHub Actions workflow (`.github/workflows/publish.yml`), which builds a `linux/amd64` image and publishes it as `ghcr.io/artifactdev/bauplan:<tag>` and `ghcr.io/artifactdev/bauplan:latest`:
+Unraid's Docker template pulls a container image; it does not build the repository's Dockerfile. Pushing a `v*` tag runs the `Publish Bauplan` GitHub Actions workflow (`.github/workflows/publish.yml`), which builds `linux/amd64` and `linux/arm64` images and publishes them as `ghcr.io/artifactdev/bauplan:<tag>` and `ghcr.io/artifactdev/bauplan:latest`:
 
 ```sh
 git tag v1.0.0
@@ -42,6 +42,8 @@ git push origin v1.0.0
 ```
 
 If the GHCR package is private, either make it public in the package settings on GitHub or configure registry credentials in Unraid before installing the template.
+
+The workflow sets `version` in `package.json` and `package-lock.json` from the tag (without the leading `v`) before building, so the version shown in the app sidebar matches the image tag. Tags must have the form `vX.Y.Z` (optionally with a pre-release suffix such as `v1.0.0-beta.1`). After a successful publish, a second job commits the new version to the default branch as `chore(release): X.Y.Z [skip ci]`; it skips the commit if the branch already has that version or a newer one. Pull before your next commit. If the default branch is protected, allow GitHub Actions to push to it, or the commit step fails (the image is published regardless).
 
 ### 2. Install the Bauplan template
 

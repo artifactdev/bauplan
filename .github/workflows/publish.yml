@@ -7,14 +7,32 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Set version from tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not a semantic version (expected vX.Y.Z)."
+            exit 1
+          fi
+          npm version "$version" --no-git-tag-version --allow-same-version
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v4
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -35,3 +53,40 @@ jobs:
           tags: |
             ghcr.io/artifactdev/bauplan:${{ github.ref_name }}
             ghcr.io/artifactdev/bauplan:latest
+
+  commit-version:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Commit version to default branch
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          current="$(node -p "require('./package.json').version")"
+          if [ "$current" = "$VERSION" ]; then
+            echo "package.json is already at $VERSION."
+            exit 0
+          fi
+          # Never move the version backwards, e.g. when tagging a hotfix for an older release.
+          if [ "$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
+            echo "Keeping $current on $BRANCH; tag version $VERSION is older."
+            exit 0
+          fi
+          npm version "$VERSION" --no-git-tag-version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): $VERSION [skip ci]"
+          for attempt in 1 2 3; do
+            git push origin "HEAD:$BRANCH" && exit 0
+            git pull --rebase origin "$BRANCH"
+          done
+          echo "::error::Could not push the version commit to $BRANCH."
+          exit 1
