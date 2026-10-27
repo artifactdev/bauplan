@@ -560,5 +560,10 @@
   "tasks.plan_tick_off_renovation": "Plan and tick off your renovation tasks.",
   "tasks.status": "By status",
   "tasks.tasks_bauplan": "Tasks – Bauplan",
-  "tasks.trade": "By trade"
+  "tasks.trade": "By trade",
+  "settings.change_password": "Change password",
+  "settings.current_password": "Current password",
+  "settings.new_password_min_8": "New password (min. 8 characters)",
+  "settings.no_local_password": "You currently sign in with OIDC only. You can also set a local password here.",
+  "settings.current_password_wrong": "The current password is incorrect."
 }

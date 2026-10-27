@@ -12,13 +12,20 @@ describe("passwords", () => {
 describe("OIDC login", () => {
   const member = { id: "u1", role: "member" as const, oidc_sub: null };
   it("unknown person gets a pending account", () => {
-    expect(decideOidcLogin(undefined, undefined, true)).toEqual({ action: "create-pending" });
+    expect(decideOidcLogin(undefined, undefined)).toEqual({ action: "create-pending" });
   });
-  it("unverified e-mail is never linked to an existing account", () => {
-    expect(decideOidcLogin(undefined, member, false)).toEqual({ action: "create-pending" });
+  it("known subject logs in", () => {
+    expect(decideOidcLogin({ ...member, oidc_sub: "s1" }, member)).toEqual({ action: "login", id: "u1" });
   });
-  it("verified e-mail links to the existing account", () => {
-    expect(decideOidcLogin(undefined, member, true)).toEqual({ action: "link", id: "u1" });
+  it("matching e-mail links to the existing account", () => {
+    expect(decideOidcLogin(undefined, member)).toEqual({ action: "link", id: "u1" });
+  });
+  it("matching e-mail relinks an account bound to an older subject", () => {
+    expect(decideOidcLogin(undefined, { ...member, oidc_sub: "old" })).toEqual({ action: "link", id: "u1" });
+  });
+  it("matching e-mail replaces a pending duplicate from an earlier login", () => {
+    const pending = { id: "p1", role: "pending" as const, oidc_sub: "s1" };
+    expect(decideOidcLogin(pending, member)).toEqual({ action: "link", id: "u1", replaces: "p1" });
   });
 });
 

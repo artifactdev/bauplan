@@ -27,7 +27,7 @@ Expenses count as money spent; "reimbursed" does not change the budget (shown se
 Household members work together. All members see all data; roles are admin/member/pending, kept in a separate table (protection against privilege escalation).
 
 ### 8. Initial setup instead of open registration
-With no account, the app always starts setup and creates the admin; admins create further accounts. New OIDC accounts await approval unless a verified email matches an existing account.
+With no account, the app always starts setup and creates the admin; admins create further accounts. OIDC sign-ins are matched to existing accounts by subject, then by email (the configured provider is trusted for email addresses); only unknown people get a new account that awaits approval.
 
 ### 9. Optional OIDC implemented in-house
 For Pocket ID and compatible providers, without extra dependencies: Authorization Code + PKCE with discovery. Password authentication remains local and OIDC is disabled unless explicitly configured.

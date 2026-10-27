@@ -48,15 +48,20 @@ type Known = { id: string; role: Role; oidc_sub: string | null } | undefined;
 
 /**
  * Decides what an OIDC login does. Existing accounts are matched by subject
- * first, then by verified e-mail (and linked). Unknown people get a pending
- * account that an admin must approve before they can see any data.
+ * first, then by e-mail (and linked, replacing an older subject). The provider
+ * is trusted for e-mail addresses because it is configured by the admin.
+ * Unknown people get a pending account that an admin must approve before they
+ * can see any data.
  */
-export function decideOidcLogin(bySub: Known, byEmail: Known, emailVerified: boolean):
+export function decideOidcLogin(bySub: Known, byEmail: Known):
   | { action: "login"; id: string }
-  | { action: "link"; id: string }
+  | { action: "link"; id: string; replaces?: string }
   | { action: "create-pending" } {
+  // A pending duplicate from an earlier unmatched login gives way to the real account.
+  if (bySub && byEmail && bySub.id !== byEmail.id && bySub.role === "pending")
+    return { action: "link", id: byEmail.id, replaces: bySub.id };
   if (bySub) return { action: "login", id: bySub.id };
-  if (byEmail && emailVerified && !byEmail.oidc_sub) return { action: "link", id: byEmail.id };
+  if (byEmail) return { action: "link", id: byEmail.id };
   return { action: "create-pending" };
 }
 

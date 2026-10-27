@@ -116,6 +116,31 @@ export async function adminCount() {
   );
 }
 
+export async function hasPassword(id: string) {
+  const db = await getSqliteDb();
+  return !!db.prepare("SELECT password_hash FROM app_users WHERE id = ?").get(id)?.["password_hash"];
+}
+
+/** Changes the signed-in user's password and ends their other sessions. */
+export async function changeOwnPassword(
+  id: string,
+  current: string,
+  next: string,
+  keepToken: string | undefined,
+) {
+  const db = await getSqliteDb();
+  const stored = db.prepare("SELECT password_hash FROM app_users WHERE id = ?").get(id)?.[
+    "password_hash"
+  ] as string | null | undefined;
+  if (stored && !(await verifyPassword(current, stored)))
+    throw new Error("Das aktuelle Passwort ist falsch.");
+  db.prepare("UPDATE app_users SET password_hash = ? WHERE id = ?").run(await hashPassword(next), id);
+  db.prepare("DELETE FROM app_sessions WHERE user_id = ? AND token_hash != ?").run(
+    id,
+    keepToken ? await sha256(keepToken) : "",
+  );
+}
+
 export async function checkPassword(email: string, password: string): Promise<LocalUser | null> {
   const db = await getSqliteDb();
   const row = db
@@ -234,10 +259,11 @@ export async function upsertOidcUser(info: {
     ? (db.prepare(`SELECT ${COLS} FROM app_users WHERE email = ?`).get(email) as
         LocalUser | undefined)
     : undefined;
-  const d = decideOidcLogin(bySub, byEmail, info.email_verified !== false);
+  const d = decideOidcLogin(bySub, byEmail);
   let id: string;
   if (d.action === "login") id = d.id;
   else if (d.action === "link") {
+    if (d.replaces) await deleteUser(d.replaces);
     db.prepare("UPDATE app_users SET oidc_sub = ? WHERE id = ?").run(info.sub, d.id);
     id = d.id;
   } else {

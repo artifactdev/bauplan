@@ -67,6 +67,7 @@ export const legacyUiKeys: Readonly<Record<string, string>> = {
   "Die Uploads überschreiten die Backup-Größe.": "shared.uploaded_files_exceed_backup",
   "Diese Backup-Version wird von dieser Bauplan-Version nicht unterstützt.": "shared.backup_version_not_supported",
   "Do": "calendar.thu",
+  "Das aktuelle Passwort ist falsch.": "settings.current_password_wrong",
   "Dokument": "shared.document",
   "E-Mail oder Passwort falsch": "shared.wrong_email_password",
   "Effektiver Jahreszins (%)": "credit_calculator.effective_annual_rate",

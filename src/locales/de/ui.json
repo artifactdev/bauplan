@@ -560,5 +560,10 @@
   "tasks.plan_tick_off_renovation": "Aufgaben deiner Renovierung planen und abhaken.",
   "tasks.status": "Nach Status",
   "tasks.tasks_bauplan": "Aufgaben – Bauplan",
-  "tasks.trade": "Nach Gewerk"
+  "tasks.trade": "Nach Gewerk",
+  "settings.change_password": "Passwort ändern",
+  "settings.current_password": "Aktuelles Passwort",
+  "settings.new_password_min_8": "Neues Passwort (mind. 8 Zeichen)",
+  "settings.no_local_password": "Du meldest dich bisher nur per OIDC an. Hier kannst du zusätzlich ein lokales Passwort festlegen.",
+  "settings.current_password_wrong": "Das aktuelle Passwort ist falsch."
 }

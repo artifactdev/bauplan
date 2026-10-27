@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  createManagedUser, deleteManagedUser, getCalendarFeed, setCalendarFeed, getOidcAdmin, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
+  changeOwnPassword, createManagedUser, deleteManagedUser, getCalendarFeed, setCalendarFeed, getOidcAdmin, getOwnPasswordState, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
 } from "@/lib/auth.functions";
 import { importBackup } from "@/lib/data.functions";
 import { signOut } from "./route";
@@ -69,6 +69,7 @@ function SettingsPage() {
               <p className="mb-3 text-xs text-muted-foreground">{auth.user?.email} · {tr(ROLE_LABEL[auth.user?.role ?? "member"])}</p>
               <Button variant="outline" onClick={() => signOut()}><LogOut className="h-4 w-4" /> {tr("shared.sign_out")}</Button>
             </Panel>
+            <PasswordPanel />
             <Panel title={tr("settings.language")}>
               <LanguageSelect />
               <p className="mt-2 text-xs text-muted-foreground">{tr("settings.language_saved_browser")}</p>
@@ -226,6 +227,54 @@ function CalendarFeedPanel() {
       ) : (
         <Button onClick={() => set.mutate("create")} disabled={set.isPending || feed.isLoading}><CalendarDays className="h-4 w-4" /> {tr("settings.generate_link")}</Button>
       )}
+    </Panel>
+  );
+}
+
+function PasswordPanel() {
+  const qc = useQueryClient();
+  const state = useQuery({ queryKey: ["own-password"], queryFn: () => getOwnPasswordState() });
+  const [form, setForm] = useState({ current: "", password: "", repeat: "" });
+  const save = useMutation({
+    mutationFn: () => changeOwnPassword({ data: { current: form.current, password: form.password } }),
+    onSuccess: () => {
+      toast.success(tr("settings.password_changed"));
+      setForm({ current: "", password: "", repeat: "" });
+      qc.invalidateQueries({ queryKey: ["own-password"] });
+    },
+    onError: (e: Error) => toast.error(tr(e.message)),
+  });
+  if (!state.data) return null;
+  const hasPassword = state.data.hasPassword;
+  return (
+    <Panel title={tr("settings.change_password")}>
+      {!hasPassword && <p className="mb-3 text-sm text-muted-foreground">{tr("settings.no_local_password")}</p>}
+      <form
+        className="grid gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (form.password !== form.repeat) { toast.error(tr("setup.passwords_not_match")); return; }
+          save.mutate();
+        }}
+      >
+        {hasPassword && (
+          <div className="grid gap-1.5">
+            <Label htmlFor="pw-current">{tr("settings.current_password")}</Label>
+            <Input id="pw-current" type="password" autoComplete="current-password" required value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} />
+          </div>
+        )}
+        <div className="grid gap-1.5">
+          <Label htmlFor="pw-new">{tr("settings.new_password_min_8")}</Label>
+          <Input id="pw-new" type="password" autoComplete="new-password" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="pw-repeat">{tr("setup.repeat_password")}</Label>
+          <Input id="pw-repeat" type="password" autoComplete="new-password" required minLength={8} value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value })} />
+        </div>
+        <Button type="submit" variant="outline" className="justify-self-start" disabled={save.isPending}>
+          <KeyRound className="h-4 w-4" /> {tr("settings.change_password")}
+        </Button>
+      </form>
     </Panel>
   );
 }

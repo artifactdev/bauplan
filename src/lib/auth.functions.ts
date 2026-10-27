@@ -68,6 +68,29 @@ export const logoutLocal = createServerFn({ method: "POST" }).handler(async () =
   return { ok: true };
 });
 
+async function requireUser() {
+  const la = await import("@/server/local-auth");
+  const u = await la.userFromToken(getCookie(SESSION));
+  if (!u) throw new Error("Nicht angemeldet");
+  return u;
+}
+
+/** Whether the signed-in user already has a local password (OIDC-only accounts do not). */
+export const getOwnPasswordState = createServerFn().handler(async (): Promise<{ hasPassword: boolean }> => {
+  const u = await requireUser();
+  const la = await import("@/server/local-auth");
+  return { hasPassword: await la.hasPassword(u.id) };
+});
+
+export const changeOwnPassword = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ current: z.string().max(200), password: z.string().min(8).max(200) }).parse(d))
+  .handler(async ({ data }) => {
+    const u = await requireUser();
+    const la = await import("@/server/local-auth");
+    await la.changeOwnPassword(u.id, data.current, data.password, getCookie(SESSION));
+    return { ok: true };
+  });
+
 /* --------------------------- admin: users --------------------------- */
 
 async function requireAdmin() {

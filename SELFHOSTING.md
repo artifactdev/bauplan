@@ -23,6 +23,6 @@ On first launch, the setup page creates the admin account. The admin can add use
 
 ## Optional OIDC (e.g. Pocket ID)
 
-Local email/password authentication works without an external service. To enable OIDC, enter the issuer, client ID, and secret under **Settings → Sign in with OIDC**. Register `https://<your-address>/api/oidc/callback` as the callback URL with the provider. Behind a reverse proxy, also enter the public app address. First-time OIDC users need admin approval unless their verified email matches an existing account.
+Local email/password authentication works without an external service. To enable OIDC, enter the issuer, client ID, and secret under **Settings → Sign in with OIDC**. Register `https://<your-address>/api/oidc/callback` as the callback URL with the provider. Behind a reverse proxy, also enter the public app address. OIDC sign-ins are linked to an existing account with the same email address; only first-time users without a matching account need admin approval. Users can change their own local password under **Settings → Personal → Account**.
 
 OIDC requires outbound access to the provider when enabled. For a fully local setup, leave it disabled. Docker requires network access when pulling base images and downloading build dependencies; the running app does not require cloud services. Downloading OCR language models requires outbound HTTPS access to jsDelivr; no document content is sent.
