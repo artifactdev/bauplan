@@ -63,6 +63,12 @@ export type OcrRecognition = {
   pages: { page: number; text: string }[] | null;
   tables: null;
   warnings: string[];
+  /** Decoded QR code payloads (TSE receipt code, GiroCode). */
+  codes: string[];
+  /** E-invoice XML embedded in a PDF (ZUGFeRD/Factur-X). */
+  xml: string[];
+  /** Text of a second OCR pass (single-block layout) when the first pass found no reliable total. */
+  alternates: string[];
 };
 
 export type OcrModelStatus = {

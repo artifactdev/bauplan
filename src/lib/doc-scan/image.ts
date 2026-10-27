@@ -15,8 +15,9 @@ function drawToRaster(
   width: number,
   height: number,
   maxSide: number,
+  maxPixels: number,
 ): Raster {
-  const scale = fitScale(width, height, maxSide);
+  const scale = fitScale(width, height, maxSide, maxPixels);
   const w = Math.max(1, Math.round(width * scale));
   const h = Math.max(1, Math.round(height * scale));
   const { ctx } = canvas2d(w, h);
@@ -24,19 +25,19 @@ function drawToRaster(
   return ctx.getImageData(0, 0, w, h);
 }
 
-/** Decodes an image file (respecting EXIF orientation) and downscales it to maxSide. */
-export async function decodeImage(blob: Blob, maxSide: number): Promise<Raster> {
+/** Decodes an image file (respecting EXIF orientation) and downscales it to maxSide / maxPixels. */
+export async function decodeImage(blob: Blob, maxSide: number, maxPixels = Infinity): Promise<Raster> {
   const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
   try {
-    return drawToRaster(bitmap, bitmap.width, bitmap.height, maxSide);
+    return drawToRaster(bitmap, bitmap.width, bitmap.height, maxSide, maxPixels);
   } finally {
     bitmap.close();
   }
 }
 
-export function grabVideoFrame(video: HTMLVideoElement, maxSide: number): Raster | null {
+export function grabVideoFrame(video: HTMLVideoElement, maxSide: number, maxPixels = Infinity): Raster | null {
   if (!video.videoWidth || !video.videoHeight) return null;
-  return drawToRaster(video, video.videoWidth, video.videoHeight, maxSide);
+  return drawToRaster(video, video.videoWidth, video.videoHeight, maxSide, maxPixels);
 }
 
 export async function encodeJpeg(image: Raster, quality = 0.85): Promise<Blob> {

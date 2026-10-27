@@ -20,6 +20,7 @@ import type { Raster } from "@/lib/doc-scan/cv-ops";
 import {
   DETECT_SIDE,
   MAX_SCAN_PAGES,
+  MAX_SOURCE_PIXELS,
   MAX_SOURCE_SIDE,
   SCAN_FILTERS,
   fullQuad,
@@ -78,7 +79,7 @@ function releaseUnshared(page: ScanPage | undefined, keep: ScanPage | undefined)
 }
 
 async function render(page: Omit<ScanPage, "result">, pixels?: Raster): Promise<Rendered> {
-  const image = pixels ?? (await decodeImage(page.source, MAX_SOURCE_SIDE));
+  const image = pixels ?? (await decodeImage(page.source, MAX_SOURCE_SIDE, MAX_SOURCE_PIXELS));
   const out = await processScan(image, {
     quad: page.quad,
     rotation: page.rotation,
@@ -198,7 +199,7 @@ function ScannerDialog({ onOpenChange, onComplete }: DocumentScannerProps) {
     setBusy(tr("scanner.processing"));
     try {
       for (const file of files.slice(0, Math.max(1, room)))
-        images.push(await decodeImage(file, MAX_SOURCE_SIDE));
+        images.push(await decodeImage(file, MAX_SOURCE_SIDE, MAX_SOURCE_PIXELS));
     } catch {
       setBusy(null);
       setError(tr("scanner.image_failed"));
@@ -462,7 +463,7 @@ function CameraCapture({
 
   const capture = () => {
     const video = videoRef.current;
-    const frame = video && grabVideoFrame(video, MAX_SOURCE_SIDE);
+    const frame = video && grabVideoFrame(video, MAX_SOURCE_SIDE, MAX_SOURCE_PIXELS);
     if (frame) onCapture(frame);
   };
 

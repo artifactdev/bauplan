@@ -58,3 +58,14 @@ Edge detection, perspective correction, and filters run locally with OpenCV.js i
 
 ### 16. Internationalization with i18next, German as default
 The interface supports German and English via JSON language files (`src/locales/<lang>/<namespace>.json`). The language is chosen during setup and in Settings and stored per browser. Amounts remain in euros; number/date formats follow the language. Documentation is written in English.
+
+### 20. Field extraction: machine-readable data first, then cross-checked rules
+Receipts and invoices increasingly carry exact data: the TSE QR code on German receipts, GiroCodes on invoices, and ZUGFeRD/XRechnung XML in PDFs. These are read first. When none is present, the OCR text is used, and the total is the candidate that other numbers on the page confirm best: repeated payment lines, net + VAT, VAT-rate math, and given − change. The label in front of a number alone is not enough, because OCR often misreads a single digit.
+
+On real documents:
+
+- A second Tesseract pass with PSM 6 (single block) read the total correctly where automatic layout misread it, so it runs only when no total is confirmed.
+- Raising `user_defined_dpi` to 300 made amounts worse.
+- 2× upscaling and Otsu binarisation brought no consistent gain and cost time.
+
+The scanner keeps up to 6 MP instead of a 2400 px long side, so narrow receipts stay wide enough to read. Everything stays local and rule-based (no AI); QR decoding uses the bundled `zxing-wasm` WebAssembly module.

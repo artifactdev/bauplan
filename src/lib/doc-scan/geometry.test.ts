@@ -76,6 +76,13 @@ describe("doc-scan geometry", () => {
     expect(fitScale(800, 600, 2000)).toBe(1);
   });
 
+  it("caps the pixel area so narrow receipts keep their width", () => {
+    expect(fitScale(4000, 3000, 4096, 3_000_000)).toBeCloseTo(Math.sqrt(0.25));
+    const receipt = fitScale(1500, 4800, 4096, 6_000_000);
+    expect(1500 * receipt).toBeGreaterThan(1200); // was 750 with the old 2400 px long-side cap
+    expect(1500 * 4800 * receipt ** 2).toBeLessThanOrEqual(6_000_000 + 1);
+  });
+
   it("rotates in quarter turns both ways", () => {
     expect(nextRotation(0)).toBe(90);
     expect(nextRotation(270)).toBe(0);

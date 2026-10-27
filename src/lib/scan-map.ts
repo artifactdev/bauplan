@@ -23,9 +23,9 @@ export function mapExtraction(
   const raw: Record<string, unknown> = (() => {
     switch (target) {
       case "offer":
-        return { contractor: ex?.vendor, title, amount: ex?.amount, offer_date: ex?.date, trade_id: tradeId, notes: ex?.summary };
+        return { contractor: ex?.vendor, contact_id: ex?.contact_id, title, amount: ex?.amount, offer_date: ex?.date, trade_id: tradeId, notes: ex?.summary };
       case "invoice":
-        return { contractor: ex?.vendor, title, amount: ex?.amount, invoice_date: ex?.date, due_date: ex?.due_date, trade_id: tradeId };
+        return { contractor: ex?.vendor, contact_id: ex?.contact_id, title, amount: ex?.amount, invoice_date: ex?.date, due_date: ex?.due_date, trade_id: tradeId };
       case "expense":
         return { title, vendor: ex?.vendor, amount: ex?.amount, expense_date: ex?.date, category: ex?.expense_category, trade_id: tradeId, notes: ex?.summary };
       case "task":

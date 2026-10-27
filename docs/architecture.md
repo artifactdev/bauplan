@@ -70,6 +70,7 @@ OCR settings are private `app_settings` data, never included in the Workspace. A
 | `src/lib/events.ts` | Multi-day events, validation, labels |
 | `src/lib/ics.ts` | iCal generation |
 | `src/lib/ocr-parse.ts` / `scan-map.ts` | Rule-based recognition / form mapping |
+| `src/lib/ocr-structured.ts` | TSE receipt QR, GiroCode, IBAN/VAT ID and e-invoice XML parsers |
 | `src/lib/ocr.ts` / `src/server/ocr/` | OCR contracts, private settings, encryption, preflight, provider adapters |
 | `src/components/app/EntityDialog.tsx` | Generic form (fields, scan, "+ New", optional date fields) |
 | `src/components/app/InvoicesTable.tsx` | Invoice table with filters, totals, sorting |

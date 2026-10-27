@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
@@ -22,7 +23,7 @@ const tesseract = vi.hoisted(() => ({
 vi.mock("tesseract.js", () => ({
   createWorker: tesseract.createWorker,
   OEM: { LSTM_ONLY: 1 },
-  PSM: { AUTO: "3" },
+  PSM: { AUTO: "3", SINGLE_BLOCK: "6" },
 }));
 
 const enabledSettings = { enabled: true, language: "de+en" as const };
@@ -70,6 +71,16 @@ async function mixedPdf(): Promise<Uint8Array> {
   const image = await pdf.embedPng(connectionSample());
   page.drawImage(image, { x: 0, y: 0, width: 600, height: 130 });
   return pdf.save();
+}
+
+/** PNG with a QR code, generated locally by the ZXing writer. */
+async function qrPng(text: string): Promise<Uint8Array> {
+  const writer = await import("zxing-wasm/writer");
+  const file = await readFile(createRequire(import.meta.url).resolve("zxing-wasm/writer/zxing_writer.wasm"));
+  const wasmBinary = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
+  await writer.prepareZXingModule({ overrides: { wasmBinary }, fireImmediately: true });
+  const { image } = await writer.writeBarcode(text, { format: "QRCode", scale: 6 });
+  return new Uint8Array(await image!.arrayBuffer());
 }
 
 beforeEach(async () => {
@@ -255,6 +266,43 @@ describe("local image and PDF recognition", () => {
     });
     expect(result.pages).toEqual([{ page: 1, text: "BAUPLAN 12345" }]);
     expect(result.text).toBe("BAUPLAN 12345");
+  });
+
+  it("reads the image a second time as one text block only when asked", async () => {
+    await installModels();
+    tesseract.recognize.mockResolvedValueOnce({ data: { text: "Summe 2B,9B" } }).mockResolvedValueOnce({ data: { text: "Summe 28,98" } });
+    const secondPass = vi.fn(() => true);
+    const result = await processDocument(config, sample, { secondPass });
+    expect(secondPass).toHaveBeenCalledWith("Summe 2B,9B");
+    expect(result).toMatchObject({ text: "Summe 2B,9B", alternates: ["Summe 28,98"] });
+    expect(tesseract.setParameters.mock.calls.map(([p]) => p.tessedit_pageseg_mode).slice(-2)).toEqual(["6", "3"]);
+
+    tesseract.recognize.mockClear();
+    const plain = await processDocument(config, sample, { secondPass: () => false });
+    expect(plain.alternates).toEqual([]);
+    expect(tesseract.recognize).toHaveBeenCalledTimes(1);
+  });
+
+  it("decodes QR codes in images locally", async () => {
+    await installModels();
+    const payload = "BCD\n002\n1\nSCT\n\nMalermeister Weber\nDE89370400440532013000\nEUR2380.00";
+    const bytes = await qrPng(payload);
+    const fetch = vi.spyOn(globalThis, "fetch");
+    const result = await processDocument(config, { bytes, mime: "image/png", name: "qr.png" });
+    expect(result.codes).toEqual([payload]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns XML attachments of e-invoice PDFs", async () => {
+    await installModels();
+    const pdf = await PDFDocument.load(await textPdf());
+    await pdf.attach(new TextEncoder().encode("<Invoice><IssueDate>2026-02-03</IssueDate></Invoice>"), "xrechnung.xml", {
+      mimeType: "application/xml",
+    });
+    await pdf.attach(new TextEncoder().encode("ignored"), "notes.txt", { mimeType: "text/plain" });
+    const result = await processDocument(config, { bytes: await pdf.save(), mime: "application/pdf", name: "e.pdf" });
+    expect(result.xml).toEqual(["<Invoice><IssueDate>2026-02-03</IssueDate></Invoice>"]);
+    expect(result.codes).toEqual([]);
   });
 
   it("limits concurrent recognition and releases slots when jobs finish", async () => {

@@ -6,7 +6,12 @@ export type ScanFilter = "color" | "gray" | "contrast" | "bw";
 
 export const SCAN_FILTERS: readonly ScanFilter[] = ["color", "gray", "contrast", "bw"];
 /** Longest image side kept in memory and processed; larger photos are downscaled. */
-export const MAX_SOURCE_SIDE = 2400;
+export const MAX_SOURCE_SIDE = 4096;
+/**
+ * Pixel budget for the kept image. Capping the area instead of only the long side keeps
+ * long, narrow receipts wide enough for OCR (a 1500×4800 receipt keeps 1280 px width instead of 750).
+ */
+export const MAX_SOURCE_PIXELS = 6_000_000;
 /** Longest side used for corner detection (speed over precision; corners are scaled back). */
 export const DETECT_SIDE = 640;
 export const MAX_SCAN_PAGES = 20;
@@ -84,9 +89,9 @@ export function warpSize(q: Quad): { width: number; height: number } {
   };
 }
 
-/** Scale factor that fits width × height into maxSide (never upscales). */
-export function fitScale(width: number, height: number, maxSide: number): number {
-  return Math.min(1, maxSide / Math.max(width, height));
+/** Scale factor that fits width × height into maxSide and maxPixels (never upscales). */
+export function fitScale(width: number, height: number, maxSide: number, maxPixels = Infinity): number {
+  return Math.min(1, maxSide / Math.max(width, height), Math.sqrt(maxPixels / (width * height)));
 }
 
 export function nextRotation(r: Rotation, direction: 1 | -1 = 1): Rotation {

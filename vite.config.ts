@@ -22,7 +22,7 @@ export default defineConfig({
       preset: "node-server",
       // tesseract.js and pdf.js locate their worker scripts and WASM/core files at runtime
       // (__dirname, dynamic imports), so they must stay unbundled packages in .output/server/node_modules.
-      traceDeps: ["tesseract.js*", "tesseract.js-core*", "pdfjs-dist*"],
+      traceDeps: ["tesseract.js*", "tesseract.js-core*", "pdfjs-dist*", "zxing-wasm*"],
       routeRules: {
         "/sw.js": { headers: { "cache-control": "no-cache" } },
         "/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },

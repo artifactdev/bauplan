@@ -11,6 +11,51 @@ OCR runs in-process on the Bauplan server with `tesseract.js`; no OCR service, h
 - Invalid, encrypted, oversized, too-large-page-count, timed-out, or incomplete documents produce explicit errors. Uploads remain available for manual processing.
 - Debugging: in dev mode (`npm run dev`) each recognition is logged to the browser console as a collapsed `[OCR] <file>` group with the extracted fields, errors, warnings and the raw recognized text. Production builds neither log nor send the raw text to the browser.
 
+## Field extraction
+
+`extractFromText` in `src/lib/ocr-parse.ts` fills document type, vendor, contact, amount, document date, due date, trade and expense category. Machine-readable data always wins over recognized text:
+
+| Field | Order of sources |
+| --- | --- |
+| Amount | e-invoice XML (amount due, else grand total) → TSE receipt QR (sum of gross per VAT rate) → GiroCode amount → scored OCR candidates |
+| Vendor | matched contact → e-invoice seller → GiroCode recipient → retail chain list → letterhead rules |
+| Document date | e-invoice issue date → TSE QR end time (German local date) → printed TSE start/stop time → labelled date (`Rechnungsdatum`, `Datum`) |
+| Due date | e-invoice due date → explicit `zahlbar bis` date → relative terms (`innerhalb 14 Tagen`, `30 Tage netto`, `sofort`) from the document date |
+
+Machine-readable sources (parsers in `src/lib/ocr-structured.ts`):
+
+- **QR codes**: decoded on the server with [`zxing-wasm`](https://github.com/Sec-ant/zxing-wasm) (MIT). The WASM binary is read from `node_modules`, never fetched. Images are decoded directly; scanned PDF pages are decoded from the rendered page. Text PDF pages are rendered only when they contain images. Decode errors are ignored.
+  - **TSE QR** on German receipts (KassenSichV/DSFinV-K: `V0;…;Kassenbeleg-V1;Beleg^…`): the gross total and the transaction time.
+  - **GiroCode** (EPC QR) on invoices: recipient, IBAN, amount.
+- **E-invoices**: XML attachments of ZUGFeRD/Factur-X PDFs (CII, including ZUGFeRD 1.0) and embedded XRechnung UBL. Uploading a plain `.xml` XRechnung file is not supported because uploads must be PDFs or images.
+
+**Total scoring.** Every amount gets the label in front of it on the same line, or from a short label-only line above it. Labels with several columns, such as `Netto MwSt Brutto`, map onto the amounts in the rows below. Typical OCR digit confusions inside amounts are repaired first (`O→0`, `S→5`, `B→8`, `l→1`). Candidates are weighted: `Rechnungsbetrag`/`zu zahlen`-style labels first, then `Brutto`, `Summe`/`Total`, and payment lines (`Kartenzahlung`, `Mastercard`, `Betrag`). Excluded: subtotals, discounts, net, VAT, `gegeben`/`Rückgeld`, `inkl. MwSt`, and unit-price columns.
+
+A candidate gains points when another source confirms it:
+
+- the same value is printed again;
+- net + VAT equals it;
+- the VAT amount matches 19 % or 7 % of it;
+- given − change equals it.
+
+Rows of a multi-rate VAT table are summed. A misread total such as `TOTAL 29,19` therefore loses against `Betrag 55,19`, `MASTERCARD 55,19` and `NETTO 46,38 + MWST 8,81`.
+
+**Second OCR pass.** When the first Tesseract pass (automatic layout, PSM 3) finds amounts but no confirmed total, the image is read again as one uniform block (PSM 6). For PDFs, this applies only to the last scanned page. Both texts are scored together, and agreement between them counts as confirmation. Tesseract normally splits a receipt's label column and amount column into separate blocks, and PSM 6 keeps each label next to its amount.
+
+**Vendor and contact.**
+
+- A known contact is matched by VAT ID, tax number or IBAN (from the contact's notes), by website or e-mail domain (public mail providers are ignored), by phone number, or by company or name. Ties produce no match. Lines from the recipient address block (`Familie`, `Herrn`, `Frau`, `An`, …) are never used to match a contact or name the vendor.
+- For offers and invoices, a matched contact is preselected in the form.
+- Without a contact match, the vendor is taken in this order:
+  1. a known retail chain;
+  2. a letterhead line with a legal form;
+  3. the first plausible letterhead line;
+  4. the sender line above the address window (`Firma · Straße · PLZ Ort`).
+  
+  A single-word letterhead name is combined with a nearby trade word, so `Krause` + `Dachdeckerei` becomes `Dachdeckerei Krause`. Letter-spaced headings are joined.
+
+**Test corpus.** `src/lib/ocr-fixtures/` contains anonymised real OCR output, with its original recognition errors, plus synthetic layouts. `ocr-fixtures.test.ts` checks type, vendor, amount and dates for every entry. Add a fixture whenever a real document is filled wrongly.
+
 ## Language models
 
 An administrator downloads German and/or English language models from **Settings → Text recognition (OCR)**. Downloads are an explicit action; neither setup nor document processing downloads model data automatically. The app retrieves only the pinned `@tesseract.js-data/deu@1.0.0` or `@tesseract.js-data/eng@1.0.0` `4.0.0_best_int` model from jsDelivr, validates the gzip data and size, and atomically stores it under `DATA_DIR/ocr-models/`.

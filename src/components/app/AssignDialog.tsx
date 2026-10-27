@@ -128,9 +128,9 @@ export function AssignDialog({
     if (target === "ausgabe")
       await create.mutateAsync({ table: "expenses", row: { ...base, title: v.title, vendor: v.vendor, amount: v.amount, expense_date: v.date, payment_date: v["payment_date"], category: v.category, status: v.status, budget_pot_id: v["budget_pot_id"] ?? null } });
     if (target === "rechnung")
-      await create.mutateAsync({ table: "invoices", row: { ...base, contractor: v.vendor, title: v.title, amount: v.amount, invoice_date: v.date, due_date: v.due_date, payment_date: v["payment_date"], paid: !!v.paid, budget_pot_id: v["budget_pot_id"] ?? null } });
+      await create.mutateAsync({ table: "invoices", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, invoice_date: v.date, due_date: v.due_date, payment_date: v["payment_date"], paid: !!v.paid, budget_pot_id: v["budget_pot_id"] ?? null } });
     if (target === "angebot")
-      await create.mutateAsync({ table: "offers", row: { ...base, contractor: v.vendor, title: v.title, amount: v.amount, offer_date: v.date, status: "received" } });
+      await create.mutateAsync({ table: "offers", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, offer_date: v.date, status: "received" } });
     const category = target === "ausgabe" ? (ex?.doc_type === "rechnung" ? "Rechnung" : "Beleg") : target === "rechnung" ? "Rechnung" : target === "angebot" ? "Angebot" : CATEGORY_FOR[ex?.doc_type ?? "sonstiges"];
     await update.mutateAsync({
       table: "documents",

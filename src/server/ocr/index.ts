@@ -1,5 +1,5 @@
 import { createCanvas } from "@napi-rs/canvas";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createWorker, OEM, PSM } from "tesseract.js";
 import {
   OCR_MAX_BYTES,
@@ -9,6 +9,7 @@ import {
   type OcrLanguage,
   type OcrRecognition,
 } from "@/lib/ocr";
+import { decodeQrCodes } from "./codes";
 import { OcrError } from "./errors";
 import { hasModels, modelDirectory } from "./models";
 import type { StoredOcrSettings } from "./config";
@@ -76,12 +77,25 @@ async function createOcrWorker(language: OcrLanguage) {
   return worker;
 }
 
-async function recognizeImage(
-  image: Buffer,
-  worker: Awaited<ReturnType<typeof createOcrWorker>>,
-): Promise<string> {
-  const result = await worker.recognize(image);
-  return result.data.text.trim();
+type OcrWorker = Awaited<ReturnType<typeof createOcrWorker>>;
+/** Decides whether a page's text should be read a second time with another layout mode. */
+export type SecondPass = (text: string) => boolean;
+type PageResult = { text: string; alternate: string | null };
+
+/**
+ * Reads an image with automatic layout analysis. If `secondPass` asks for it, the image is
+ * read again as one uniform block (PSM 6), which keeps receipt label/amount columns together.
+ */
+async function recognizeImage(image: Buffer, worker: OcrWorker, secondPass?: SecondPass): Promise<PageResult> {
+  const text = (await worker.recognize(image)).data.text.trim();
+  if (!text || !secondPass?.(text)) return { text, alternate: null };
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+  try {
+    const alternate = (await worker.recognize(image)).data.text.trim();
+    return { text, alternate: alternate || null };
+  } finally {
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+  }
 }
 
 function textFromContent(items: { str?: string; hasEOL?: boolean }[]): string {
@@ -91,13 +105,50 @@ function textFromContent(items: { str?: string; hasEOL?: boolean }[]): string {
     .trim();
 }
 
+type PdfDocument = Awaited<ReturnType<typeof openPdf>>["pdf"];
+type PdfPage = Awaited<ReturnType<PdfDocument["getPage"]>>;
+const IMAGE_OPS = new Set<number>([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageXObjectRepeat]);
+
+async function renderPage(page: PdfPage): Promise<Buffer> {
+  const viewport = page.getViewport({ scale: 1 });
+  const scale = Math.min(2, Math.sqrt(16_000_000 / (viewport.width * viewport.height)));
+  const scaled = page.getViewport({ scale });
+  const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
+  const context = canvas.getContext("2d");
+  await page.render({
+    canvas: canvas as unknown as Parameters<typeof page.render>[0]["canvas"],
+    canvasContext: context as unknown as Parameters<typeof page.render>[0]["canvasContext"],
+    viewport: scaled,
+  }).promise;
+  return canvas.encode("png");
+}
+
+/** XML attachments of a PDF, e.g. the ZUGFeRD/Factur-X invoice embedded in a PDF/A-3. */
+async function xmlAttachments(pdf: PdfDocument): Promise<string[]> {
+  try {
+    const attachments = await pdf.getAttachments();
+    const out: string[] = [];
+    for (const [id, attachment] of attachments ?? []) {
+      if (!/\.xml$/i.test(attachment.filename)) continue;
+      const content = attachment.content ?? (await pdf.getAttachmentContent(id));
+      if (content && content.length <= 5 * 1024 * 1024) out.push(new TextDecoder("utf-8").decode(content));
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 async function recognizePdf(
   bytes: Uint8Array,
-  worker: Awaited<ReturnType<typeof createOcrWorker>>,
-): Promise<{ text: string; pages: { page: number; text: string }[] }> {
+  worker: OcrWorker,
+  secondPass?: SecondPass,
+): Promise<{ text: string; pages: { page: number; text: string }[]; codes: string[]; xml: string[]; alternates: string[] }> {
   const { pdf, destroy } = await openPdf(bytes);
   try {
     const pages: { page: number; text: string }[] = [];
+    const codes: string[] = [];
+    const alternates: string[] = [];
     for (let number = 1; number <= pdf.numPages; number++) {
       const page = await pdf.getPage(number);
       const content = await page.getTextContent();
@@ -107,17 +158,16 @@ async function recognizePdf(
         ),
       );
       if (text.replace(/\s/g, "").length < 20) {
-        const viewport = page.getViewport({ scale: 1 });
-        const scale = Math.min(2, Math.sqrt(16_000_000 / (viewport.width * viewport.height)));
-        const scaled = page.getViewport({ scale });
-        const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
-        const context = canvas.getContext("2d");
-        await page.render({
-          canvas: canvas as unknown as Parameters<typeof page.render>[0]["canvas"],
-          canvasContext: context as unknown as Parameters<typeof page.render>[0]["canvasContext"],
-          viewport: scaled,
-        }).promise;
-        text = await recognizeImage(await canvas.encode("png"), worker);
+        const image = await renderPage(page);
+        codes.push(...(await decodeQrCodes(image)));
+        // Totals are usually on the last page; a second pass on every page would be slow.
+        const result = await recognizeImage(image, worker, number === pdf.numPages ? secondPass : undefined);
+        text = result.text;
+        if (result.alternate) alternates.push(result.alternate);
+      } else {
+        // Text PDFs can still carry a payment QR code (GiroCode) as an image.
+        const operators = await page.getOperatorList();
+        if (operators.fnArray.some((fn) => IMAGE_OPS.has(fn))) codes.push(...(await decodeQrCodes(await renderPage(page))));
       }
       pages.push({ page: number, text });
       page.cleanup();
@@ -128,6 +178,9 @@ async function recognizePdf(
         .filter(Boolean)
         .join("\n\n"),
       pages,
+      codes: [...new Set(codes)],
+      xml: await xmlAttachments(pdf),
+      alternates,
     };
   } finally {
     await destroy();
@@ -137,6 +190,7 @@ async function recognizePdf(
 export async function processDocument(
   config: StoredOcrSettings,
   input: { bytes: Uint8Array; mime: string; name: string },
+  options: { secondPass?: SecondPass } = {},
 ): Promise<OcrRecognition> {
   if (!config.settings.enabled) throw new OcrError("unconfigured");
   if (active >= 2) throw new OcrError("busy");
@@ -164,14 +218,24 @@ export async function processDocument(
         throw new OcrError("timeout");
       }
       if (pageCount !== null) {
-        const result = await recognizePdf(input.bytes, worker);
+        const result = await recognizePdf(input.bytes, worker, options.secondPass);
         if (result.pages.length !== pageCount) throw new OcrError("partial");
-        if (!result.text) throw new OcrError("emptyText");
+        if (!result.text && !result.xml.length) throw new OcrError("emptyText");
         return { provider: "tesseract", ...result, tables: null, warnings: [] };
       }
-      const text = await recognizeImage(Buffer.from(input.bytes), worker);
+      const codes = input.mime === "image/tiff" ? [] : await decodeQrCodes(input.bytes);
+      const { text, alternate } = await recognizeImage(Buffer.from(input.bytes), worker, options.secondPass);
       if (!text) throw new OcrError("emptyText");
-      return { provider: "tesseract", text, pages: null, tables: null, warnings: [] };
+      return {
+        provider: "tesseract",
+        text,
+        pages: null,
+        tables: null,
+        warnings: [],
+        codes,
+        xml: [],
+        alternates: alternate ? [alternate] : [],
+      };
     })();
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {

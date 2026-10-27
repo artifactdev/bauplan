@@ -24,6 +24,7 @@ const harness = vi.hoisted(() => {
           },
         ],
         trades: [],
+        contacts: [],
       })),
       readFile: vi.fn(async () => new Uint8Array([66, 77])),
     },
@@ -90,6 +91,9 @@ vi.mock("@/server/ocr", () => ({
     pages: null,
     tables: null,
     warnings: [],
+    codes: [],
+    xml: [],
+    alternates: [],
   })),
   ocrIsActive: () => false,
 }));
@@ -235,6 +239,9 @@ describe("OCR server-function authorization and orchestration", () => {
       pages: null,
       tables: null,
       warnings: [],
+      codes: [],
+      xml: [],
+      alternates: [],
     });
     expect(await testOcrSettings({ data: draft })).toMatchObject({
       data: null,
@@ -264,6 +271,7 @@ describe("OCR server-function authorization and orchestration", () => {
     expect(processDocument).toHaveBeenCalledWith(
       expect.objectContaining({ settings: draft.settings, version: 2 }),
       expect.objectContaining({ name: "test.bmp" }),
+      expect.objectContaining({ secondPass: expect.any(Function) }),
     );
   });
 });
