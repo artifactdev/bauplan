@@ -259,7 +259,7 @@ function Shell() {
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-sidebar px-4 md:px-8">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-sidebar/60 px-4 backdrop-blur-xl md:bg-sidebar md:px-8 md:backdrop-blur-none">
           <div className="min-w-0">
             <span className="flex items-center gap-2 font-semibold md:hidden">
               <img src="/app-icon.svg" alt="" className="h-6 w-6 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
@@ -410,8 +410,11 @@ function Shell() {
 
       <nav
         aria-label={t("navigation")}
-        style={{ gridTemplateColumns: `repeat(${primaryNav.length + 1}, minmax(0, 1fr))` }}
-        className="fixed inset-x-0 bottom-0 z-30 grid border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-3 z-30 grid rounded-xl border bg-card/60 shadow-card backdrop-blur-xl md:hidden"
+        style={{
+          gridTemplateColumns: `repeat(${primaryNav.length + 1}, minmax(0, 1fr))`,
+          bottom: "max(0.75rem, env(safe-area-inset-bottom))",
+        }}
       >
         {primaryNav.map((n) => (
           <Link
