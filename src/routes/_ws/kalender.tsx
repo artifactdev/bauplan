@@ -16,6 +16,7 @@ import { coversDay, eventEnd, rangeError, rangeLabel } from "@/lib/events";
 import { offerDeadlines } from "@/lib/offer-deadlines";
 import { QuickTask } from "@/components/app/quick-actions";
 import { OfferDialog } from "@/components/app/OfferDialog";
+import { taskRange } from "@/lib/tasks";
 
 export const Route = createFileRoute("/_ws/kalender")({
   head: () => ({
@@ -40,6 +41,7 @@ type Item = {
   trade_id: string | null;
   source: { type: "event" | "task" | "offer"; id: string };
   done?: boolean;
+  deadline?: string | null;
 };
 const KIND: Record<
   Item["kind"],
@@ -95,7 +97,10 @@ function CalendarPage() {
 
   usePushTarget(ws.events, (event) => {
     setDlg({ id: event.id, initial: { ...event } });
-    setCursor({ y: Number(event.event_date.slice(0, 4)), m: Number(event.event_date.slice(5, 7)) - 1 });
+    setCursor({
+      y: Number(event.event_date.slice(0, 4)),
+      m: Number(event.event_date.slice(5, 7)) - 1,
+    });
   });
   const items: Item[] = useMemo(
     () =>
@@ -111,20 +116,25 @@ function CalendarPage() {
           trade_id: e.trade_id,
           source: { type: "event" as const, id: e.id },
         })),
-        ...ws.tasks
-          .filter((t) => t.due_date)
-          .map((t) => ({
-            id: t.id,
-            title: t.title,
-            date: t.due_date!,
-            end: t.due_date!,
-            label: fmtDate(t.due_date!),
-            start_time: null,
-            kind: "aufgabe" as const,
-            trade_id: t.trade_id,
-            source: { type: "task" as const, id: t.id },
-            done: t.status === "erledigt",
-          })),
+        ...ws.tasks.flatMap((t) => {
+          const range = taskRange(t);
+          if (!range) return [];
+          return [
+            {
+              id: t.id,
+              title: t.title,
+              date: range.event_date,
+              end: range.end_date,
+              label: rangeLabel(range, fmtDate),
+              start_time: null,
+              kind: "aufgabe" as const,
+              trade_id: t.trade_id,
+              source: { type: "task" as const, id: t.id },
+              done: t.status === "erledigt",
+              deadline: t.due_date,
+            },
+          ];
+        }),
         ...offerDeadlines(ws.offers).map((e) => ({
           id: e.id,
           title: e.title,
@@ -135,6 +145,7 @@ function CalendarPage() {
           kind: e.kind,
           trade_id: e.trade_id,
           source: { type: "offer" as const, id: e.offer_id },
+          deadline: e.event_date,
         })),
       ].sort(
         (a, b) =>
@@ -157,7 +168,7 @@ function CalendarPage() {
     });
 
   const upcoming = items.filter((i) => i.end >= today && !i.done);
-  const overdue = items.filter((i) => i.date < today && i.source.type !== "event" && !i.done);
+  const overdue = items.filter((i) => i.deadline && i.deadline < today && !i.done);
 
   const editEvent = (id: string) => {
     const e = ws.events.find((x) => x.id === id);

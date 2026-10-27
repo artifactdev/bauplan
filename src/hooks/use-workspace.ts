@@ -26,6 +26,7 @@ import {
 } from "@/lib/offline-store";
 import { BOOL_COLS, cleanRow, TABLES, type TableName, type Workspace } from "@/lib/schema";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
+import { validateTaskDates } from "@/lib/tasks";
 
 const EMPTY: Workspace = {
   projects: [],
@@ -84,6 +85,7 @@ export function useMutations() {
   const create = useMutation({
     networkMode: "always",
     mutationFn: async (v: { table: TableName; row: Record<string, unknown> }) => {
+      if (v.table === "tasks") validateTaskDates(v.row);
       if (navigator.onLine) return createRow({ data: v });
       const account = requireAccount(userId);
       const current = await readCachedWorkspace(qc, key, account.id);
@@ -121,6 +123,7 @@ export function useMutations() {
       const current = await readCachedWorkspace(qc, key, account.id);
       const base = findRow(current, v.table, v.id);
       const row = { ...base, ...cleanRow(v.table, v.patch) };
+      if (v.table === "tasks") validateTaskDates(row);
       const change: OfflineChange = {
         id: crypto.randomUUID(),
         userId: account.id,

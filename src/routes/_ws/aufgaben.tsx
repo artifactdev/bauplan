@@ -8,6 +8,8 @@ import { useTaskAssignees } from "@/hooks/use-task-assignees";
 import { isOverdue } from "@/lib/calc";
 import { fmtDate } from "@/lib/format";
 import { tradeName } from "@/lib/options";
+import { taskRange } from "@/lib/tasks";
+import { rangeLabel } from "@/lib/events";
 import { PHASES, type Task } from "@/lib/schema";
 import {
   Bar,
@@ -154,6 +156,7 @@ function TasksPage() {
               {tasks.map((t) => {
                 const isDone = t.status === "erledigt";
                 const od = isOverdue(t.due_date, isDone);
+                const range = taskRange(t);
                 const doc = ws.documents.find((d) => d.id === t.document_id);
                 return (
                   <li key={t.id} className="flex flex-wrap items-start gap-3 py-2.5">
@@ -203,7 +206,7 @@ function TasksPage() {
                       className={`tabular text-xs ${od ? "font-medium text-destructive" : "text-muted-foreground"}`}
                     >
                       {od ? tr("tasks.overdue") : ""}
-                      {fmtDate(t.due_date)}
+                      {range ? rangeLabel(range, fmtDate) : fmtDate(null)}
                     </span>
                     <div className="flex">
                       <Button

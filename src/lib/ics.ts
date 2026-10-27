@@ -1,6 +1,7 @@
 // Builds an iCalendar (.ics) feed from calendar entries and tasks with a due date.
 import type { CalEvent, Offer, Task } from "./schema";
 import { offerDeadlines } from "./offer-deadlines";
+import { taskRange } from "./tasks";
 
 const KIND: Record<string, string> = { termin: "Termin", frist: "Frist", arbeit: "Arbeiten" };
 
@@ -67,14 +68,15 @@ export function buildIcs(
   ];
   for (const e of [...events, ...offerDeadlines(offers)]) lines.push(...eventLines(e, stamp));
   for (const t of tasks) {
-    if (!t.due_date || t.status === "erledigt") continue;
+    const range = taskRange(t);
+    if (!range || t.status === "erledigt") continue;
     lines.push(
       "BEGIN:VEVENT",
       `UID:task-${t.id}@bauplan`,
       `DTSTAMP:${stamp}`,
       `SUMMARY:${esc(`Aufgabe: ${t.title}`)}`,
-      `DTSTART;VALUE=DATE:${d8(t.due_date)}`,
-      `DTEND;VALUE=DATE:${d8(nextDay(t.due_date))}`,
+      `DTSTART;VALUE=DATE:${d8(range.event_date)}`,
+      `DTEND;VALUE=DATE:${d8(nextDay(range.end_date))}`,
       "CATEGORIES:Aufgabe",
     );
     if (t.notes) lines.push(`DESCRIPTION:${esc(t.notes)}`);

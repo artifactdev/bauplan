@@ -4,7 +4,13 @@ import i18n from "@/i18n";
 import { todayISO } from "@/lib/format";
 import { Route } from "./kalender";
 
-const mocks = vi.hoisted(() => ({ update: vi.fn(), create: vi.fn(), remove: vi.fn(), date: "" }));
+const mocks = vi.hoisted(() => ({
+  update: vi.fn(),
+  create: vi.fn(),
+  remove: vi.fn(),
+  date: "",
+  start: null as string | null,
+}));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
     ws: {
@@ -26,6 +32,7 @@ vi.mock("@/hooks/use-workspace", () => ({
           id: "same-id",
           title: "Remove panels",
           due_date: mocks.date,
+          start_date: mocks.start,
           status: "offen",
           priority: "hoch",
           phase: "Rückbau",
@@ -74,6 +81,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage("en");
   mocks.date = todayISO();
+  mocks.start = null;
   mocks.update.mockResolvedValue({ ok: true });
 });
 afterEach(() => {
@@ -88,6 +96,37 @@ function renderCalendar() {
 }
 
 describe("calendar source dialogs", () => {
+  it("shows a multi-day task on every covered day and edits its start date", async () => {
+    const month = todayISO().slice(0, 7);
+    mocks.start = `${month}-10`;
+    mocks.date = `${month}-12`;
+    renderCalendar();
+    expect(screen.getAllByRole("button", { name: /Remove panels/ })).toHaveLength(3);
+    fireEvent.click(screen.getAllByRole("button", { name: /Remove panels/ })[1]!);
+    expect(screen.getByLabelText("Start date")).toHaveValue(mocks.start);
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: `${month}-09` } });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({
+        table: "tasks",
+        id: "same-id",
+        patch: expect.objectContaining({ start_date: `${month}-09`, due_date: mocks.date }),
+      }),
+    );
+  });
+  it("does not mark an ongoing multi-day task as overdue before its due date", () => {
+    const today = new Date(`${todayISO()}T12:00:00Z`);
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 2);
+    const end = new Date(today);
+    end.setUTCDate(end.getUTCDate() + 2);
+    mocks.start = start.toISOString().slice(0, 10);
+    mocks.date = end.toISOString().slice(0, 10);
+    renderCalendar();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "List" }), { button: 0, ctrlKey: false });
+    expect(screen.queryByRole("heading", { name: "Overdue" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove panels" })).toBeInTheDocument();
+  });
   it("deletes an appointment from its modal after confirmation and closes on success", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     mocks.remove.mockImplementation((_values, options) => options?.onSuccess());

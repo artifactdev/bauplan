@@ -32,6 +32,7 @@ export function taskFields(
       type: "select",
       options: assignees.map((user) => ({ value: user.id, label: user.label })),
     },
+    { name: "start_date", label: tr("tasks.start_date"), type: "date" },
     { name: "due_date", label: tr("quick_actions.due"), type: "date" },
     {
       name: "priority",

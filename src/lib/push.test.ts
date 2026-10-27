@@ -79,6 +79,20 @@ function workspace() {
 }
 
 describe("push reminder rules", () => {
+  it("keeps multi-day task reminders tied to the due date, not the start", () => {
+    const ws = workspace();
+    ws.tasks[0]!.start_date = "2026-10-20";
+    expect(
+      reminderJobs(ws, new Date("2026-10-20T08:00:00Z")).filter((job) => job.kind === "task"),
+    ).toHaveLength(0);
+    expect(
+      reminderJobs(ws, new Date("2026-10-27T08:00:00Z")).filter((job) => job.kind === "task"),
+    ).toHaveLength(1);
+    ws.tasks[0]!.due_date = null;
+    expect(
+      reminderJobs(ws, new Date("2026-10-27T08:00:00Z")).filter((job) => job.kind === "task"),
+    ).toHaveLength(0);
+  });
   it("uses Berlin time across summer, winter and DST transitions", () => {
     expect(berlinTime("2026-07-01")?.toISOString()).toBe("2026-07-01T07:00:00.000Z");
     expect(berlinTime("2026-12-01")?.toISOString()).toBe("2026-12-01T08:00:00.000Z");
@@ -96,6 +110,12 @@ describe("push reminder rules", () => {
     expect(jobs[0]?.recipient).toBe("member");
     expect(jobs[1]?.recipient).toBeNull();
     expect(pushLink(jobs[0]!)).toBe("/aufgaben?eintrag=task");
+    expect(jobs.map(pushLink)).toEqual([
+      "/aufgaben?eintrag=task",
+      "/angebote?eintrag=offer",
+      "/ausgaben?eintrag=expense",
+      "/kalender?eintrag=event",
+    ]);
     expect(reminderJobs(ws, new Date("2026-10-28T08:00:00Z"))).toHaveLength(0);
     expect(reminderJobs(ws, new Date("2026-10-30T08:00:00Z"))).toHaveLength(3);
     expect(reminderJobs(ws, new Date("2026-10-31T08:00:00Z"))).toHaveLength(0);

@@ -65,6 +65,38 @@ afterAll(() => {
 const sent = () => vi.mocked(webpush.sendNotification);
 
 describe("persistent Web Push delivery", () => {
+  it("persists task ranges and rejects invalid online or synced partial updates", async () => {
+    await repo.insert(
+      "tasks",
+      {
+        id: "range",
+        start_date: "2026-10-28",
+        due_date: "2026-11-02",
+        assignee_id: "bob",
+      },
+      "alice",
+    );
+    const task = db.prepare("SELECT * FROM tasks WHERE id = 'range'").get();
+    expect(task).toMatchObject({ start_date: "2026-10-28", due_date: "2026-11-02" });
+    await expect(
+      repo.update("tasks", "range", { due_date: "2026-10-27" }, "alice"),
+    ).rejects.toThrow("tasks.due_before_start");
+    const ws = await repo.getAll();
+    await expect(
+      repo.applySyncChange("alice", {
+        id: "bad-range",
+        table: "tasks",
+        action: "update",
+        rowId: "range",
+        base: { ...ws.tasks.find((row) => row.id === "range") },
+        row: { start_date: "2026-11-03" },
+      }),
+    ).rejects.toThrow("tasks.due_before_start");
+    expect(db.prepare("SELECT * FROM tasks WHERE id = 'range'").get()).toEqual(task);
+    expect(
+      db.prepare("SELECT id FROM app_sync_operations WHERE id = 'bad-range'").get(),
+    ).toBeUndefined();
+  });
   it("uses the admin email automatically and preserves keys when the contact changes", async () => {
     const configuration = await pushConfiguration();
     expect(configuration?.subject).toBe("mailto:alice@example.org");

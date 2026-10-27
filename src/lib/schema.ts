@@ -81,6 +81,7 @@ export const TABLES = {
     "phase",
     "priority",
     "status",
+    "start_date",
     "due_date",
     "notes",
     "cost_item_id",
@@ -241,6 +242,7 @@ export type Task = Base & {
   phase: string | null;
   priority: "niedrig" | "mittel" | "hoch";
   status: "offen" | "in_arbeit" | "erledigt";
+  start_date?: string | null;
   due_date: string | null;
   notes: string | null;
   cost_item_id: string | null;
