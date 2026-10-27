@@ -48,7 +48,7 @@ Rows of a multi-rate VAT table are summed. A misread total such as `TOTAL 29,19`
 **Vendor and contact.**
 
 - A known contact is matched by VAT ID, tax number or IBAN (from the contact's notes), by website or e-mail domain (public mail providers are ignored), by phone number, or by company or name. Ties produce no match. Lines from the recipient address block (`Familie`, `Herrn`, `Frau`, `An`, …) are never used to match a contact or name the vendor.
-- For offers and invoices, a matched contact is preselected in the form.
+- For offers and expenses, a matched contact is preselected in the form. Invoices are recorded as expenses, with their recognized due date and an initial open payment status; no separate invoice assignment is required.
 - Without a contact match, the vendor is taken in this order:
   1. a known retail chain;
   2. a letterhead line with a legal form;

@@ -11,7 +11,6 @@ import { DocumentScanner } from "./DocumentScanner";
 
 const CATEGORY: Record<ScanTarget, string> = {
   offer: "Angebot",
-  invoice: "Rechnung",
   expense: "Beleg",
   task: "Sonstiges",
   event: "Sonstiges",

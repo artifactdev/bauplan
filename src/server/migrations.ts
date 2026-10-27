@@ -8,6 +8,7 @@ import {
   USER_NAVIGATION_DDL,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
+import { legacyInvoiceExpense } from "@/lib/expenses";
 
 type Migration = { version: number; name: string; up: (db: SqliteDb) => void };
 
@@ -28,7 +29,28 @@ const MIGRATIONS: readonly Migration[] = [
       db.exec(SYNC_OPERATIONS_DDL);
     },
   },
+  {
+    version: 2,
+    name: "unify-invoices-and-expenses",
+    up(db) {
+      for (const invoice of db.prepare("SELECT * FROM invoices").all()) {
+        const expense = legacyInvoiceExpense(invoice);
+        const keys = Object.keys(expense);
+        db.prepare(
+          `INSERT INTO expenses (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
+        ).run(...keys.map((key) => toSqlValue(expense[key])));
+      }
+      db.exec("DELETE FROM invoices");
+    },
+  },
 ];
+
+function toSqlValue(value: unknown): string | number | null {
+  if (typeof value === "string" || typeof value === "number") return value;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value == null) return null;
+  throw new Error("Unsupported invoice migration value.");
+}
 
 function synchronizeWorkspaceSchema(db: SqliteDb) {
   const columnType = (column: string) =>

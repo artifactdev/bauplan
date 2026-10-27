@@ -31,6 +31,10 @@ Updates migrate the persistent SQLite database automatically **before the produc
 - A database version newer than the running build supports is rejected. Rolling back application code is not a database downgrade mechanism.
 - Take a backup **before deploying an update**. For a rollback, restore a matching pre-update database and app version. Migrations do not create an automatic backup and cannot undo a successfully committed update.
 
+Migration v2 consolidates existing invoices into expenses, using `invoice-<old-id>` IDs and preserving all financial fields and existing document/contact/cost-item links. It then empties the legacy invoice table so totals are not counted twice. An ID collision fails and rolls back the migration rather than overwriting either record. The empty legacy table/schema is retained for reading older backups and cached workspaces; old ZIP imports undergo the same conversion. New expenses can optionally link to a quote; no historical quote link is guessed.
+
+Synchronize offline work before updating. Writes from obsolete invoice forms or queued invoice operations are explicitly rejected with a reload/reconciliation message rather than creating hidden records. Unsynchronized changes remain local; transfer them to the migrated expense (or create a new expense) before discarding them. Expense operations with an older row shape may require the existing conflict-resolution flow after new nullable columns are added.
+
 ### Reverse proxy
 Put HTTPS in front of the app (cookies are `secure` under `https`). For OIDC, enter the public address in Settings.
 Allow a 100 MiB upload plus multipart overhead (for example `client_max_body_size 110m;` in nginx) and OCR processing durations up to 180 seconds in the proxy.

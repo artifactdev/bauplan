@@ -166,6 +166,7 @@ export function sqliteRepo(): Repo {
       (await db()).prepare(`DELETE FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).run(userId);
     },
     async applySyncChange(userId, change) {
+      if (change.table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       d.exec("BEGIN IMMEDIATE");
       try {
@@ -394,6 +395,7 @@ export function sqliteRepo(): Repo {
       }
     },
     async insert(table, row) {
+      if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       const id = (row["id"] as string) || crypto.randomUUID();
       const full = { ...row, id, created_at: row["created_at"] ?? new Date().toISOString() };
@@ -404,6 +406,7 @@ export function sqliteRepo(): Repo {
       return full;
     },
     async update(table, id, patch) {
+      if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       const keys = Object.keys(patch);
       if (!keys.length) return;
@@ -413,6 +416,7 @@ export function sqliteRepo(): Repo {
       );
     },
     async remove(table, id) {
+      if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       (await db()).prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
     },
     async putFile(name, _mime, bytes) {

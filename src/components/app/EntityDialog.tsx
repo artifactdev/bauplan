@@ -70,6 +70,8 @@ export function EntityDialog({
   uploadSelection,
   uploadOptions,
   uploaded,
+  onFieldChange,
+  preserveOnScan,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -86,6 +88,8 @@ export function EntityDialog({
   scan?: ScanTarget | undefined;
   /** Documents stored just for this form; closing without saving asks whether to delete them. */
   uploaded?: { id: string; name: string }[] | undefined;
+  onFieldChange?: (field: string, value: unknown) => Record<string, unknown>;
+  preserveOnScan?: string[];
 }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
@@ -145,7 +149,8 @@ export function EntityDialog({
     setAskDiscard(false);
     onOpenChange(false);
   };
-  const set = (k: string, v: unknown) => setValues((s) => ({ ...s, [k]: v }));
+  const set = (k: string, v: unknown) =>
+    setValues((s) => ({ ...s, [k]: v, ...onFieldChange?.(k, v) }));
   const addNew = async (field: string) => {
     const cfg = QUICK_ADD[field];
     const name = newName.trim();
@@ -366,7 +371,14 @@ export function EntityDialog({
               <div id="entity-dialog-upload-options" className="sm:col-span-2">
                 <ScanBar
                   target={scan}
-                  onFill={(v) => setValues((s) => ({ ...s, ...v }))}
+                  onFill={(v) =>
+                    setValues((s) => ({
+                      ...s,
+                      ...Object.fromEntries(
+                        Object.entries(v).filter(([field]) => !preserveOnScan?.includes(field)),
+                      ),
+                    }))
+                  }
                   onUploaded={(doc) => setUploads((u) => [...u, doc])}
                   onBusyChange={setUploading}
                 />

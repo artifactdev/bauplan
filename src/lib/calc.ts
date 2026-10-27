@@ -577,7 +577,9 @@ export function bankFundedPayments(
   for (const expense of expenses) {
     if (expense.budget_pot_id !== bankPotId) continue;
     const actual = expense.status !== "offen";
-    const date = expense.payment_date ?? expense.expense_date;
+    const date = actual
+      ? (expense.payment_date ?? expense.expense_date)
+      : (expense.payment_date ?? expense.due_date ?? expense.expense_date);
     if (date) result.push({ amount: Number(expense.amount), date, actual });
   }
   return result;

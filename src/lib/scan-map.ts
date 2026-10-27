@@ -1,11 +1,10 @@
 import type { Extraction } from "./ocr-parse";
 
-export type ScanTarget = "offer" | "invoice" | "expense" | "task" | "event" | "cost" | "trade";
+export type ScanTarget = "offer" | "expense" | "task" | "event" | "cost" | "trade";
 
 /** Tables whose rows can link the scanned document directly. */
 export const LINKS_DOCUMENT: Record<ScanTarget, boolean> = {
   offer: true,
-  invoice: true,
   expense: true,
   task: true,
   event: false,
@@ -44,22 +43,15 @@ export function mapExtraction(
           trade_id: tradeId,
           notes: ex?.summary,
         };
-      case "invoice":
-        return {
-          contractor: ex?.vendor,
-          contact_id: ex?.contact_id,
-          title,
-          amount: ex?.amount,
-          invoice_date: ex?.date,
-          due_date: ex?.due_date,
-          trade_id: tradeId,
-        };
       case "expense":
         return {
           title,
           vendor: ex?.vendor,
+          contact_id: ex?.contact_id,
           amount: ex?.amount,
           expense_date: ex?.date,
+          due_date: ex?.due_date,
+          ...(ex?.doc_type === "rechnung" ? { status: "offen" } : {}),
           category: ex?.expense_category,
           trade_id: tradeId,
           notes: ex?.summary,

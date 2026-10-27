@@ -95,8 +95,11 @@ export const TABLES = {
   expenses: [
     "title",
     "vendor",
+    "contact_id",
+    "offer_id",
     "amount",
     "expense_date",
+    "due_date",
     "payment_date",
     "category",
     "trade_id",
@@ -238,8 +241,11 @@ export type ExpenseStatus = "offen" | "bezahlt" | "eingereicht" | "erstattet";
 export type Expense = Base & {
   title: string;
   vendor: string | null;
+  contact_id?: string | null;
+  offer_id?: string | null;
   amount: number;
   expense_date: string | null;
+  due_date?: string | null;
   payment_date?: string | null;
   category: string | null;
   trade_id: string | null;
@@ -278,6 +284,7 @@ export type CreditRepayment = Base & {
   notes: string | null;
 };
 export const EXPENSE_CATEGORIES = [
+  "Handwerker",
   "Baumarkt",
   "Material",
   "Werkzeug",

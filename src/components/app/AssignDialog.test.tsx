@@ -13,6 +13,7 @@ vi.mock("@/hooks/use-workspace", () => ({
       cost_items: [],
       budget_pots: [],
       contacts: [],
+      offers: [],
       documents: [{ id: "doc-1", name: "Quote.pdf" }],
     },
   }),
@@ -58,6 +59,43 @@ describe("filing a recognized offer", () => {
           offer_date: "2026-10-27",
           valid_until: "2026-11-12",
           status: "received",
+        }),
+      }),
+    );
+  });
+
+  it("files a recognized invoice as an open expense without a separate invoice target", async () => {
+    await i18n.changeLanguage("en");
+    vi.mocked(analyzeDocument).mockResolvedValue({
+      result: {
+        ...extractFromText("Rechnung"),
+        doc_type: "rechnung",
+        vendor: "Roofing",
+        title: "Roof invoice",
+        amount: 1000,
+        date: "2026-01-01",
+        due_date: "2026-01-15",
+        contact_id: "contact",
+      },
+      error: null,
+      warnings: [],
+    });
+    mutations.create.mockResolvedValue({ id: "expense-1" });
+    mutations.update.mockResolvedValue({ ok: true });
+    render(<AssignDialog documentId="doc-1" onClose={() => {}} />);
+    expect(await screen.findByLabelText("Payable by")).toHaveValue("2026-01-15");
+    expect(screen.queryByRole("radio", { name: "Contractor invoice" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(mutations.create).toHaveBeenCalledWith({
+        table: "expenses",
+        row: expect.objectContaining({
+          document_id: "doc-1",
+          contact_id: "contact",
+          due_date: "2026-01-15",
+          status: "offen",
+          amount: 1000,
+          payment_date: null,
         }),
       }),
     );

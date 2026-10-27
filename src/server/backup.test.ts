@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { DEFAULT_APPEARANCE } from "@/lib/appearance";
 import { DEFAULT_NAVIGATION } from "@/lib/navigation";
+import { TABLES } from "@/lib/schema";
 import type { Repo, SqliteDb } from "./repo";
 import { createBackup, parseBackup, restoreBackup } from "./backup";
 
@@ -176,6 +177,70 @@ describe("Bauplan backups", () => {
     expect((await repo.getAll()).projects.map((item) => item.id)).toEqual(["project-1"]);
     expect(await repo.readFile(files[0]!.name)).toEqual(files[0]!.bytes);
     expect(readdirSync(join(dir, "uploads")).sort()).toEqual(files.map((file) => file.name).sort());
+  });
+
+  it("imports old invoice records as expenses and supplies missing nullable expense fields", async () => {
+    const entries = unzipSync(await createBackup(repo));
+    const manifest = JSON.parse(strFromU8(entries["backup.json"]!)) as {
+      database: { tables: Record<string, Record<string, unknown>[]> };
+    };
+    const tables = manifest.database.tables;
+    tables["invoices"] = [
+      {
+        ...Object.fromEntries(TABLES.invoices.map((column) => [column, null])),
+        id: "legacy-invoice",
+        created_at: "2026-01-01",
+        contractor: "Roofing",
+        title: "Roof invoice",
+        amount: 1000,
+        paid: 0,
+        due_date: "2026-01-15",
+        contact_id: "contact",
+        document_id: "document-1",
+        budget_pot_id: "bank",
+      },
+    ];
+    tables["expenses"] = [
+      {
+        ...Object.fromEntries(
+          TABLES.expenses
+            .filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
+            .map((column) => [column, null]),
+        ),
+        id: "legacy-expense",
+        created_at: "2026-01-01",
+        title: "Existing expense",
+        amount: 25,
+        status: "bezahlt",
+      },
+    ];
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    const archive = zipSync(entries);
+    const parsed = parseBackup(archive);
+    expect(parsed.database.tables.invoices).toEqual([]);
+    expect(parsed.database.tables.expenses).toHaveLength(2);
+    expect(parsed.database.tables.expenses[0]).toMatchObject({
+      offer_id: null,
+      contact_id: null,
+      due_date: null,
+    });
+    await restoreBackup(repo, archive);
+    const workspace = await repo.getAll();
+    expect(workspace.invoices).toEqual([]);
+    expect(workspace.expenses.find((item) => item.id === "invoice-legacy-invoice")).toMatchObject({
+      title: "Roof invoice",
+      vendor: "Roofing",
+      amount: 1000,
+      status: "offen",
+      due_date: "2026-01-15",
+      contact_id: "contact",
+      document_id: "document-1",
+      budget_pot_id: "bank",
+      offer_id: null,
+    });
+    tables["expenses"].push({ ...parsed.database.tables.expenses[1]! });
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(() => parseBackup(zipSync(entries))).toThrow(/kollidierende/);
   });
 
   it("does not restore during setup if a user was created after the setup check", async () => {

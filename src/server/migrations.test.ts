@@ -33,7 +33,7 @@ describe("database migrations", () => {
         );
       }
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(1);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'app_%'").all()).toHaveLength(
       6,
     );
@@ -88,7 +88,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(1);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
   });
 
   it("applies ordered data migrations once", () => {
@@ -108,6 +108,60 @@ describe("database migrations", () => {
     migrateDatabase(db, migrations);
     expect(db.prepare("SELECT budget FROM trades").get()?.["budget"]).toBe(125);
     expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
+  });
+
+  it("moves paid and open invoices into expenses once while preserving their fields", () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec(`
+      PRAGMA user_version = 1;
+      ALTER TABLE expenses DROP COLUMN offer_id;
+      ALTER TABLE expenses DROP COLUMN contact_id;
+      ALTER TABLE expenses DROP COLUMN due_date;
+      INSERT INTO expenses (id, created_at, title, amount, status) VALUES ('old-expense', '2026-01-01', 'Tools', 25, 'bezahlt');
+      INSERT INTO invoices (id, created_at, title, contractor, amount, invoice_date, due_date, payment_date, paid, trade_id, cost_item_id, document_id, contact_id, budget_pot_id)
+        VALUES ('paid', '2026-01-01', 'First installment', 'Roofing', 1000, '2026-01-01', '2026-01-15', '2026-01-12', 1, 'trade', 'cost', 'doc', 'contact', 'bank'),
+               ('open', '2026-01-02', NULL, 'Roofing', 2000, '2026-01-02', '2026-01-16', NULL, 0, 'trade', 'cost', NULL, 'contact', 'bank');
+    `);
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(db.prepare("SELECT * FROM invoices").all()).toEqual([]);
+    expect(db.prepare("SELECT * FROM expenses").all()).toHaveLength(3);
+    expect(db.prepare("SELECT * FROM expenses WHERE id = 'invoice-paid'").get()).toMatchObject({
+      title: "First installment",
+      vendor: "Roofing",
+      amount: 1000,
+      expense_date: "2026-01-01",
+      due_date: "2026-01-15",
+      payment_date: "2026-01-12",
+      status: "bezahlt",
+      trade_id: "trade",
+      cost_item_id: "cost",
+      document_id: "doc",
+      contact_id: "contact",
+      budget_pot_id: "bank",
+      offer_id: null,
+    });
+    expect(db.prepare("SELECT * FROM expenses WHERE id = 'invoice-open'").get()).toMatchObject({
+      title: "Roofing",
+      status: "offen",
+      due_date: "2026-01-16",
+      payment_date: null,
+    });
+  });
+
+  it("rolls back rather than overwriting an expense whose ID collides with a migrated invoice", () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec(`
+      PRAGMA user_version = 1;
+      INSERT INTO expenses (id, created_at, amount) VALUES ('invoice-existing', '2026-01-01', 25);
+      INSERT INTO invoices (id, created_at, amount) VALUES ('existing', '2026-01-01', 100);
+    `);
+    expect(() => migrateDatabase(db)).toThrow("Database migration failed");
+    expect(db.prepare("SELECT amount FROM expenses").get()?.["amount"]).toBe(25);
+    expect(db.prepare("SELECT amount FROM invoices").get()?.["amount"]).toBe(100);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(1);
   });
 
   it("rolls back schema, data, and version together when a migration fails", () => {

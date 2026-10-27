@@ -25,6 +25,29 @@ afterAll(() => {
 });
 
 describe("offline row synchronization", () => {
+  it("rejects obsolete invoice writes explicitly rather than hiding or double-counting them", async () => {
+    await expect(repo.insert("invoices", { amount: 100 })).rejects.toThrow(
+      "expenses.legacy_invoice_write",
+    );
+    await expect(repo.update("invoices", "old", { paid: true })).rejects.toThrow(
+      "expenses.legacy_invoice_write",
+    );
+    await expect(repo.remove("invoices", "old")).rejects.toThrow("expenses.legacy_invoice_write");
+    await expect(
+      repo.applySyncChange("account-1", {
+        id: "old-invoice-operation",
+        table: "invoices",
+        action: "create",
+        rowId: "old",
+        base: null,
+        row: { amount: 100 },
+      }),
+    ).rejects.toThrow("expenses.legacy_invoice_write");
+    expect((await repo.getAll()).invoices).toEqual([]);
+    expect(
+      db.prepare("SELECT id FROM app_sync_operations WHERE id = 'old-invoice-operation'").get(),
+    ).toBeUndefined();
+  });
   it("applies changes once and reports concurrent edits without overwriting", async () => {
     const create: SyncChange = {
       id: "operation-create",

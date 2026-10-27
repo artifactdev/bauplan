@@ -3,6 +3,7 @@ import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
 import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, type TableName } from "@/lib/schema";
 import { appearanceSchema } from "@/lib/appearance";
 import { navigationSchema } from "@/lib/navigation";
+import { legacyInvoiceExpense } from "@/lib/expenses";
 import { z } from "zod";
 import type { BackupDatabase, BackupFile, Repo } from "./repo";
 
@@ -85,14 +86,23 @@ function validateDatabase(value: unknown): BackupDatabase {
         ? columns.filter((column) => column !== "assignee_id")
         : table === "offers"
           ? columns.filter((column) => column !== "valid_until")
-          : columns;
+          : table === "expenses"
+            ? columns.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
+            : columns;
     const validatedRows = validateRows(tables[table], columns, required);
     const rows =
       table === "tasks"
         ? validatedRows.map((row) => ({ ...row, assignee_id: row["assignee_id"] ?? null }))
         : table === "offers"
           ? validatedRows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
-          : validatedRows;
+          : table === "expenses"
+            ? validatedRows.map((row) => ({
+                ...row,
+                offer_id: row["offer_id"] ?? null,
+                contact_id: row["contact_id"] ?? null,
+                due_date: row["due_date"] ?? null,
+              }))
+            : validatedRows;
     for (const row of rows) {
       for (const [column, item] of Object.entries(row)) {
         if (item !== null && NUMERIC_COLS.has(column) && typeof item !== "number")
@@ -117,6 +127,15 @@ function validateDatabase(value: unknown): BackupDatabase {
     }
     normalizedTables[table] = rows;
   }
+  const expenseIds = new Set(normalizedTables.expenses.map((row) => row["id"]));
+  for (const invoice of normalizedTables.invoices) {
+    const expense = legacyInvoiceExpense(invoice);
+    if (expenseIds.has(expense["id"]))
+      fail("Backup enthält kollidierende Rechnungs- und Ausgaben-IDs.");
+    expenseIds.add(expense["id"]);
+    normalizedTables.expenses.push(expense);
+  }
+  normalizedTables.invoices = [];
 
   const users = value["users"];
   if (!Array.isArray(users)) fail("Die Benutzerkonten im Backup sind ungültig.");

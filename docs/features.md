@@ -10,7 +10,7 @@ Admins can export and restore a complete database-and-documents backup from Sett
 
 ## Overview (dashboard)
 - Metrics: total budget, expected costs, remaining budget, already paid.
-- Open/overdue invoices, upcoming events and tasks.
+- Paid and open expense totals, upcoming events and tasks.
 - Quick actions: upload a document (also via camera), create a task or cost item.
 - On the very first visit without a project: create a project (name, address, budget, time period).
 - Edit the shared project's name, address, total budget, and dates from the sidebar project card or the account menu (also on mobile). The Budget page opens the same editor.
@@ -20,10 +20,9 @@ Admins can export and restore a complete database-and-documents backup from Sett
 - **Cost items** per trade with planned amounts.
 - Per item and trade: planned, committed, expected, paid, variance. Details in [budget.md](budget.md).
 
-- **Payment sources** (e.g. Bank, Private, managed in Settings): each source decides whether its expenses/invoices are deducted from the total budget; the expenses page filters and totals by source.
+- **Payment sources** (e.g. Bank, Private, managed in Settings): each source decides whether its expenses are deducted from the total budget; the expenses page filters and totals by source.
 
-## Quotes & invoices
-**Quotes**
+## Quotes
 - Status: **Requested** → **Received** → **Accepted** / **Rejected**.
 - "Record request": company/contact, work, request date — without an amount. Shows "requested N days ago" and a count of open requests.
 - "Quote received" opens the request to add amount and quote date (never prefilled).
@@ -32,24 +31,24 @@ Admins can export and restore a complete database-and-documents backup from Sett
 - Filters: free text, status, trade, contact; "Reset".
 - Linkable to a contact, trade, cost item, and document.
 
-**Invoices**
-- Table with sortable columns (default: due date).
-- Derived status: **Paid**, **Overdue**, or **Open**; clicking the status toggles paid/unpaid.
-- Totals above the table (total, open, overdue, paid), reflecting the filters.
-
 ## Expenses
-General expenses such as hardware store receipts or fees.
+All invoices and receipts, including contractor invoices, partial invoices, hardware store purchases, and fees, are recorded here. There is no separate invoice workflow.
+- **Create expense** opens one form, with or without a receipt. Optionally select an existing document or expand **Add document** to upload, photograph, or scan a receipt; recognized values prefill the editable fields. The same document options are available when editing an expense. No separate manual/upload workflow or assignment step is needed on this page.
 - Status: **open**, **paid**, **submitted**, **reimbursed**.
-- Categories: hardware store, materials, tools, disposal, fees, transport, meals, other.
-- Link to receipt (document), trade, and cost item; search, status filter, totals by status.
-- Expenses always count against the budget.
+- Optional invoice due date, planned/actual payment date, payment source, contact, and related quote. Choosing a quote prefills its company, contact, trade, and cost item, but never replaces the expense amount or dates. These assignments remain editable. Multiple expenses can reference the same quote for installments.
+- Recognized invoices prefill the matched contact and due date and start as **open** when creating an expense; uploading a replacement document while editing preserves the current payment status. Review the extracted values before saving. Receipts retain the paid-by-default workflow.
+- **Overdue** is derived from an open expense whose due date is before today. Both desktop and mobile show the due date and overdue status.
+- Categories: contractor, hardware store, materials, tools, disposal, fees, transport, meals, other.
+- Search and filter by status (including overdue), trade, contact, quote, and payment source; sort by newest date, earliest due date, highest amount, or description. Status cards show workspace totals; the table/card footer shows the filtered sum.
+- Only expenses linked to a valid cost item and a budget-deducting payment source (or no source) affect the project budget. Open expenses count toward incurred costs, but not paid totals. An accepted quote and its expenses are never added together for the same cost item.
+- Existing invoices are migrated automatically to expenses at startup, preserving their amount, dates, payment state/source, and document/contact/cost-item links. The same conversion is applied when importing older backups.
 
 ## Documents
 - Upload images and PDFs (up to 100 MB), also directly from the camera.
 - **Scan document**: wherever documents or receipts are uploaded, scan paper with the camera or import photos. Bauplan detects the page edges, corrects perspective, and lets you adjust the four corners, rotate, and apply filters (color, grayscale, contrast, black & white). Scan up to 20 pages, reorder, retake, or remove them; the result is saved as one PDF through the normal upload. Processing runs entirely in the browser (OpenCV.js in a Web Worker); images are never sent to external services. The camera needs HTTPS (or localhost); image import works everywhere. Text recognition reads at most the first 10 pages.
 - Categories, tags, description; assign to trade, task, or cost item.
 - Responsive document rows keep filenames readable, put related records on separate lines, and place actions in a dedicated lower toolbar on smaller screens. Desktop keeps actions beside the document details; touch targets remain at least 44 × 44 CSS pixels.
-- After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, invoice, quote, or just store). See [ocr.md](ocr.md).
+- After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, quote, or just store). Recognized invoices are filed as expenses. See [ocr.md](ocr.md).
 
 ## Tasks
 - Title, trade, phase, priority, status, due date, notes.
@@ -68,7 +67,7 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 
 ## Contacts
 - Person, company, trade, phone, email, website, address, notes; search and trade filter.
-- Each card lists linked quotes with status; selectable in quote and invoice forms.
+- Each card lists linked quotes with status; selectable in quote and expense forms.
 
 ## Forms (throughout the app)
 - **Scan receipt** above each create form: photo or file → fields are prefilled, the document is saved and linked. Cancelling the form afterwards (Cancel, Escape or clicking the background) asks whether to delete the uploaded document or keep it in Documents; the same applies to the assign step right after "Upload document" with recognition, and to closing while the upload is still running.

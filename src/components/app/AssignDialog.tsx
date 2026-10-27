@@ -5,23 +5,44 @@ import { toast } from "sonner";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { analyzeDocument, type Extraction } from "@/lib/ocr.functions";
 import { logOcrResult, ocrText } from "@/lib/ocr-ui";
-import { costItemOptions, potOptions, tradeOptions } from "@/lib/options";
+import {
+  contactOptions,
+  costItemOptions,
+  offerOptions,
+  potOptions,
+  tradeOptions,
+} from "@/lib/options";
+import { expenseLinkDefaults, normalizeExpense } from "@/lib/expenses";
 import { EXPENSE_CATEGORIES } from "@/lib/schema";
 import { EntityDialog, type Field } from "./EntityDialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
-type Target = "ausgabe" | "rechnung" | "angebot" | "ablegen";
+type Target = "ausgabe" | "angebot" | "ablegen";
 
 const TARGETS: { value: Target; label: string; hint: string }[] = [
-  { value: "ausgabe", label: tr("assign_dialog.expense"), hint: tr("assign_dialog.receipt_general_invoice_deducted") },
-  { value: "rechnung", label: tr("assign_dialog.contractor_invoice"), hint: tr("assign_dialog.invoice_order_cost_item") },
+  {
+    value: "ausgabe",
+    label: tr("assign_dialog.expense"),
+    hint: tr("assign_dialog.receipt_general_invoice_deducted"),
+  },
   { value: "angebot", label: tr("shared.quote"), hint: tr("assign_dialog.estimate_comparison") },
-  { value: "ablegen", label: tr("assign_dialog.just_file"), hint: tr("assign_dialog.plan_contract_photo_data") },
+  {
+    value: "ablegen",
+    label: tr("assign_dialog.just_file"),
+    hint: tr("assign_dialog.plan_contract_photo_data"),
+  },
 ];
 
 const CATEGORY_FOR: Record<string, string> = {
-  angebot: "Angebot", rechnung: "Rechnung", kassenzettel: "Beleg", vertrag: "Vertrag", plan: "Plan", datenblatt: "Datenblatt", foto: "Foto", sonstiges: "Sonstiges",
+  angebot: "Angebot",
+  rechnung: "Rechnung",
+  kassenzettel: "Beleg",
+  vertrag: "Vertrag",
+  plan: "Plan",
+  datenblatt: "Datenblatt",
+  foto: "Foto",
+  sonstiges: "Sonstiges",
 };
 
 function targetFor(t: Extraction["doc_type"]): Target {
@@ -30,7 +51,7 @@ function targetFor(t: Extraction["doc_type"]): Target {
   return "ablegen";
 }
 
-/** Reads a document via local OCR, then lets the user confirm and file it as expense, invoice or offer. */
+/** Reads a document via local OCR, then lets the user confirm and file it as expense or offer. */
 export function AssignDialog({
   documentId,
   onClose,
@@ -85,55 +106,169 @@ export function AssignDialog({
       title: ex?.title ?? ex?.summary ?? doc?.name ?? null,
       amount: ex?.amount ?? null,
       date: ex?.date ?? null,
-      payment_date: ex?.date ?? null,
+      payment_date: ex?.doc_type === "rechnung" ? null : (ex?.date ?? null),
+      contact_id: ex?.contact_id ?? null,
+      offer_id: null,
       due_date: ex?.due_date ?? null,
       valid_until: ex?.valid_until ?? null,
       trade_id: trade?.id ?? doc?.trade_id ?? null,
       cost_item_id: doc?.cost_item_id ?? null,
-      category: ex?.expense_category && EXPENSE_CATEGORIES.includes(ex.expense_category) ? ex.expense_category : "Sonstiges",
-      status: "bezahlt",
-      paid: false,
+      category:
+        ex?.expense_category && EXPENSE_CATEGORIES.includes(ex.expense_category)
+          ? ex.expense_category
+          : "Sonstiges",
+      status: ex?.doc_type === "rechnung" ? "offen" : "bezahlt",
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ex, documentId]);
 
   const common: Field[] = [
     { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
-    { name: "cost_item_id", label: tr("shared.cost_item"), type: "select", options: costItemOptions(ws) },
+    {
+      name: "cost_item_id",
+      label: tr("shared.cost_item"),
+      type: "select",
+      options: costItemOptions(ws),
+    },
   ];
   const fields: Field[] =
     target === "ablegen"
       ? [{ name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) }]
       : [
-          { name: "vendor", label: target === "ausgabe" ? tr("shared.shop_company") : "Firma", required: target !== "ausgabe" },
+          { name: "vendor", label: tr("shared.shop_company"), required: target !== "ausgabe" },
+          ...(target === "ausgabe"
+            ? [
+                {
+                  name: "offer_id",
+                  label: tr("expenses.linked_offer"),
+                  type: "select" as const,
+                  options: offerOptions(ws),
+                },
+                {
+                  name: "contact_id",
+                  label: tr("quotes.contact"),
+                  type: "select" as const,
+                  options: contactOptions(ws),
+                },
+              ]
+            : []),
           { name: "amount", label: tr("shared.gross_amount"), type: "number", required: true },
           { name: "title", label: tr("shared.description"), required: true, full: true },
           { name: "date", label: tr("shared.date"), type: "date" },
-          ...(target !== "angebot" ? [{ name: "payment_date", label: tr("shared.payment_date_planned_actual"), type: "date" as const }] : []),
-          ...(target === "rechnung" ? [{ name: "due_date", label: tr("shared.payable"), type: "date" as const }] : []),
-          ...(target === "angebot" ? [{ name: "valid_until", label: tr("quotes.valid_until"), type: "date" as const }] : []),
+          ...(target !== "angebot"
+            ? [
+                {
+                  name: "payment_date",
+                  label: tr("shared.payment_date_planned_actual"),
+                  type: "date" as const,
+                },
+              ]
+            : []),
+          ...(target === "ausgabe"
+            ? [{ name: "due_date", label: tr("shared.payable"), type: "date" as const }]
+            : []),
+          ...(target === "angebot"
+            ? [{ name: "valid_until", label: tr("quotes.valid_until"), type: "date" as const }]
+            : []),
           ...(target === "ausgabe"
             ? [
-                { name: "category", label: tr("shared.category"), type: "select" as const, required: true, options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
-                { name: "status", label: tr("shared.status"), type: "select" as const, required: true, options: [{ value: "offen", label: tr("shared.open") }, { value: "bezahlt", label: tr("shared.paid") }, { value: "eingereicht", label: tr("shared.submitted") }, { value: "erstattet", label: tr("shared.reimbursed") }] },
+                {
+                  name: "category",
+                  label: tr("shared.category"),
+                  type: "select" as const,
+                  required: true,
+                  options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })),
+                },
+                {
+                  name: "status",
+                  label: tr("shared.status"),
+                  type: "select" as const,
+                  required: true,
+                  options: [
+                    { value: "offen", label: tr("shared.open") },
+                    { value: "bezahlt", label: tr("shared.paid") },
+                    { value: "eingereicht", label: tr("shared.submitted") },
+                    { value: "erstattet", label: tr("shared.reimbursed") },
+                  ],
+                },
               ]
             : []),
           ...common,
-          ...(target !== "angebot" ? [{ name: "budget_pot_id", label: tr("shared.paid_2"), type: "select" as const, options: potOptions(ws) }] : []),
-          ...(target === "rechnung" ? [{ name: "paid", label: tr("assign_dialog.already_paid"), type: "checkbox" as const }] : []),
+          ...(target !== "angebot"
+            ? [
+                {
+                  name: "budget_pot_id",
+                  label: tr("shared.paid_2"),
+                  type: "select" as const,
+                  options: potOptions(ws),
+                },
+              ]
+            : []),
         ];
 
   async function submit(raw: Record<string, unknown>) {
-    const v = raw as { [k: string]: unknown; trade_id?: unknown; cost_item_id?: unknown; title?: unknown; vendor?: unknown; amount?: unknown; date?: unknown; due_date?: unknown; category?: unknown; status?: unknown; paid?: unknown };
+    const v = raw as {
+      [k: string]: unknown;
+      trade_id?: unknown;
+      cost_item_id?: unknown;
+      title?: unknown;
+      vendor?: unknown;
+      amount?: unknown;
+      date?: unknown;
+      due_date?: unknown;
+      category?: unknown;
+      status?: unknown;
+      paid?: unknown;
+    };
     if (!documentId) return;
-    const base = { trade_id: v.trade_id ?? null, cost_item_id: v.cost_item_id ?? null, document_id: documentId };
+    const base = {
+      trade_id: v.trade_id ?? null,
+      cost_item_id: v.cost_item_id ?? null,
+      document_id: documentId,
+    };
     if (target === "ausgabe")
-      await create.mutateAsync({ table: "expenses", row: { ...base, title: v.title, vendor: v.vendor, amount: v.amount, expense_date: v.date, payment_date: v["payment_date"], category: v.category, status: v.status, budget_pot_id: v["budget_pot_id"] ?? null } });
-    if (target === "rechnung")
-      await create.mutateAsync({ table: "invoices", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, invoice_date: v.date, due_date: v.due_date, payment_date: v["payment_date"], paid: !!v.paid, budget_pot_id: v["budget_pot_id"] ?? null } });
+      await create.mutateAsync({
+        table: "expenses",
+        row: normalizeExpense(
+          {
+            ...base,
+            title: v.title,
+            vendor: v.vendor,
+            contact_id: v["contact_id"],
+            offer_id: v["offer_id"],
+            amount: v.amount,
+            expense_date: v.date,
+            due_date: v.due_date,
+            payment_date: v["payment_date"],
+            category: v.category,
+            status: v.status,
+            budget_pot_id: v["budget_pot_id"] ?? null,
+          },
+          ws,
+        ),
+      });
     if (target === "angebot")
-      await create.mutateAsync({ table: "offers", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, offer_date: v.date, valid_until: v["valid_until"], status: "received" } });
-    const category = target === "ausgabe" ? (ex?.doc_type === "rechnung" ? "Rechnung" : "Beleg") : target === "rechnung" ? "Rechnung" : target === "angebot" ? "Angebot" : CATEGORY_FOR[ex?.doc_type ?? "sonstiges"];
+      await create.mutateAsync({
+        table: "offers",
+        row: {
+          ...base,
+          contractor: v.vendor,
+          contact_id: ex?.contact_id ?? null,
+          title: v.title,
+          amount: v.amount,
+          offer_date: v.date,
+          valid_until: v["valid_until"],
+          status: "received",
+        },
+      });
+    const category =
+      target === "ausgabe"
+        ? ex?.doc_type === "rechnung"
+          ? "Rechnung"
+          : "Beleg"
+        : target === "angebot"
+          ? "Angebot"
+          : CATEGORY_FOR[ex?.doc_type ?? "sonstiges"];
     await update.mutateAsync({
       table: "documents",
       id: documentId,
@@ -145,15 +280,40 @@ export function AssignDialog({
         ...(ex?.summary && !doc?.description ? { description: ex.summary } : {}),
       },
     });
-    toast.success(target === "ausgabe" ? tr("assign_dialog.expense_recorded_deducted_budget") : target === "ablegen" ? tr("assign_dialog.document_filed") : "Zugeordnet");
+    toast.success(
+      target === "ausgabe"
+        ? tr("assign_dialog.expense_recorded_deducted_budget")
+        : target === "ablegen"
+          ? tr("assign_dialog.document_filed")
+          : "Zugeordnet",
+    );
   }
 
   const header = (
     <div className="grid gap-3">
-      <div className={cn("flex items-start gap-2 rounded-lg border p-3 text-sm", error ? "border-destructive/40 bg-destructive/5" : "bg-accent/40")}>
-        {loading ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : <ScanText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
+      <div
+        className={cn(
+          "flex items-start gap-2 rounded-lg border p-3 text-sm",
+          error ? "border-destructive/40 bg-destructive/5" : "bg-accent/40",
+        )}
+      >
+        {loading ? (
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+        ) : (
+          <ScanText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        )}
         <span>
-          {loading ? tr("assign_dialog.reading_content") : error ? `${error}. Du kannst die Angaben selbst eintragen.` : ex ? <>{tr("assign_dialog.recognized")} <b className="font-medium">{CATEGORY_FOR[ex.doc_type]}</b>{ex.summary ? ` – ${ex.summary}` : ""} Bitte prüfen.</> : null}
+          {loading ? (
+            tr("assign_dialog.reading_content")
+          ) : error ? (
+            `${error}. Du kannst die Angaben selbst eintragen.`
+          ) : ex ? (
+            <>
+              {tr("assign_dialog.recognized")}{" "}
+              <b className="font-medium">{CATEGORY_FOR[ex.doc_type]}</b>
+              {ex.summary ? ` – ${ex.summary}` : ""} Bitte prüfen.
+            </>
+          ) : null}
         </span>
       </div>
       <ToggleGroup
@@ -161,7 +321,7 @@ export function AssignDialog({
         value={target}
         onValueChange={(v) => v && setTarget(v as Target)}
         aria-label={tr("assign_dialog.file_as")}
-        className="grid grid-cols-2 items-stretch gap-1 rounded-lg bg-muted p-1 sm:grid-cols-4"
+        className="grid grid-cols-3 items-stretch gap-1 rounded-lg bg-muted p-1"
       >
         {TARGETS.map((t) => (
           <ToggleGroupItem
@@ -174,7 +334,9 @@ export function AssignDialog({
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      <p className="text-xs text-muted-foreground">{TARGETS.find((t) => t.value === target)?.hint}</p>
+      <p className="text-xs text-muted-foreground">
+        {TARGETS.find((t) => t.value === target)?.hint}
+      </p>
     </div>
   );
 
@@ -186,6 +348,7 @@ export function AssignDialog({
       header={header}
       fields={loading ? [] : fields}
       initial={initial}
+      onFieldChange={(field, value) => expenseLinkDefaults(field, value, ws)}
       onSubmit={submit}
       uploaded={uploaded}
       submitLabel={target === "ablegen" ? "Ablegen" : tr("assign_dialog.apply")}

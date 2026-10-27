@@ -158,7 +158,11 @@ function Dashboard() {
         <MetricCard
           label={tr("shared.paid")}
           value={eur(s.paid)}
-          hint={s.open > 0 ? `${eur(s.open)} offene Rechnungen` : tr("index.no_open_invoices")}
+          hint={
+            s.open > 0
+              ? tr("expenses.open_amount", { amount: eur(s.open) })
+              : tr("index.no_open_invoices")
+          }
           tone="success"
           icon={<CheckCircle2 className="h-4 w-4" />}
         />

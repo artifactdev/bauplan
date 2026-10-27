@@ -29,16 +29,19 @@ describe("prefill from scan", () => {
       trade_id: "t1",
     });
   });
-  it("offers and invoices link a recognized contact", () => {
+  it("offers and expenses link a recognized contact and invoice payment deadline", () => {
     const withContact = { ...ex, doc_type: "rechnung" as const, contact_id: "c1" };
     expect(mapExtraction("offer", withContact, "a.pdf", trades)).toMatchObject({
       contact_id: "c1",
       contractor: "Hornbach",
     });
-    expect(mapExtraction("invoice", withContact, "a.pdf", trades)).toMatchObject({
+    expect(
+      mapExtraction("expense", { ...withContact, due_date: "2026-11-03" }, "a.pdf", trades),
+    ).toMatchObject({
       contact_id: "c1",
+      due_date: "2026-11-03",
+      status: "offen",
     });
-    expect(mapExtraction("expense", withContact, "a.pdf", trades)).not.toHaveProperty("contact_id");
   });
   it("without recognized text, the file name becomes the title", () => {
     expect(mapExtraction("task", null, "Fliesen_Angebot.pdf", trades)).toEqual({
