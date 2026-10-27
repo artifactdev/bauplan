@@ -130,7 +130,8 @@ export async function saveSnapshot(userId: string, workspace: Workspace) {
 }
 
 export async function loadSnapshot(userId: string) {
-  return (await database()).get("snapshots", userId);
+  const snapshot = await (await database()).get("snapshots", userId);
+  return snapshot ? { ...snapshot, funding_entries: snapshot.funding_entries ?? [] } : undefined;
 }
 
 export async function saveChange(change: OfflineChange) {

@@ -110,6 +110,7 @@ export const TABLES = {
     "budget_pot_id",
   ],
   budget_pots: ["name", "deducts_from_budget", "notes"],
+  funding_entries: ["budget_pot_id", "amount", "received_date", "notes"],
   credit_terms: [
     "budget_pot_id",
     "total_credit",
@@ -332,8 +333,16 @@ export type Workspace = {
   ideas: Idea[];
   expenses: Expense[];
   budget_pots: BudgetPot[];
+  funding_entries: FundingEntry[];
   credit_terms: CreditTerms[];
   credit_repayments: CreditRepayment[];
+};
+
+export type FundingEntry = Base & {
+  budget_pot_id: string;
+  amount: number;
+  received_date: string;
+  notes: string | null;
 };
 
 export const DOC_CATEGORIES = [

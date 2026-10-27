@@ -74,6 +74,7 @@ const workspace: Workspace = {
   events: [],
   ideas: [],
   budget_pots: [],
+  funding_entries: [],
   credit_terms: [],
   credit_repayments: [],
 };

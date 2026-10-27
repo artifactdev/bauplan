@@ -25,6 +25,53 @@ afterAll(() => {
 });
 
 describe("offline row synchronization", () => {
+  it("validates funding writes and protects sources needed by the funding ledger", async () => {
+    await repo.insert("budget_pots", { id: "grandma", name: "Oma", deducts_from_budget: true });
+    const row = {
+      id: "funding",
+      budget_pot_id: "grandma",
+      amount: 10000,
+      received_date: "2026-01-01",
+    };
+    await repo.insert("funding_entries", row);
+    expect((await repo.getAll()).funding_entries[0]).toMatchObject(row);
+    await expect(
+      repo.insert("funding_entries", { ...row, id: "invalid", amount: -1 }),
+    ).rejects.toThrow("funding.invalid_amount");
+    await expect(
+      repo.insert("funding_entries", { ...row, id: "invalid", received_date: "2026-02-30" }),
+    ).rejects.toThrow("funding.invalid_date");
+    await expect(
+      repo.insert("funding_entries", { ...row, id: "invalid", budget_pot_id: "missing" }),
+    ).rejects.toThrow("funding.invalid_source");
+    await expect(repo.update("funding_entries", "funding", { amount: 0 })).rejects.toThrow(
+      "funding.invalid_amount",
+    );
+    await expect(repo.update("funding_entries", "gone", { amount: 100 })).rejects.toThrow(
+      "funding.not_found",
+    );
+    await expect(
+      repo.update("budget_pots", "grandma", { deducts_from_budget: false }),
+    ).rejects.toThrow("funding.source_in_use");
+    await expect(repo.remove("budget_pots", "grandma")).rejects.toThrow("funding.source_in_use");
+    await expect(
+      repo.applySyncChange("account-1", {
+        id: "invalid-funding-operation",
+        table: "funding_entries",
+        action: "create",
+        rowId: "invalid",
+        base: null,
+        row: { ...row, amount: -100 },
+      }),
+    ).rejects.toThrow("funding.invalid_amount");
+    expect(
+      db.prepare("SELECT id FROM app_sync_operations WHERE id = 'invalid-funding-operation'").get(),
+    ).toBeUndefined();
+    await repo.update("funding_entries", "funding", { amount: 9000 });
+    expect((await repo.getAll()).funding_entries[0]?.amount).toBe(9000);
+    await repo.remove("funding_entries", "funding");
+    await repo.remove("budget_pots", "grandma");
+  });
   it("rejects obsolete invoice writes explicitly rather than hiding or double-counting them", async () => {
     await expect(repo.insert("invoices", { amount: 100 })).rejects.toThrow(
       "expenses.legacy_invoice_write",

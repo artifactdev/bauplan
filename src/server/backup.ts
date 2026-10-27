@@ -4,6 +4,7 @@ import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, type TableName } from "@/
 import { appearanceSchema } from "@/lib/appearance";
 import { navigationSchema } from "@/lib/navigation";
 import { legacyInvoiceExpense } from "@/lib/expenses";
+import { validateFundingEntry } from "@/lib/funding";
 import { z } from "zod";
 import type { BackupDatabase, BackupFile, Repo } from "./repo";
 
@@ -73,8 +74,8 @@ function validateDatabase(value: unknown): BackupDatabase {
     fail("Die Backup-Datenbank enthält unbekannte Bereiche.");
   const tables = value["tables"];
   if (
-    Object.keys(tables).length !== TABLE_NAMES.length ||
-    TABLE_NAMES.some((table) => !(table in tables))
+    Object.keys(tables).some((table) => !TABLE_NAMES.includes(table as TableName)) ||
+    TABLE_NAMES.some((table) => table !== "funding_entries" && !(table in tables))
   )
     fail("Das Backup enthält nicht alle Bauplan-Datentabellen.");
 
@@ -89,7 +90,11 @@ function validateDatabase(value: unknown): BackupDatabase {
           : table === "expenses"
             ? columns.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
             : columns;
-    const validatedRows = validateRows(tables[table], columns, required);
+    const validatedRows = validateRows(
+      table === "funding_entries" && !(table in tables) ? [] : tables[table],
+      columns,
+      required,
+    );
     const rows =
       table === "tasks"
         ? validatedRows.map((row) => ({ ...row, assignee_id: row["assignee_id"] ?? null }))
@@ -136,6 +141,14 @@ function validateDatabase(value: unknown): BackupDatabase {
     normalizedTables.expenses.push(expense);
   }
   normalizedTables.invoices = [];
+  for (const entry of normalizedTables.funding_entries)
+    validateFundingEntry(
+      entry,
+      normalizedTables.budget_pots.map((pot) => ({
+        id: String(pot["id"]),
+        deducts_from_budget: Boolean(pot["deducts_from_budget"]),
+      })),
+    );
 
   const users = value["users"];
   if (!Array.isArray(users)) fail("Die Benutzerkonten im Backup sind ungültig.");

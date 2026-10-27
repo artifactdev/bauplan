@@ -12,10 +12,11 @@ Admins can export and restore a complete database-and-documents backup from Sett
 - Metrics: total budget, expected costs, remaining budget, already paid.
 - Paid and open expense totals, upcoming events and tasks.
 - Quick actions: upload a document (also via camera), create a task or cost item.
-- On the very first visit without a project: create a project (name, address, budget, time period).
-- Edit the shared project's name, address, total budget, and dates from the sidebar project card or the account menu (also on mobile). The Budget page opens the same editor.
+- On the very first visit without a project: create a project (name, address, initial bank budget, time period).
+- Edit the shared project's name, address, initial bank budget, and dates from the sidebar project card or the account menu (also on mobile). The Budget page opens the same editor. The overall budget is calculated from this initial amount plus additional funding.
 
 ## Budget
+- **Additional funding:** separately record received money from family or grants, with source, amount, date, and optional notes. The total budget includes these receipts without changing the initial bank budget or the bank loan. Multiple receipts per source, editing, and deletion are supported. Source cards show received funds, assigned expenses, and the remaining amount. Select the corresponding payment source when recording an expense; expenses are deducted once, not again when recording income. See [budget logic](budget.md).
 - **Trades** (e.g. roofing, electrical) with their own budget and color.
 - **Cost items** per trade with planned amounts.
 - Per item and trade: planned, committed, expected, paid, variance. Details in [budget.md](budget.md).

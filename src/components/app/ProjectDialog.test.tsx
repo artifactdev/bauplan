@@ -42,6 +42,7 @@ it("prefills the project and saves edits through the shared mutation, refreshing
     </QueryClientProvider>,
   );
   expect(screen.getByLabelText("Projektname")).toHaveValue("Renovierung");
+  expect(screen.getByLabelText("Initiales Bankbudget (€)")).toHaveValue(100000);
   fireEvent.change(screen.getByLabelText("Projektname"), { target: { value: "Sanierung" } });
   fireEvent.change(screen.getByLabelText("Adresse"), { target: { value: "Neue Straße 2" } });
   fireEvent.click(screen.getByRole("button", { name: "Speichern" }));

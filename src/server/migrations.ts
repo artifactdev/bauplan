@@ -43,6 +43,12 @@ const MIGRATIONS: readonly Migration[] = [
       db.exec("DELETE FROM invoices");
     },
   },
+  {
+    version: 3,
+    name: "additional-funding-ledger",
+    // The shared schema creates the ledger; versioning prevents older builds from ignoring it.
+    up() {},
+  },
 ];
 
 function toSqlValue(value: unknown): string | number | null {

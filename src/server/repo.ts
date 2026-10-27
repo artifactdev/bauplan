@@ -12,6 +12,7 @@ import {
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_TABLE } from "@/lib/schema";
 import { migrateDatabase } from "./migrations";
+import { validateFundingEntry } from "@/lib/funding";
 import {
   parseNavigation,
   navigationSchema,
@@ -397,6 +398,7 @@ export function sqliteRepo(): Repo {
     async insert(table, row) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
+      if (table === "funding_entries") validateFundingEntry(row, fundingSources(d));
       const id = (row["id"] as string) || crypto.randomUUID();
       const full = { ...row, id, created_at: row["created_at"] ?? new Date().toISOString() };
       const keys = Object.keys(full);
@@ -408,6 +410,18 @@ export function sqliteRepo(): Repo {
     async update(table, id, patch) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
+      if (table === "funding_entries") {
+        const existing = d.prepare("SELECT * FROM funding_entries WHERE id = ?").get(id);
+        if (!existing) throw new Error("funding.not_found");
+        validateFundingEntry({ ...existing, ...patch }, fundingSources(d));
+      }
+      if (
+        table === "budget_pots" &&
+        "deducts_from_budget" in patch &&
+        !patch["deducts_from_budget"] &&
+        d.prepare("SELECT id FROM funding_entries WHERE budget_pot_id = ? LIMIT 1").get(id)
+      )
+        throw new Error("funding.source_in_use");
       const keys = Object.keys(patch);
       if (!keys.length) return;
       d.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(
@@ -417,7 +431,13 @@ export function sqliteRepo(): Repo {
     },
     async remove(table, id) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
-      (await db()).prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+      const d = await db();
+      if (
+        table === "budget_pots" &&
+        d.prepare("SELECT id FROM funding_entries WHERE budget_pot_id = ? LIMIT 1").get(id)
+      )
+        throw new Error("funding.source_in_use");
+      d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
     },
     async putFile(name, _mime, bytes) {
       const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
@@ -465,6 +485,16 @@ export async function readSqliteFile(p: string): Promise<Uint8Array | null> {
 }
 
 /* ------------------------------- helpers ------------------------------- */
+
+function fundingSources(db: SqliteDb) {
+  return db
+    .prepare("SELECT id, deducts_from_budget FROM budget_pots")
+    .all()
+    .map((row) => ({
+      id: String(row["id"]),
+      deducts_from_budget: Boolean(row["deducts_from_budget"]),
+    }));
+}
 
 function normalize(row: Record<string, unknown>) {
   const out: Record<string, unknown> = { ...row };

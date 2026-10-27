@@ -8,6 +8,7 @@ import { eur } from "@/lib/format";
 import { tradeName, tradeOptions } from "@/lib/options";
 import { Bar, Empty, PageHeader, Panel } from "@/components/app/ui-bits";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
+import { FundingPanel } from "@/components/app/FundingPanel";
 import { QuickCost } from "@/components/app/quick-actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,6 +182,12 @@ function BudgetPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,1.3fr)]">
           <div>
             <div className="font-display text-3xl font-semibold tabular">{eur(summary.budget)}</div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm tabular">
+              <dt className="text-muted-foreground">{tr("funding.bank_budget")}</dt>
+              <dd className="text-right">{eur(summary.bankBudget)}</dd>
+              <dt className="text-muted-foreground">{tr("funding.title")}</dt>
+              <dd className="text-right">{eur(summary.additionalFunding)}</dd>
+            </dl>
             {summary.budget > 0 ? (
               <>
                 <div className="mt-3">
@@ -457,6 +464,7 @@ function BudgetPage() {
         )}
       </Panel>
 
+      <FundingPanel />
       <QuickCost
         open={!!costDlg}
         onOpenChange={(open) => !open && setCostDlg(null)}

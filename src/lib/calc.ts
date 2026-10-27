@@ -3,6 +3,7 @@ import type {
   CreditRepayment,
   CreditTerms,
   Expense,
+  FundingEntry,
   Invoice,
   Workspace,
 } from "./schema";
@@ -33,13 +34,19 @@ export function expectedCost(planned: number, committed: number, invoiced: numbe
 /** Expenses (receipts, general bills) always count as spent money. Only status "offen" is unpaid. */
 const expPaid = (e: Expense) => e.status !== "offen";
 
-export type PotSummary = BudgetPot & { spent: number; paid: number };
+export type PotSummary = BudgetPot & {
+  spent: number;
+  paid: number;
+  received: number;
+  remaining: number;
+};
 
 /** Totals per payment source (expenses + invoices). */
 export function summarizePots(
   pots: BudgetPot[],
   expenses: Expense[],
   invoices: Invoice[],
+  funding: FundingEntry[] = [],
 ): PotSummary[] {
   return pots.map((p) => {
     const ex = expenses.filter((e) => e.budget_pot_id === p.id);
@@ -49,7 +56,10 @@ export function summarizePots(
     const paid =
       ex.filter(expPaid).reduce((s, e) => s + Number(e.amount), 0) +
       inv.filter((i) => i.paid).reduce((s, i) => s + Number(i.amount), 0);
-    return { ...p, spent, paid };
+    const received = funding
+      .filter((entry) => entry.budget_pot_id === p.id)
+      .reduce((sum, entry) => sum + Number(entry.amount), 0);
+    return { ...p, spent, paid, received, remaining: received - spent };
   });
 }
 
@@ -64,6 +74,7 @@ export function summarize(
   wsIn: Pick<Workspace, "cost_items" | "offers" | "invoices" | "projects"> & {
     expenses?: Expense[];
     budget_pots?: BudgetPot[];
+    funding_entries?: FundingEntry[];
   },
 ) {
   // Only transactions assigned to a cost item and a budget-counting source
@@ -83,7 +94,8 @@ export function summarize(
       costItemIds.has(expense.cost_item_id) &&
       countsTowardBudget(expense.budget_pot_id, potList),
   );
-  const pots = summarizePots(potList, allExpenses, wsIn.invoices);
+  const funding = wsIn.funding_entries ?? [];
+  const pots = summarizePots(potList, allExpenses, wsIn.invoices, funding);
   const items: ItemSummary[] = wsIn.cost_items.map((c) => {
     const committed = wsIn.offers
       .filter((o) => o.cost_item_id === c.id && o.status === "accepted")
@@ -110,7 +122,9 @@ export function summarize(
   });
   const sum = (k: keyof ItemSummary) => items.reduce((s, i) => s + (i[k] as number), 0);
 
-  const budget = Number(wsIn.projects[0]?.total_budget ?? 0);
+  const bankBudget = Number(wsIn.projects[0]?.total_budget ?? 0);
+  const additionalFunding = funding.reduce((sum, entry) => sum + Number(entry.amount), 0);
+  const budget = bankBudget + additionalFunding;
   const planned = sum("planned");
   const committed = sum("committed");
   const invoiced = sum("invoiced");
@@ -124,6 +138,8 @@ export function summarize(
   return {
     items,
     budget,
+    bankBudget,
+    additionalFunding,
     planned,
     committed,
     invoiced,

@@ -29,6 +29,33 @@ afterAll(() => {
 });
 
 describe("Bauplan backups", () => {
+  it("round-trips additional funding and accepts legacy backups without the new ledger", async () => {
+    await repo.insert("budget_pots", { id: "gift-source", name: "Oma", deducts_from_budget: true });
+    await repo.insert("funding_entries", {
+      id: "gift",
+      budget_pot_id: "gift-source",
+      amount: 10000,
+      received_date: "2026-01-01",
+    });
+    const archive = await createBackup(repo);
+    const parsed = parseBackup(archive);
+    expect(parsed.database.tables.funding_entries[0]).toMatchObject({
+      amount: 10000,
+      budget_pot_id: "gift-source",
+    });
+    await repo.update("funding_entries", "gift", { amount: 1 });
+    await restoreBackup(repo, archive);
+    expect((await repo.getAll()).funding_entries[0]?.amount).toBe(10000);
+    const entries = unzipSync(archive);
+    const manifest = JSON.parse(strFromU8(entries["backup.json"]!)) as {
+      database: { tables: Record<string, unknown> };
+    };
+    delete manifest.database.tables["funding_entries"];
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(parseBackup(zipSync(entries)).database.tables.funding_entries).toEqual([]);
+    await repo.remove("funding_entries", "gift");
+    await repo.remove("budget_pots", "gift-source");
+  });
   it("round-trips database data, user accounts and uploaded documents without sessions", async () => {
     const syncGeneration = await repo.getSyncGeneration();
     db.prepare(

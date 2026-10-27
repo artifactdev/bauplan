@@ -40,6 +40,7 @@ const EMPTY: Workspace = {
   ideas: [],
   contacts: [],
   budget_pots: [],
+  funding_entries: [],
   credit_terms: [],
   credit_repayments: [],
 };
@@ -52,8 +53,7 @@ export function useWorkspace() {
       if (!userId) throw new Error(tr("offline.no_account_available_offline"));
       if (!navigator.onLine) {
         const cached = await loadSnapshot(userId);
-        if (!cached)
-          throw new Error(tr("offline.saved_workspace_unavailable_offline"));
+        if (!cached) throw new Error(tr("offline.saved_workspace_unavailable_offline"));
         return cached;
       }
       const workspace = await mergePendingWorkspace(userId, (await getWorkspace()) as Workspace);
@@ -161,7 +161,8 @@ export function useMutations() {
 
   const upload = useMutation({
     mutationFn: async (v: { file: File; meta: Record<string, unknown> }) => {
-      if (v.file.size > MAX_UPLOAD_BYTES) throw new Error(tr("offline.file_too_large", { max: MAX_UPLOAD_MB }));
+      if (v.file.size > MAX_UPLOAD_BYTES)
+        throw new Error(tr("offline.file_too_large", { max: MAX_UPLOAD_MB }));
       if (navigator.onLine) {
         const fd = new FormData();
         fd.append("file", v.file);
@@ -279,11 +280,7 @@ export function useOfflineSync(userId: string) {
       if (!user || user.id !== userId || (user.role !== "admin" && user.role !== "member")) {
         clearOfflineAccount();
         window.location.href = "/auth";
-        throw new Error(
-          tr(
-            "offline.session_no_longer_active",
-          ),
-        );
+        throw new Error(tr("offline.session_no_longer_active"));
       }
       const store = await import("@/lib/offline-store");
       const uploads = await store.listUploads(userId);
@@ -338,9 +335,7 @@ export function useOfflineSync(userId: string) {
       await qc.invalidateQueries({ queryKey: ["ws", userId] });
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? tr(error.message)
-          : tr("offline.offline_synchronization_failed"),
+        error instanceof Error ? tr(error.message) : tr("offline.offline_synchronization_failed"),
       );
     } finally {
       syncingRef.current = false;
@@ -349,9 +344,7 @@ export function useOfflineSync(userId: string) {
         await refresh();
       } catch (error) {
         toast.error(
-          error instanceof Error
-            ? tr(error.message)
-            : tr("offline.not_load_offline_status"),
+          error instanceof Error ? tr(error.message) : tr("offline.not_load_offline_status"),
         );
       }
     }

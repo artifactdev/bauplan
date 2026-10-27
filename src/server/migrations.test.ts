@@ -33,7 +33,7 @@ describe("database migrations", () => {
         );
       }
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(3);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'app_%'").all()).toHaveLength(
       6,
     );
@@ -88,7 +88,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(3);
   });
 
   it("applies ordered data migrations once", () => {
@@ -108,6 +108,21 @@ describe("database migrations", () => {
     migrateDatabase(db, migrations);
     expect(db.prepare("SELECT budget FROM trades").get()?.["budget"]).toBe(125);
     expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
+  });
+
+  it("adds the funding ledger to v2 without changing the existing initial bank budget", () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec(`
+      DROP TABLE funding_entries;
+      PRAGMA user_version = 2;
+      INSERT INTO projects (id, created_at, total_budget) VALUES ('project', '2026-01-01', 100000);
+    `);
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
+    expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(3);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

@@ -49,11 +49,12 @@ const NONE = "__none";
 /** Select fields that allow creating a new entry inline. */
 const QUICK_ADD: Record<
   string,
-  { table: "trades" | "cost_items" | "contacts"; col: string; label: string }
+  { table: "trades" | "cost_items" | "contacts" | "budget_pots"; col: string; label: string }
 > = {
   trade_id: { table: "trades", col: "name", label: tr("shared.new_trade") },
   cost_item_id: { table: "cost_items", col: "title", label: tr("shared.new_cost_item") },
   contact_id: { table: "contacts", col: "name", label: tr("shared.new_contact") },
+  budget_pot_id: { table: "budget_pots", col: "name", label: tr("funding.new_source") },
 };
 
 export function EntityDialog({
@@ -156,7 +157,9 @@ export function EntityDialog({
     const name = newName.trim();
     if (!cfg || !name) return;
     const row: Record<string, unknown> = { [cfg.col]: name };
-    if (cfg.table !== "trades" && values["trade_id"]) row["trade_id"] = values["trade_id"];
+    if ((cfg.table === "cost_items" || cfg.table === "contacts") && values["trade_id"])
+      row["trade_id"] = values["trade_id"];
+    if (cfg.table === "budget_pots") row["deducts_from_budget"] = true;
     const { id } = await create.mutateAsync({ table: cfg.table, row });
     setAdded((a) => ({ ...a, [field]: [...(a[field] ?? []), { value: id, label: name }] }));
     set(field, id);

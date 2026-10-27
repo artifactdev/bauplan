@@ -33,6 +33,8 @@ Updates migrate the persistent SQLite database automatically **before the produc
 
 Migration v2 consolidates existing invoices into expenses, using `invoice-<old-id>` IDs and preserving all financial fields and existing document/contact/cost-item links. It then empties the legacy invoice table so totals are not counted twice. An ID collision fails and rolls back the migration rather than overwriting either record. The empty legacy table/schema is retained for reading older backups and cached workspaces; old ZIP imports undergo the same conversion. New expenses can optionally link to a quote; no historical quote link is guessed.
 
+Migration v3 introduces the additional-funding ledger, created from the shared schema. Existing project amounts are preserved and displayed as the initial bank budget; additional funding starts empty. The version gate prevents older migration-aware builds from opening a database containing funding they cannot account for. ZIP backups include incoming funds; backups and offline snapshots created before this table existed are accepted with an empty ledger.
+
 Synchronize offline work before updating. Writes from obsolete invoice forms or queued invoice operations are explicitly rejected with a reload/reconciliation message rather than creating hidden records. Unsynchronized changes remain local; transfer them to the migrated expense (or create a new expense) before discarding them. Expense operations with an older row shape may require the existing conflict-resolution flow after new nullable columns are added.
 
 ### Reverse proxy

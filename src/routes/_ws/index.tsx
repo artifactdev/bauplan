@@ -135,7 +135,14 @@ function Dashboard() {
         <MetricCard
           label={tr("shared.total_budget")}
           value={eur(s.budget)}
-          hint={s.budget > 0 ? undefined : tr("index.budget_not_set")}
+          hint={
+            s.budget > 0
+              ? tr("funding.total_breakdown", {
+                  bank: eur(s.bankBudget),
+                  additional: eur(s.additionalFunding),
+                })
+              : tr("index.budget_not_set")
+          }
           icon={<Wallet className="h-4 w-4" />}
         />
         <MetricCard

@@ -29,6 +29,7 @@ const emptyWorkspace: Workspace = {
   contacts: [],
   expenses: [],
   budget_pots: [],
+  funding_entries: [],
   credit_terms: [],
   credit_repayments: [],
 };
@@ -89,6 +90,35 @@ describe("account-scoped offline storage", () => {
     await clearAccountData("legacy-account");
     clearOfflineAccount();
     expect(getOfflineAccount()).toBeNull();
+  });
+
+  it("initializes the funding ledger in old snapshots and queues funding changes without losing existing data", async () => {
+    const legacy = structuredClone(emptyWorkspace);
+    Reflect.deleteProperty(legacy, "funding_entries");
+    await saveSnapshot("legacy-funding-account", legacy);
+    const loaded = await loadSnapshot("legacy-funding-account");
+    expect(loaded?.funding_entries).toEqual([]);
+    if (!loaded) throw new Error("Missing restored snapshot");
+    const change: OfflineChange = {
+      id: "funding-change",
+      userId: "legacy-funding-account",
+      sequence: 0,
+      table: "funding_entries",
+      action: "create",
+      rowId: "gift",
+      base: null,
+      row: {
+        id: "gift",
+        budget_pot_id: "grandma",
+        amount: 10000,
+        received_date: "2026-01-01",
+        notes: null,
+      },
+    };
+    await persistChange("legacy-funding-account", applyChange(loaded, change), change);
+    expect((await loadSnapshot("legacy-funding-account"))?.funding_entries[0]?.amount).toBe(10000);
+    expect((await listChanges("legacy-funding-account"))[0]?.table).toBe("funding_entries");
+    await clearAccountData("legacy-funding-account");
   });
 });
 

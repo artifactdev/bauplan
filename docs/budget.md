@@ -13,6 +13,18 @@ Implemented in `src/lib/calc.ts`, covered by `src/lib/calc.test.ts`.
 | **Paid**      | Expenses with status ≠ open                 |
 | **Remaining** | Total budget − Expected                     |
 
+## Financing
+
+The project's existing `total_budget` field is now presented as **Initial bank budget**. Its stored value is preserved during upgrades; it is not increased or rewritten when additional funds arrive.
+
+Record received money under **Budget → Additional funding**, with a payment source (for example **Oma**), positive amount, received date, and optional note. The source picker can create a new budget-counting payment source inline. Multiple receipts may belong to the same source.
+
+**Total budget = initial bank budget + all recorded incoming funds.** A received payment is financing, not a negative expense, and does not increase incurred or paid costs. Actual expenses are recorded only once under Expenses, selecting the matching source. For example, €100,000 initial bank budget + €10,000 received − €3,000 eligible expenses leaves €107,000 when there are no other planned/committed costs.
+
+The Budget page shows the bank/additional-funding breakdown, an editable ledger, and received/spent/remaining totals per funded source. Source balances include all assigned expenses (including open expenses and expenses without cost items); project expected/paid totals retain the cost-item rules below. Negative source balances are shown, not silently capped. Editing or deleting a receipt updates the total budget, but never changes existing expenses. A source with recorded incoming funds cannot be deleted or excluded from budget deductions until its entries are moved or removed.
+
+Additional funds do not change the bank loan principal or create bank drawdowns. Credit calculations still include only expenses paid from the configured bank source. Existing projects and workspaces without funding entries behave as before.
+
 ## Rules
 
 1. **No double counting:** per cost item use the larger of accepted quotes and incurred expenses when either is present; otherwise use the planned amount. A quote and its expenses are never added together. Multiple partial invoices are separate expenses, optionally linked to the same quote.
