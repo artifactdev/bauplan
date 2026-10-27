@@ -271,6 +271,7 @@ export function sqliteRepo(): Repo {
       const files: BackupFile[] = [];
       let totalBytes = 0;
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+        if (entry.isDirectory() && entry.name.startsWith(".bauplan-restore-")) continue;
         if (!entry.isFile()) throw new Error("Das Upload-Verzeichnis enthält einen ungültigen Eintrag.");
         const filePath = path.join(directory, entry.name);
         const fileStat = await fs.stat(filePath);
@@ -304,16 +305,20 @@ export function sqliteRepo(): Repo {
       const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
       const path = await nodeImport<typeof import("node:path")>("node:" + "path");
       const liveDirectory = uploadsDir(path);
-      const parent = path.dirname(liveDirectory);
-      const stageDirectory = await fs.mkdtemp(path.join(parent, ".bauplan-restore-"));
-      const stagedUploads = path.join(stageDirectory, "uploads");
-      const previousUploads = `${liveDirectory}.backup-${crypto.randomUUID()}`;
-      let oldMoved = false;
-      let newMoved = false;
+      // The uploads directory is often a mount point (Docker volume) that cannot be renamed,
+      // so staging happens inside it and only its entries are swapped.
+      await fs.mkdir(liveDirectory, { recursive: true });
+      const stageDirectory = await fs.mkdtemp(path.join(liveDirectory, ".bauplan-restore-"));
+      const stageName = path.basename(stageDirectory);
+      const stagedUploads = path.join(stageDirectory, "new");
+      const previousUploads = path.join(stageDirectory, "previous");
+      const movedOld: string[] = [];
+      const movedNew: string[] = [];
       let transactionOpen = false;
 
       try {
         await fs.mkdir(stagedUploads);
+        await fs.mkdir(previousUploads);
         for (const file of files) {
           if (
             !file.name ||
@@ -362,10 +367,15 @@ export function sqliteRepo(): Repo {
         insertRows(USER_NAVIGATION_TABLE, database.navigation);
         insertRows("app_sync_operations", database.syncOperations);
 
-        await fs.rename(liveDirectory, previousUploads);
-        oldMoved = true;
-        await fs.rename(stagedUploads, liveDirectory);
-        newMoved = true;
+        for (const name of await fs.readdir(liveDirectory)) {
+          if (name === stageName) continue;
+          await fs.rename(path.join(liveDirectory, name), path.join(previousUploads, name));
+          movedOld.push(name);
+        }
+        for (const name of await fs.readdir(stagedUploads)) {
+          await fs.rename(path.join(stagedUploads, name), path.join(liveDirectory, name));
+          movedNew.push(name);
+        }
         d.exec("COMMIT");
         transactionOpen = false;
       } catch (error) {
@@ -377,16 +387,16 @@ export function sqliteRepo(): Repo {
             recoveryErrors.push(rollbackError);
           }
         }
-        if (newMoved) {
+        for (const name of movedNew) {
           try {
-            await fs.rm(liveDirectory, { recursive: true, force: true });
+            await fs.rm(path.join(liveDirectory, name), { force: true });
           } catch (cleanupError) {
             recoveryErrors.push(cleanupError);
           }
         }
-        if (oldMoved) {
+        for (const name of movedOld) {
           try {
-            await fs.rename(previousUploads, liveDirectory);
+            await fs.rename(path.join(previousUploads, name), path.join(liveDirectory, name));
           } catch (restoreError) {
             recoveryErrors.push(restoreError);
           }
@@ -405,7 +415,6 @@ export function sqliteRepo(): Repo {
       }
 
       try {
-        await fs.rm(previousUploads, { recursive: true, force: true });
         await fs.rm(stageDirectory, { recursive: true, force: true });
       } catch (error) {
         throw new Error(

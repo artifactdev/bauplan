@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, unzipSync, zipSync } from "fflate";
@@ -99,8 +99,14 @@ describe("Bauplan backups", () => {
       total_budget: 1,
     });
     const extraFile = await repo.putFile("extra.txt", "text/plain", new Uint8Array([9]));
+    const uploads = join(dir, "uploads");
+    const uploadsInode = statSync(uploads).ino;
     await restoreBackup(repo, archive);
     expect(await repo.getSyncGeneration()).not.toBe(syncGeneration);
+    // The uploads directory may be a mount point, so restore must swap its contents in place.
+    expect(statSync(uploads).ino).toBe(uploadsInode);
+    expect(readdirSync(uploads).sort()).toEqual([storagePath]);
+    expect(readdirSync(dir).filter((name) => name.includes("backup"))).toEqual([]);
 
     const workspace = await repo.getAll();
     expect(workspace.projects.map((item) => item.id)).toEqual([project["id"]]);
@@ -148,6 +154,7 @@ describe("Bauplan backups", () => {
     await expect(repo.restoreBackup(invalidDatabase, files)).rejects.toThrow();
     expect((await repo.getAll()).projects.map((item) => item.id)).toEqual(["project-1"]);
     expect(await repo.readFile(files[0]!.name)).toEqual(files[0]!.bytes);
+    expect(readdirSync(join(dir, "uploads")).sort()).toEqual(files.map((file) => file.name).sort());
   });
 
   it("does not restore during setup if a user was created after the setup check", async () => {
