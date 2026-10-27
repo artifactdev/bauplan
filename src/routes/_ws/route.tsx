@@ -209,9 +209,7 @@ function Shell() {
       </a>
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground md:flex">
         <div className="mb-7 flex items-center gap-3 px-3 font-display text-lg font-semibold text-sidebar-accent-foreground">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Hammer className="h-5 w-5" />
-          </span>{" "}
+          <img src="/app-icon.svg" alt="" className="h-9 w-9 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
           {tr("shared.bauplan")}
         </div>
         <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
@@ -259,7 +257,7 @@ function Shell() {
         <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-sidebar px-4 md:px-8">
           <div className="min-w-0">
             <span className="flex items-center gap-2 font-semibold md:hidden">
-              <Hammer className="h-5 w-5 text-primary" />
+              <img src="/app-icon.svg" alt="" className="h-6 w-6 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
               {tr("shared.bauplan")}
             </span>
             <span className="hidden truncate text-sm text-muted-foreground md:block">

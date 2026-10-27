@@ -20,7 +20,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       outDir: ".output/public",
       injectRegister: false,
-      includeAssets: ["favicon.ico", "pwa-icon.svg", "pwa-icon.png"],
+      includeAssets: ["favicon.ico", "app-icon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "Bauplan – Renovierung im Griff",
         short_name: "Bauplan",
@@ -32,8 +32,10 @@ export default defineConfig({
         display: "standalone",
         start_url: "/",
         icons: [
-          { src: "/pwa-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
-          { src: "/pwa-icon.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+          { src: "/app-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+          { src: "/app-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/app-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/app-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
