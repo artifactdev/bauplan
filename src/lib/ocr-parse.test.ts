@@ -26,6 +26,7 @@ describe("ocr-parse", () => {
     ["Bindefrist:\n16.11.2026", "2026-11-16"],
     ["Annahmefrist bis 16. November 2026", "2026-11-16"],
     ["Valid until 2026-11-16", "2026-11-16"],
+    ["Dieses Angebot gilt bis zum 16.11.2026", "2026-11-16"],
     ["Angebot gültig 14 Tage", "2026-11-10"],
     ["Angebot gültig für 2 Wochen", "2026-11-10"],
     ["Gültig bis 31.02.2026", null],
@@ -44,6 +45,12 @@ describe("ocr-parse", () => {
     expect(extractFromText("Angebot\nGültig bis 16.11.2026")).toMatchObject({
       date: null,
       valid_until: "2026-11-16",
+    });
+  });
+  it("uses the duration rather than a document date on the next line", () => {
+    expect(extractFromText("Angebot gültig 14 Tage\nAngebotsdatum: 27.10.2026")).toMatchObject({
+      date: "2026-10-27",
+      valid_until: "2026-11-10",
     });
   });
   it("reads total from a receipt, ignoring change and tax", () => {

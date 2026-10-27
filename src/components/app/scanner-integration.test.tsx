@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { analyzeDocument } from "@/lib/ocr.functions";
+import { extractFromText } from "@/lib/ocr-parse";
 import { ScanBar } from "./ScanBar";
 import { QuickUpload } from "./quick-actions";
 import { EntityDialog } from "./EntityDialog";
@@ -124,10 +125,15 @@ describe("scanner save integration", () => {
 
   it("uploads into an existing offer, prefills dates and amount, and preserves unrelated fields", async () => {
     vi.mocked(analyzeDocument).mockResolvedValue({
-      result: { amount: 30392, date: "2026-10-27", valid_until: "2026-11-10" },
+      result: {
+        ...extractFromText("Angebot"),
+        amount: 30392,
+        date: "2026-10-27",
+        valid_until: "2026-11-10",
+      },
       error: null,
       warnings: [],
-    } as unknown as Awaited<ReturnType<typeof analyzeDocument>>);
+    });
     const submit = vi.fn();
     render(
       <EntityDialog

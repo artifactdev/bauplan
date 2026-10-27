@@ -386,7 +386,7 @@ export function findDates(text: string): string[] {
 
 const DATE_LABEL = /(rechnungs|beleg|angebots|bestell|kauf)?datum\b|\bdate\b/i;
 const NOT_DOC_DATE =
-  /(liefer|leistung|geburt|f[äa]llig|zahlbar|g[üu]ltig|bindefrist|annahmefrist|\bbis\b|offen|valuta|seit\b|auftrag erteilt)/i;
+  /(liefer|leistung|geburt|f[äa]llig|zahlbar|g[üu]ltig|gilt\s+bis|bindefrist|annahmefrist|\bbis\b|offen|valuta|seit\b|auftrag erteilt)/i;
 
 /** Document date: a labelled date ("Rechnungsdatum", "Datum") first, else the first unrelated date. */
 export function findDocDate(text: string, due: string | null = null): string | null {
@@ -414,21 +414,21 @@ function addDays(isoDate: string, days: number): string {
 /** Offer validity is separate from an invoice's payment deadline. */
 export function findOfferValidity(text: string, docDate: string | null = null): string | null {
   const lines = text.split(/\r?\n/);
-  const label = /g[üu]ltig(?:keit)?|bindefrist|annahmefrist|valid\s+until/i;
+  const label = /g[üu]ltig(?:keit)?|gilt\s+bis|bindefrist|annahmefrist|valid\s+until/i;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     const match = label.exec(line);
     if (!match) continue;
     const value = line.slice(match.index);
-    const date = findDates(value)[0] ?? findDates(lines[i + 1] ?? "")[0];
-    if (date) {
-      const parsed = new Date(`${date}T00:00:00Z`);
-      if (parsed.toISOString().slice(0, 10) === date) return date;
-    }
     const relative = value.match(/(?:g[üu]ltig(?:keit)?)[^\d\n]{0,30}(\d{1,3})\s*(tage?|wochen?)/i);
     if (relative && docDate) {
       const days = Number(relative[1]) * (/woche/i.test(relative[2]!) ? 7 : 1);
       if (days > 0 && days <= 365) return addDays(docDate, days);
+    }
+    const date = findDates(value)[0] ?? (!relative ? findDates(lines[i + 1] ?? "")[0] : null);
+    if (date) {
+      const parsed = new Date(`${date}T00:00:00Z`);
+      if (parsed.toISOString().slice(0, 10) === date) return date;
     }
   }
   return null;

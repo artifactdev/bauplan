@@ -87,6 +87,7 @@ export function AssignDialog({
       date: ex?.date ?? null,
       payment_date: ex?.date ?? null,
       due_date: ex?.due_date ?? null,
+      valid_until: ex?.valid_until ?? null,
       trade_id: trade?.id ?? doc?.trade_id ?? null,
       cost_item_id: doc?.cost_item_id ?? null,
       category: ex?.expense_category && EXPENSE_CATEGORIES.includes(ex.expense_category) ? ex.expense_category : "Sonstiges",
@@ -110,6 +111,7 @@ export function AssignDialog({
           { name: "date", label: tr("shared.date"), type: "date" },
           ...(target !== "angebot" ? [{ name: "payment_date", label: tr("shared.payment_date_planned_actual"), type: "date" as const }] : []),
           ...(target === "rechnung" ? [{ name: "due_date", label: tr("shared.payable"), type: "date" as const }] : []),
+          ...(target === "angebot" ? [{ name: "valid_until", label: tr("quotes.valid_until"), type: "date" as const }] : []),
           ...(target === "ausgabe"
             ? [
                 { name: "category", label: tr("shared.category"), type: "select" as const, required: true, options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })) },
@@ -130,7 +132,7 @@ export function AssignDialog({
     if (target === "rechnung")
       await create.mutateAsync({ table: "invoices", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, invoice_date: v.date, due_date: v.due_date, payment_date: v["payment_date"], paid: !!v.paid, budget_pot_id: v["budget_pot_id"] ?? null } });
     if (target === "angebot")
-      await create.mutateAsync({ table: "offers", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, offer_date: v.date, status: "received" } });
+      await create.mutateAsync({ table: "offers", row: { ...base, contractor: v.vendor, contact_id: ex?.contact_id ?? null, title: v.title, amount: v.amount, offer_date: v.date, valid_until: v["valid_until"], status: "received" } });
     const category = target === "ausgabe" ? (ex?.doc_type === "rechnung" ? "Rechnung" : "Beleg") : target === "rechnung" ? "Rechnung" : target === "angebot" ? "Angebot" : CATEGORY_FOR[ex?.doc_type ?? "sonstiges"];
     await update.mutateAsync({
       table: "documents",
