@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Camera, CheckCircle2, Loader2, ScanLine, Upload } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { analyzeDocument } from "@/lib/ocr.functions";
-import { ocrText } from "@/lib/ocr-ui";
+import { logOcrResult, ocrText } from "@/lib/ocr-ui";
 import { LINKS_DOCUMENT, mapExtraction, type ScanTarget } from "@/lib/scan-map";
 import { Button } from "@/components/ui/button";
 import { DocumentScanner } from "./DocumentScanner";
@@ -14,7 +14,19 @@ const CATEGORY: Record<ScanTarget, string> = {
 };
 
 /** Photo/upload step at the top of a create form: stores the file, reads it, pre-fills the form. */
-export function ScanBar({ target, onFill }: { target: ScanTarget; onFill: (v: Record<string, unknown>) => void }) {
+export function ScanBar({
+  target,
+  onFill,
+  onUploaded,
+  onBusyChange,
+}: {
+  target: ScanTarget;
+  onFill: (v: Record<string, unknown>) => void;
+  /** Called as soon as the file is stored, so the form can offer to delete it on cancel. */
+  onUploaded?: (doc: { id: string; name: string }) => void;
+  /** True while a file is being stored (not during recognition). */
+  onBusyChange?: (uploading: boolean) => void;
+}) {
   const { ws } = useWorkspace();
   const { upload } = useMutations();
   const cam = useRef<HTMLInputElement>(null);
@@ -25,19 +37,31 @@ export function ScanBar({ target, onFill }: { target: ScanTarget; onFill: (v: Re
   async function handle(file: File | undefined) {
     if (!file) return;
     setState({ busy: true });
+    onBusyChange?.(true);
+    let id: string;
     try {
-      const { id } = await upload.mutateAsync({ file, meta: { category: CATEGORY[target] } });
+      ({ id } = await upload.mutateAsync({ file, meta: { category: CATEGORY[target] } }));
+      // Registered before busy ends, so a pending "close?" question sees the stored file.
+      onUploaded?.({ id, name: file.name });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : tr("scan_bar.upload_failed"));
+      setState({ busy: false });
+      return;
+    } finally {
+      onBusyChange?.(false);
+    }
+    try {
       const canRead = file.type === "application/pdf" || file.type.startsWith("image/");
       const r = canRead ? await analyzeDocument({ data: { documentId: id } }) : { result: null, error: "unsupported", warnings: [] };
+      logOcrResult(file.name, r);
       const vals = mapExtraction(target, r.result, file.name, ws.trades);
       onFill(LINKS_DOCUMENT[target] ? { ...vals, document_id: id } : vals);
       if (r.error) toast.info(tr("scan_bar.file_saved_error_fill", { error: ocrText(r.error) }));
       for (const warning of r.warnings) toast.warning(ocrText(warning));
-      setState({ busy: false, done: file.name });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : tr("scan_bar.upload_failed"));
-      setState({ busy: false });
+    } catch {
+      toast.info(tr("scan_bar.file_saved_error_fill", { error: tr("assign_dialog.document_not_read") }));
     }
+    setState({ busy: false, done: file.name });
   }
 
   return (

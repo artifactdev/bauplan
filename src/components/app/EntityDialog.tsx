@@ -8,10 +8,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScanBar } from "./ScanBar";
 import type { ScanTarget } from "@/lib/scan-map";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useMutations } from "@/hooks/use-workspace";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export type Field = {
   name: string;
@@ -43,6 +52,7 @@ export function EntityDialog({
   extra,
   header,
   scan,
+  uploaded,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -55,6 +65,8 @@ export function EntityDialog({
   header?: ReactNode;
   /** Shows a photo/upload step that pre-fills this form (create only). */
   scan?: ScanTarget | undefined;
+  /** Documents stored just for this form; closing without saving asks whether to delete them. */
+  uploaded?: { id: string; name: string }[] | undefined;
 }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
@@ -62,10 +74,43 @@ export function EntityDialog({
   const [adding, setAdding] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [shown, setShown] = useState<Set<string>>(new Set());
-  const { create } = useMutations();
+  const [uploads, setUploads] = useState<{ id: string; name: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [askDiscard, setAskDiscard] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const { create, remove } = useMutations();
   useEffect(() => {
     if (open) { setValues(initial ?? {}); setAdding(null); setNewName(""); setShown(new Set()); }
   }, [open, initial]);
+  // Only on opening: `initial` may change while open (e.g. after a refetch) and must not forget uploads.
+  useEffect(() => {
+    if (open) { setUploads(uploaded ?? []); setUploading(false); setAskDiscard(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => {
+    if (open && uploaded?.length) setUploads((u) => [...uploaded, ...u.filter((x) => !uploaded.some((y) => y.id === x.id))]);
+  }, [open, uploaded]);
+  // Closed while the upload was still running and it then failed: nothing left to ask about.
+  useEffect(() => {
+    if (askDiscard && !uploading && !uploads.length) { setAskDiscard(false); onOpenChange(false); }
+  }, [askDiscard, uploading, uploads.length, onOpenChange]);
+  /** Closing without saving: files uploaded from this form would otherwise linger in Documents. */
+  const cancel = () => (uploads.length || uploading ? setAskDiscard(true) : onOpenChange(false));
+  const discard = async (deleteFiles: boolean) => {
+    if (deleteFiles) {
+      setDiscarding(true);
+      try {
+        for (const u of uploads) await remove.mutateAsync({ table: "documents", id: u.id });
+      } catch {
+        setDiscarding(false);
+        return;
+      }
+      setDiscarding(false);
+    }
+    // Keep `uploads` until the next open so the alert text doesn't change during its fade-out.
+    setAskDiscard(false);
+    onOpenChange(false);
+  };
   const set = (k: string, v: unknown) => setValues((s) => ({ ...s, [k]: v }));
   const addNew = async (field: string) => {
     const cfg = QUICK_ADD[field];
@@ -81,13 +126,21 @@ export function EntityDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : cancel())}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {header}
-        {scan && open && <ScanBar target={scan} onFill={(v) => setValues((s) => ({ ...s, ...v }))} />}
+        {scan && open && (
+          <ScanBar
+            target={scan}
+            onFill={(v) => setValues((s) => ({ ...s, ...v }))}
+            onUploaded={(doc) => setUploads((u) => [...u, doc])}
+            onBusyChange={setUploading}
+          />
+        )}
         <form
           className="grid grid-cols-1 gap-4 sm:grid-cols-2"
           onSubmit={async (e) => {
@@ -95,6 +148,7 @@ export function EntityDialog({
             setBusy(true);
             try {
               await onSubmit(values);
+              setUploads([]);
               onOpenChange(false);
             } catch (err) {
               toast.error(err instanceof Error ? err.message : String(err));
@@ -176,7 +230,7 @@ export function EntityDialog({
           ))}
           {extra && <div className="sm:col-span-2">{extra}</div>}
           <DialogFooter className="sm:col-span-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" onClick={cancel}>
               {tr("entity_dialog.cancel")}
             </Button>
             <Button type="submit" disabled={busy}>
@@ -186,5 +240,26 @@ export function EntityDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <AlertDialog open={askDiscard} onOpenChange={(o) => !o && !discarding && setAskDiscard(false)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{tr("entity_dialog.discard_upload_title", { count: Math.max(uploads.length, 1) })}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {uploading
+              ? tr("entity_dialog.discard_upload_pending")
+              : tr("entity_dialog.discard_upload_text", { count: uploads.length, names: uploads.map((u) => u.name).join(", ") })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={discarding}>{tr("entity_dialog.continue_editing")}</AlertDialogCancel>
+          <Button variant="outline" disabled={discarding || uploading} onClick={() => void discard(false)}>{tr("entity_dialog.keep_document")}</Button>
+          <Button variant="destructive" disabled={discarding || uploading} onClick={() => void discard(true)}>
+            {(discarding || uploading) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {tr("entity_dialog.delete_document", { count: Math.max(uploads.length, 1) })}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

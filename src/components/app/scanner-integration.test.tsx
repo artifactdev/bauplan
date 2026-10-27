@@ -4,9 +4,11 @@ import i18n from "@/i18n";
 import { analyzeDocument } from "@/lib/ocr.functions";
 import { ScanBar } from "./ScanBar";
 import { QuickUpload } from "./quick-actions";
+import { EntityDialog } from "./EntityDialog";
 
 const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
+  remove: vi.fn(),
   scanned: new File([new Uint8Array([37, 80, 68, 70])], "Scan 2026-03-14 09-05.pdf", {
     type: "application/pdf",
   }),
@@ -26,7 +28,7 @@ vi.mock("@/hooks/use-workspace", () => ({
     upload: { mutateAsync: mocks.upload },
     create: {},
     update: {},
-    remove: {},
+    remove: { mutateAsync: mocks.remove },
   }),
 }));
 vi.mock("@/lib/ocr.functions", () => ({ analyzeDocument: vi.fn() }));
@@ -131,5 +133,108 @@ describe("scanner save integration", () => {
         meta: expect.objectContaining({ category: "Plan" }),
       }),
     );
+  });
+
+  describe("cancelling a create form after uploading", () => {
+    async function openAndScan(onOpenChange = vi.fn()) {
+      vi.mocked(analyzeDocument).mockResolvedValue({ result: null, error: null, warnings: [] } as unknown as Awaited<ReturnType<typeof analyzeDocument>>);
+      render(<EntityDialog open onOpenChange={onOpenChange} title="New expense" fields={[]} onSubmit={() => {}} scan="expense" />);
+      fireEvent.click(screen.getByRole("button", { name: /scan document/i }));
+      fireEvent.click(await screen.findByRole("button", { name: "finish scan", hidden: true }));
+      await screen.findByText(mocks.scanned.name);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await screen.findByRole("alertdialog");
+      return onOpenChange;
+    }
+
+    it("deletes the uploaded document when the user chooses so", async () => {
+      mocks.remove.mockResolvedValue({ ok: true });
+      const onOpenChange = await openAndScan();
+      expect(screen.getByRole("alertdialog")).toHaveTextContent(mocks.scanned.name);
+      fireEvent.click(screen.getByRole("button", { name: "Delete document" }));
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+      expect(mocks.remove).toHaveBeenCalledWith({ table: "documents", id: "doc-1" });
+    });
+
+    it("keeps the document when the user chooses so", async () => {
+      const onOpenChange = await openAndScan();
+      fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+      expect(mocks.remove).not.toHaveBeenCalled();
+    });
+
+    it("asks on Escape / background close too, even after the page re-renders with a new initial", async () => {
+      vi.mocked(analyzeDocument).mockResolvedValue({ result: null, error: null, warnings: [] } as unknown as Awaited<ReturnType<typeof analyzeDocument>>);
+      const onOpenChange = vi.fn();
+      const view = render(<EntityDialog open onOpenChange={onOpenChange} title="New expense" fields={[]} initial={{}} onSubmit={() => {}} scan="expense" />);
+      fireEvent.click(screen.getByRole("button", { name: /scan document/i }));
+      fireEvent.click(await screen.findByRole("button", { name: "finish scan", hidden: true }));
+      await screen.findByText(mocks.scanned.name);
+      view.rerender(<EntityDialog open onOpenChange={onOpenChange} title="New expense" fields={[]} initial={{}} onSubmit={() => {}} scan="expense" />);
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+      expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("waits for a running upload before offering to delete it", async () => {
+      let finish!: (v: { id: string }) => void;
+      mocks.upload.mockReturnValue(new Promise((r) => { finish = r; }));
+      mocks.remove.mockResolvedValue({ ok: true });
+      vi.mocked(analyzeDocument).mockResolvedValue({ result: null, error: null, warnings: [] } as unknown as Awaited<ReturnType<typeof analyzeDocument>>);
+      const onOpenChange = vi.fn();
+      render(<EntityDialog open onOpenChange={onOpenChange} title="New expense" fields={[]} onSubmit={() => {}} scan="expense" />);
+      fireEvent.click(screen.getByRole("button", { name: /scan document/i }));
+      fireEvent.click(await screen.findByRole("button", { name: "finish scan", hidden: true }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent(/still uploading/);
+      expect(screen.getByRole("button", { name: "Delete document" })).toBeDisabled();
+      finish({ id: "doc-1" });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Delete document" })).toBeEnabled());
+      fireEvent.click(screen.getByRole("button", { name: "Delete document" }));
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+      expect(mocks.remove).toHaveBeenCalledWith({ table: "documents", id: "doc-1" });
+    });
+
+    it("asks for documents handed in as freshly uploaded (assign step after upload)", async () => {
+      mocks.remove.mockResolvedValue({ ok: true });
+      const onOpenChange = vi.fn();
+      render(<EntityDialog open onOpenChange={onOpenChange} title="Assign" fields={[]} onSubmit={() => {}} uploaded={[{ id: "doc-9", name: "beleg.pdf" }]} />);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent("beleg.pdf");
+      fireEvent.click(screen.getByRole("button", { name: "Delete document" }));
+      await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith({ table: "documents", id: "doc-9" }));
+    });
+
+    it("returns to the form on 'Keep editing'", async () => {
+      const onOpenChange = await openAndScan();
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(mocks.remove).not.toHaveBeenCalled();
+    });
+  });
+
+  it("closes without asking when nothing was uploaded", () => {
+    const onOpenChange = vi.fn();
+    render(<EntityDialog open onOpenChange={onOpenChange} title="New expense" fields={[]} onSubmit={() => {}} scan="expense" />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("logs the OCR result to the console in dev builds", async () => {
+    const group = vi.spyOn(console, "groupCollapsed").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.mocked(analyzeDocument).mockResolvedValue({ result: { amount: 9 }, error: null, warnings: [], text: "Summe 9,00" } as unknown as Awaited<ReturnType<typeof analyzeDocument>>);
+    const onFill = vi.fn();
+    render(<ScanBar target="expense" onFill={onFill} />);
+    fireEvent.click(screen.getByRole("button", { name: /scan document/i }));
+    fireEvent.click(screen.getByRole("button", { name: "finish scan" }));
+    await waitFor(() => expect(onFill).toHaveBeenCalled());
+    expect(group).toHaveBeenCalledWith(`[OCR] ${mocks.scanned.name}`);
+    expect(log).toHaveBeenCalledWith("extraction", { amount: 9 });
+    expect(log).toHaveBeenCalledWith("text\nSumme 9,00");
+    group.mockRestore();
+    log.mockRestore();
   });
 });

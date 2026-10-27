@@ -4,11 +4,11 @@ import { Loader2, ScanText } from "lucide-react";
 import { toast } from "sonner";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { analyzeDocument, type Extraction } from "@/lib/ocr.functions";
-import { ocrText } from "@/lib/ocr-ui";
+import { logOcrResult, ocrText } from "@/lib/ocr-ui";
 import { costItemOptions, potOptions, tradeOptions } from "@/lib/options";
 import { EXPENSE_CATEGORIES } from "@/lib/schema";
 import { EntityDialog, type Field } from "./EntityDialog";
-import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
 type Target = "ausgabe" | "rechnung" | "angebot" | "ablegen";
@@ -31,7 +31,16 @@ function targetFor(t: Extraction["doc_type"]): Target {
 }
 
 /** Reads a document via local OCR, then lets the user confirm and file it as expense, invoice or offer. */
-export function AssignDialog({ documentId, onClose }: { documentId: string | null; onClose: () => void }) {
+export function AssignDialog({
+  documentId,
+  onClose,
+  fresh = false,
+}: {
+  documentId: string | null;
+  onClose: () => void;
+  /** The document was uploaded just for this step; cancelling asks whether to delete it. */
+  fresh?: boolean;
+}) {
   const { ws } = useWorkspace();
   const { create, update } = useMutations();
   const [loading, setLoading] = useState(false);
@@ -39,6 +48,11 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<Target>("ablegen");
   const doc = ws.documents.find((d) => d.id === documentId);
+  const docName = doc?.name;
+  const uploaded = useMemo(
+    () => (fresh && documentId ? [{ id: documentId, name: docName ?? documentId }] : undefined),
+    [fresh, documentId, docName],
+  );
 
   useEffect(() => {
     if (!documentId) return;
@@ -49,6 +63,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
     analyzeDocument({ data: { documentId } })
       .then((r) => {
         if (cancelled) return;
+        logOcrResult(documentId, r);
         if (r.error) setError(ocrText(r.error));
         for (const warning of r.warnings) toast.warning(ocrText(warning));
         if (r.result) {
@@ -139,13 +154,24 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
           {loading ? tr("assign_dialog.reading_content") : error ? `${error}. Du kannst die Angaben selbst eintragen.` : ex ? <>{tr("assign_dialog.recognized")} <b className="font-medium">{CATEGORY_FOR[ex.doc_type]}</b>{ex.summary ? ` – ${ex.summary}` : ""} Bitte prüfen.</> : null}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <ToggleGroup
+        type="single"
+        value={target}
+        onValueChange={(v) => v && setTarget(v as Target)}
+        aria-label={tr("assign_dialog.file_as")}
+        className="grid grid-cols-2 items-stretch gap-1 rounded-lg bg-muted p-1 sm:grid-cols-4"
+      >
         {TARGETS.map((t) => (
-          <Button key={t.value} type="button" size="sm" variant={target === t.value ? "default" : "outline"} onClick={() => setTarget(t.value)} title={t.hint}>
+          <ToggleGroupItem
+            key={t.value}
+            value={t.value}
+            title={t.hint}
+            className="h-auto min-h-9 min-w-0 whitespace-normal break-words px-2 py-1.5 text-center leading-tight text-muted-foreground hyphens-auto hover:bg-transparent hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+          >
             {t.label}
-          </Button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
       <p className="text-xs text-muted-foreground">{TARGETS.find((t) => t.value === target)?.hint}</p>
     </div>
   );
@@ -159,6 +185,7 @@ export function AssignDialog({ documentId, onClose }: { documentId: string | nul
       fields={loading ? [] : fields}
       initial={initial}
       onSubmit={submit}
+      uploaded={uploaded}
       submitLabel={target === "ablegen" ? "Ablegen" : tr("assign_dialog.apply")}
     />
   );

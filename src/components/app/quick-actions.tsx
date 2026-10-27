@@ -137,7 +137,7 @@ export function QuickUpload({ open, onOpenChange, initial, initialFile }: P & { 
         if (recognize && canRead) setAssignId(res.id);
       }}
     />
-    <AssignDialog documentId={assignId} onClose={() => setAssignId(null)} />
+    <AssignDialog documentId={assignId} onClose={() => setAssignId(null)} fresh />
     <DocumentScanner open={scanOpen} onOpenChange={setScanOpen} onComplete={applyFile} />
     </>
   );

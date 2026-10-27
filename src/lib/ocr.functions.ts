@@ -10,7 +10,7 @@ export { DOC_TYPES, type DocType, type Extraction } from "./ocr-parse";
 export const analyzeDocument = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((d: unknown) => z.object({ documentId: z.string().uuid() }).parse(d))
-  .handler(async ({ context, data }): Promise<{ result: Extraction | null; error: OcrErrorCode | null; warnings: string[] }> => {
+  .handler(async ({ context, data }): Promise<{ result: Extraction | null; error: OcrErrorCode | null; warnings: string[]; text?: string }> => {
     const { resolveSettings } = await import("@/server/ocr/config");
     const { processDocument } = await import("@/server/ocr");
     const { OcrError, ocrErrorCode } = await import("@/server/ocr/errors");
@@ -22,7 +22,10 @@ export const analyzeDocument = createServerFn({ method: "POST" })
       if (!bytes) throw new OcrError("unreadable");
       const config = await resolveSettings(context.repo);
       const result = await processDocument(config, { bytes, mime: doc.mime_type ?? "", name: doc.name });
-      return { result: extractFromText(result.text, ws.trades.map((t) => t.name)), error: null, warnings: result.warnings };
+      const extraction = extractFromText(result.text, ws.trades.map((t) => t.name));
+      // Raw text only leaves the server in dev builds, for debugging the rule-based parser.
+      if (import.meta.env.DEV) return { result: extraction, error: null, warnings: result.warnings, text: result.text };
+      return { result: extraction, error: null, warnings: result.warnings };
     } catch (error) {
       return { result: null, error: ocrErrorCode(error), warnings: [] };
     }

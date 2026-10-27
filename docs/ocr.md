@@ -9,6 +9,7 @@ OCR runs in-process on the Bauplan server with `tesseract.js`; no OCR service, h
 - Images and rendered PDF pages use German, English, or both. The server allows two simultaneous OCR jobs and a maximum processing time of 180 seconds.
 - PDF page text is returned to the existing extraction flow. Table structure and searchable PDF output are not generated.
 - Invalid, encrypted, oversized, too-large-page-count, timed-out, or incomplete documents produce explicit errors. Uploads remain available for manual processing.
+- Debugging: in dev mode (`npm run dev`) each recognition is logged to the browser console as a collapsed `[OCR] <file>` group with the extracted fields, errors, warnings and the raw recognized text. Production builds neither log nor send the raw text to the browser.
 
 ## Language models
 
