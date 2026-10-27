@@ -1,0 +1,16 @@
+{
+  "title": "Geteiltes Dokument importieren",
+  "description": "Wie soll diese Datei erfasst werden? Noch {{count}} Datei(en). OCR füllt erkannte Felder vor; bitte vor dem Speichern prüfen.",
+  "offer": "Angebot",
+  "invoice": "Rechnung (offen)",
+  "expense": "Ausgabe / Beleg (bezahlt)",
+  "document": "Allgemeines Dokument",
+  "later": "Später",
+  "discard": "Datei verwerfen",
+  "pending": "Geteilte Dokumente importieren ({{count}})",
+  "retry": "Erneut versuchen",
+  "invalid": "Bitte eine PDF-Datei oder ein Bild teilen. Leere Dateien werden nicht unterstützt.",
+  "too_large": "Die geteilten Dateien überschreiten zusammen mit der Warteschlange 100 MB. Bitte zuerst wartende Dateien importieren oder verwerfen.",
+  "storage": "Geteilte Dokumente konnten nicht lokal gespeichert oder gelesen werden. Bitte den Browserspeicher prüfen und erneut teilen.",
+  "cleanupFailed": "Die Datei wurde verarbeitet, konnte aber nicht aus der lokalen Warteschlange entfernt werden. Bitte die Bereinigung erneut versuchen, nicht erneut importieren."
+}

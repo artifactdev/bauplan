@@ -141,7 +141,13 @@ export function QuickUpload({
   onOpenChange,
   initial,
   initialFile,
-}: P & { initialFile?: File | null | undefined }) {
+  onSaved,
+  onRecognitionChange,
+}: P & {
+  initialFile?: File | null | undefined;
+  onSaved?: (() => void) | undefined;
+  onRecognitionChange?: ((active: boolean) => void) | undefined;
+}) {
   const { ws } = useWorkspace();
   const { upload } = useMutations();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -181,6 +187,7 @@ export function QuickUpload({
           onOpenChange(o);
         }}
         title={tr("quick_actions.upload_document")}
+        onSaved={onSaved}
         submitLabel="Hochladen"
         fields={[
           {
@@ -274,10 +281,20 @@ export function QuickUpload({
           const { recognize, ...meta } = v;
           const res = await upload.mutateAsync({ file, meta });
           const canRead = file.type === "application/pdf" || file.type.startsWith("image/");
-          if (recognize && canRead) setAssignId(res.id);
+          if (recognize && canRead) {
+            onRecognitionChange?.(true);
+            setAssignId(res.id);
+          }
         }}
       />
-      <AssignDialog documentId={assignId} onClose={() => setAssignId(null)} fresh />
+      <AssignDialog
+        documentId={assignId}
+        onClose={() => {
+          setAssignId(null);
+          onRecognitionChange?.(false);
+        }}
+        fresh
+      />
       <DocumentScanner open={scanOpen} onOpenChange={setScanOpen} onComplete={applyFile} />
     </>
   );

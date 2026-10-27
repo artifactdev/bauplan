@@ -1,0 +1,16 @@
+{
+  "title": "Import shared document",
+  "description": "How should this file be recorded? {{count}} file(s) remaining. OCR prefills recognized fields; please review before saving.",
+  "offer": "Quote",
+  "invoice": "Invoice (open)",
+  "expense": "Expense / receipt (paid)",
+  "document": "General document",
+  "later": "Later",
+  "discard": "Discard file",
+  "pending": "Import shared documents ({{count}})",
+  "retry": "Try again",
+  "invalid": "Please share a PDF or an image. Empty files are not supported.",
+  "too_large": "The shared files and pending queue exceed 100 MB in total. Please import or discard pending files first.",
+  "storage": "Shared documents could not be stored or read locally. Please check browser storage and share again.",
+  "cleanupFailed": "The file was processed but could not be removed from the local queue. Please retry cleanup rather than importing it again."
+}

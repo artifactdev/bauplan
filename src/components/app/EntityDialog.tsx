@@ -73,6 +73,8 @@ export function EntityDialog({
   uploaded,
   onFieldChange,
   preserveOnScan,
+  initialFile,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -91,6 +93,8 @@ export function EntityDialog({
   uploaded?: { id: string; name: string }[] | undefined;
   onFieldChange?: (field: string, value: unknown) => Record<string, unknown>;
   preserveOnScan?: string[];
+  initialFile?: File | undefined;
+  onSaved?: (() => void) | undefined;
 }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
@@ -117,7 +121,7 @@ export function EntityDialog({
   useEffect(() => {
     if (open) {
       setUploads(uploaded ?? []);
-      setUploading(false);
+      setUploading(!!initialFile);
       setAskDiscard(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -330,6 +334,7 @@ export function EntityDialog({
               try {
                 await onSubmit(values);
                 setUploads([]);
+                onSaved?.();
                 onOpenChange(false);
               } catch (err) {
                 toast.error(tr(err instanceof Error ? err.message : String(err)));
@@ -370,10 +375,11 @@ export function EntityDialog({
                 </div>
               </div>
             )}
-            {showUploadOptions && scan && open && (
+            {(showUploadOptions || initialFile) && scan && open && (
               <div id="entity-dialog-upload-options" className="sm:col-span-2">
                 <ScanBar
                   target={scan}
+                  initialFile={initialFile}
                   onFill={(v) =>
                     setValues((s) => ({
                       ...s,
@@ -407,7 +413,10 @@ export function EntityDialog({
               <Button type="button" variant="ghost" onClick={cancel}>
                 {tr("entity_dialog.cancel")}
               </Button>
-              <Button type="submit" disabled={busy || uploading}>
+              <Button
+                type="submit"
+                disabled={busy || uploading || (!!initialFile && !uploads.length)}
+              >
                 {submitLabel}
               </Button>
             </DialogFooter>

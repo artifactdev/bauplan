@@ -4,6 +4,14 @@ Bauplan is a Progressive Web App (PWA). On a supported browser, use **Install ap
 
 On Android and other browsers that support Web App Manifest shortcuts, long-press the installed app icon to open a new appointment, create a task, scan a receipt, or record an expense. iOS home-screen web apps may not expose these shortcuts.
 
+## Receiving documents from other apps
+
+On supported Android/Chromium systems, install Bauplan as a PWA, then share a PDF or image from a scanner, files, or photos app and select **Bauplan**. Choose **Quote**, **Invoice (open)**, **Expense / receipt (paid)**, or **General document**. Multiple files are processed one at a time. Quotes and expenses open the same import forms as manual entry, upload the file, and run OCR to prefill fields for review. OCR must be enabled and configured in the existing administration settings; if it is unavailable or disabled, the file remains linked and an explicit message asks for manual entry. Invoices are expenses, optionally linked to an existing quote; they do not create a second offer. General documents use the existing upload and recognition/assignment dialog.
+
+Receiving requires HTTPS (or localhost), an installed PWA, and an active service worker. It is not supported by Safari/iOS, even for home-screen apps; use the in-app file picker there. After deployment, open the app online to update its service worker and manifest; some browsers require reinstalling the PWA before it appears as a share target. Development mode does not register a service worker.
+
+Shared files are temporarily held in a separate, browser-profile-local Cache Storage inbox, not sent to the server by the share handler. The inbox survives login, setup, and reloads; processing starts only after an approved account has signed in and a project is available. It is not account-scoped: use a private browser profile, especially when sharing before login. **Later** keeps files pending; **Discard file** removes a file. Pending files expire after 24 hours (cleaned on the next share or inbox read), and the entire inbox is limited to 100 MB. Successful imports remove the temporary copy. Clearing site data removes pending shares. Offline receipt and quote uploads can be queued using the existing offline workflow, but OCR requires a server connection.
+
 ## Before going offline
 
 1. Open Bauplan while online and sign in on the browser profile and device you will use offline.

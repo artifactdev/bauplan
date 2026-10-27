@@ -7,18 +7,16 @@ import { eur, fmtDate, todayISO } from "@/lib/format";
 import {
   contactLabel,
   contactOptions,
-  costItemOptions,
-  docOptions,
   offerOptions,
   potName,
   potOptions,
   tradeName,
   tradeOptions,
 } from "@/lib/options";
-import { EXPENSE_CATEGORIES, type Expense, type ExpenseStatus } from "@/lib/schema";
-import { expenseIsOverdue, expenseLinkDefaults, normalizeExpense } from "@/lib/expenses";
+import { type Expense, type ExpenseStatus } from "@/lib/schema";
+import { expenseIsOverdue } from "@/lib/expenses";
 import { Empty, MetricCard, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
-import { EntityDialog } from "@/components/app/EntityDialog";
+import { ExpenseDialog } from "@/components/app/ExpenseDialog";
 import { resolveFileUrl } from "@/components/app/doc-open";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +66,7 @@ const STATUS_OPTIONS = Object.entries(EXPENSE_STATUS).map(([value, s]) => ({
 
 function ExpensesPage() {
   const { ws } = useWorkspace();
-  const { create, update, remove } = useMutations();
+  const { update, remove } = useMutations();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [source, setSource] = useState<string>("all");
@@ -581,77 +579,11 @@ function ExpensesPage() {
         )}
       </Panel>
 
-      <EntityDialog
+      <ExpenseDialog
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}
-        title={dlg?.id ? tr("expenses.edit_expense") : tr("expenses.new_expense")}
-        scan="expense"
-        preserveOnScan={dlg?.id ? ["status"] : []}
-        onFieldChange={(field, value) => expenseLinkDefaults(field, value, ws)}
-        fields={[
-          {
-            name: "offer_id",
-            label: tr("expenses.linked_offer"),
-            type: "select",
-            options: offerOptions(ws),
-          },
-          {
-            name: "contact_id",
-            label: tr("quotes.contact"),
-            type: "select",
-            options: contactOptions(ws),
-          },
-          { name: "title", label: tr("shared.description"), required: true, full: true },
-          { name: "vendor", label: tr("shared.shop_company") },
-          { name: "amount", label: tr("shared.gross_amount"), type: "number", required: true },
-          { name: "expense_date", label: tr("shared.date"), type: "date" },
-          { name: "due_date", label: tr("shared.payable"), type: "date" },
-          { name: "payment_date", label: tr("shared.payment_date_planned_actual"), type: "date" },
-          {
-            name: "category",
-            label: tr("shared.category"),
-            type: "select",
-            options: EXPENSE_CATEGORIES.map((c) => ({ value: c, label: tr(c) })),
-          },
-          {
-            name: "status",
-            label: tr("shared.status"),
-            type: "select",
-            required: true,
-            options: STATUS_OPTIONS,
-          },
-          {
-            name: "trade_id",
-            label: tr("shared.trade"),
-            type: "select",
-            options: tradeOptions(ws),
-          },
-          {
-            name: "cost_item_id",
-            label: tr("shared.cost_item"),
-            type: "select",
-            options: costItemOptions(ws),
-          },
-          {
-            name: "budget_pot_id",
-            label: tr("shared.paid_2"),
-            type: "select",
-            options: potOptions(ws),
-          },
-          {
-            name: "document_id",
-            label: tr("shared.receipt"),
-            type: "select",
-            options: docOptions(ws),
-          },
-          { name: "notes", label: tr("shared.notes"), type: "textarea" },
-        ]}
+        editId={dlg?.id}
         initial={dlg?.initial}
-        onSubmit={(v) =>
-          dlg?.id
-            ? update.mutateAsync({ table: "expenses", id: dlg.id, patch: normalizeExpense(v, ws) })
-            : create.mutateAsync({ table: "expenses", row: normalizeExpense(v, ws) })
-        }
       />
     </>
   );

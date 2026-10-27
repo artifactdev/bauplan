@@ -27,6 +27,7 @@ export default defineConfig({
       traceDeps: ["tesseract.js*", "tesseract.js-core*", "pdfjs-dist*", "zxing-wasm*"],
       routeRules: {
         "/sw.js": { headers: { "cache-control": "no-cache" } },
+        "/share-target.js": { headers: { "cache-control": "no-cache" } },
         "/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },
       },
     }),
@@ -47,6 +48,14 @@ export default defineConfig({
         background_color: "#f8f7f4",
         display: "standalone",
         start_url: "/",
+        share_target: {
+          action: "/share-target",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: {
+            files: [{ name: "files", accept: ["application/pdf", "image/*", ".pdf"] }],
+          },
+        },
         shortcuts: [
           {
             name: deUi["pwa.shortcut_new_appointment"],
@@ -82,6 +91,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ["/share-target.js"],
         skipWaiting: true,
         clientsClaim: true,
         globDirectory: ".output/public",

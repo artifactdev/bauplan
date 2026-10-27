@@ -74,6 +74,101 @@ beforeEach(async () => {
 afterEach(() => cleanup());
 
 describe("scanner save integration", () => {
+  it("automatically imports a shared file into the existing form exactly once", async () => {
+    vi.mocked(analyzeDocument).mockResolvedValue({
+      result: { ...extractFromText("Angebot"), amount: 123.45, vendor: "Roofing" },
+      error: null,
+      warnings: [],
+    });
+    const onSaved = vi.fn();
+    const submit = vi.fn();
+    const initial = { status: "received" };
+    const props = {
+      open: true,
+      onOpenChange: () => {},
+      title: "Shared quote",
+      initial,
+      initialFile: mocks.scanned,
+      scan: "offer" as const,
+      fields: [
+        { name: "contractor", label: "Company" },
+        { name: "amount", label: "Amount", type: "number" as const },
+      ],
+      onSubmit: submit,
+      onSaved,
+    };
+    const { rerender } = render(<EntityDialog {...props} />);
+    await waitFor(() => expect(screen.getByLabelText("Amount")).toHaveValue(123.45));
+    expect(screen.getByLabelText("Company")).toHaveValue("Roofing");
+    rerender(<EntityDialog {...props} />);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    expect(analyzeDocument).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 123.45,
+        contractor: "Roofing",
+        document_id: "doc-1",
+        status: "received",
+      }),
+    );
+  });
+
+  it("keeps saving disabled until the shared file has finished uploading and recognizing", async () => {
+    let resolve!: (value: { id: string }) => void;
+    mocks.upload.mockReturnValue(
+      new Promise<{ id: string }>((done) => {
+        resolve = done;
+      }),
+    );
+    vi.mocked(analyzeDocument).mockResolvedValue({
+      result: extractFromText("Rechnung"),
+      error: null,
+      warnings: [],
+    });
+    render(
+      <EntityDialog
+        open
+        onOpenChange={() => {}}
+        title="Shared invoice"
+        initialFile={mocks.scanned}
+        scan="expense"
+        fields={[]}
+        onSubmit={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    resolve({ id: "doc-1" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Speichern" })).toBeEnabled());
+  });
+
+  it("does not consume a shared file after an upload failure and allows retrying the original", async () => {
+    mocks.upload.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ id: "doc-1" });
+    vi.mocked(analyzeDocument).mockResolvedValue({
+      result: extractFromText("Rechnung"),
+      error: null,
+      warnings: [],
+    });
+    render(
+      <EntityDialog
+        open
+        onOpenChange={() => {}}
+        title="Shared invoice"
+        initialFile={mocks.scanned}
+        scan="expense"
+        fields={[]}
+        onSubmit={() => {}}
+      />,
+    );
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Speichern" })).toBeEnabled());
+    expect(mocks.upload).toHaveBeenCalledTimes(2);
+    expect(mocks.upload.mock.calls[1]![0].file).toBe(mocks.scanned);
+  });
+
   it("shows the existing document picker first and keeps scanner options collapsed", async () => {
     render(
       <EntityDialog

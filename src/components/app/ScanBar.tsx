@@ -1,5 +1,5 @@
 import { tr } from "@/i18n";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Camera, CheckCircle2, Loader2, ScanLine, Upload } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -24,6 +24,7 @@ export function ScanBar({
   onFill,
   onUploaded,
   onBusyChange,
+  initialFile,
 }: {
   target: ScanTarget;
   onFill: (v: Record<string, unknown>) => void;
@@ -31,13 +32,26 @@ export function ScanBar({
   onUploaded?: (doc: { id: string; name: string }) => void;
   /** True while a file is being stored or recognized. */
   onBusyChange?: (uploading: boolean) => void;
+  initialFile?: File | undefined;
 }) {
   const { ws } = useWorkspace();
   const { upload } = useMutations();
   const cam = useRef<HTMLInputElement>(null);
   const pick = useRef<HTMLInputElement>(null);
-  const [state, setState] = useState<{ busy: boolean; done?: string }>({ busy: false });
+  const [state, setState] = useState<{ busy: boolean; done?: string; failed?: boolean }>({
+    busy: false,
+  });
   const [scanOpen, setScanOpen] = useState(false);
+  const startedFile = useRef<File | undefined>(undefined);
+
+  useEffect(() => {
+    if (initialFile && startedFile.current !== initialFile) {
+      startedFile.current = initialFile;
+      void handle(initialFile);
+    }
+    // Start once per supplied file, not again when form callbacks or workspace data change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
 
   async function handle(file: File | undefined) {
     if (!file) return;
@@ -51,7 +65,7 @@ export function ScanBar({
       if (LINKS_DOCUMENT[target]) onFill({ document_id: id });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : tr("scan_bar.upload_failed"));
-      setState({ busy: false });
+      setState({ busy: false, failed: true });
       onBusyChange?.(false);
       return;
     }
@@ -98,6 +112,11 @@ export function ScanBar({
         }}
       />
       <div className="flex flex-wrap items-center gap-2">
+        {initialFile && state.failed && (
+          <Button type="button" size="sm" onClick={() => void handle(initialFile)}>
+            <Upload data-icon="inline-start" /> {tr("retry", { ns: "share" })}
+          </Button>
+        )}
         <Button type="button" size="sm" disabled={state.busy} onClick={() => setScanOpen(true)}>
           <ScanLine className="h-4 w-4" /> {tr("scanner.scan_document")}
         </Button>

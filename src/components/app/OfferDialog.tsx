@@ -44,11 +44,15 @@ export function OfferDialog({
   onOpenChange,
   editId,
   initial,
+  initialFile,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editId?: string | undefined;
   initial?: Record<string, unknown> | undefined;
+  initialFile?: File | undefined;
+  onSaved?: (() => void) | undefined;
 }) {
   const { ws } = useWorkspace();
   const { create, update } = useMutations();
@@ -60,6 +64,8 @@ export function OfferDialog({
       fields={offerFields(ws)}
       scan="offer"
       initial={initial}
+      initialFile={initialFile}
+      onSaved={onSaved}
       onSubmit={(values) => {
         const row = { ...values };
         const contact = ws.contacts.find((item) => item.id === row["contact_id"]);

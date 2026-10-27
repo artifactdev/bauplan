@@ -41,6 +41,7 @@ import { getUpdateReady, subscribeUpdateReady } from "@/lib/sw-update";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
 import { AppearanceModeMenu } from "@/components/app/AppearanceControls";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
+import { SharedImport } from "@/components/app/SharedImport";
 import { navigationItem } from "@/components/app/navigation-items";
 import { DEFAULT_NAVIGATION, visibleNavigation } from "@/lib/navigation";
 import { useNavigation } from "@/hooks/use-navigation";
@@ -400,7 +401,10 @@ function Shell() {
                 </Button>
               </p>
             ) : project ? (
-              <Outlet />
+              <>
+                <SharedImport />
+                <Outlet />
+              </>
             ) : (
               <ProjectSetup />
             )}
