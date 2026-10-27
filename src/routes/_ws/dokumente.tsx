@@ -56,7 +56,11 @@ function DocsPage() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("aktion") === "neu",
+  );
   const [scanned, setScanned] = useState<File | null>(null);
   const [edit, setEdit] = useState<Doc | null>(null);
   const [assignId, setAssignId] = useState<string | null>(null);

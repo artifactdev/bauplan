@@ -76,7 +76,14 @@ function ExpensesPage() {
   const [contact, setContact] = useState("all");
   const [offer, setOffer] = useState("all");
   const [sort, setSort] = useState("date");
-  const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(null);
+  const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("aktion") === "neu"
+      ? {
+          initial: { status: "bezahlt", expense_date: todayISO(), category: "Baumarkt" },
+        }
+      : null,
+  );
   const today = todayISO();
   const vendor = (expense: Expense) => {
     const linked = ws.contacts.find((item) => item.id === expense.contact_id);

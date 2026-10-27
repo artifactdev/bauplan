@@ -2,6 +2,8 @@
 
 Bauplan is a Progressive Web App (PWA). On a supported browser, use **Install app** or **Add to Home Screen** in the browser menu. On iPhone or iPad, open the site in Safari, choose **Share**, then **Add to Home Screen**. The app must be served over HTTPS, except when testing on localhost.
 
+On Android and other browsers that support Web App Manifest shortcuts, long-press the installed app icon to open a new appointment, create a task, scan a receipt, or record an expense. iOS home-screen web apps may not expose these shortcuts.
+
 ## Before going offline
 
 1. Open Bauplan while online and sign in on the browser profile and device you will use offline.

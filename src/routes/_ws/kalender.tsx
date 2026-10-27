@@ -79,7 +79,12 @@ function CalendarPage() {
       ? "list"
       : "month",
   );
-  const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(null);
+  const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("aktion") === "neu"
+      ? { initial: { kind: "termin", event_date: today } }
+      : null,
+  );
   const [taskDlg, setTaskDlg] = useState<{ id: string; initial: Record<string, unknown> } | null>(
     null,
   );

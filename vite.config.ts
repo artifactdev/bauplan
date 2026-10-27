@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { nitro } from "nitro/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import deUi from "./src/locales/de/ui.json";
 
 // Changes on every build so the precached HTML shell ("/") is refreshed with each deployment.
 const buildId = Date.now().toString(36);
@@ -46,11 +47,38 @@ export default defineConfig({
         background_color: "#f8f7f4",
         display: "standalone",
         start_url: "/",
+        shortcuts: [
+          {
+            name: deUi["pwa.shortcut_new_appointment"],
+            url: "/kalender?aktion=neu",
+            icons: [{ src: "/app-icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: deUi["pwa.shortcut_new_task"],
+            url: "/aufgaben?aktion=neu",
+            icons: [{ src: "/app-icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: deUi["pwa.shortcut_scan_receipt"],
+            url: "/dokumente?aktion=neu",
+            icons: [{ src: "/app-icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: deUi["pwa.shortcut_record_expense"],
+            url: "/ausgaben?aktion=neu",
+            icons: [{ src: "/app-icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+        ],
         icons: [
           { src: "/app-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
           { src: "/app-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
           { src: "/app-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "/app-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          {
+            src: "/app-icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
       },
       workbox: {

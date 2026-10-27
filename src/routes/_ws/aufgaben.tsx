@@ -49,7 +49,12 @@ function TasksPage() {
   const assignees = new Map((assigneesQuery.data ?? []).map((user) => [user.id, user.label]));
   const [groupBy, setGroupBy] = useState<"phase" | "trade" | "status">("phase");
   const [filter, setFilter] = useState<"open" | "all" | "overdue">("open");
-  const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(null);
+  const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("aktion") === "neu"
+      ? {}
+      : null,
+  );
 
   const done = ws.tasks.filter((t) => t.status === "erledigt").length;
 
