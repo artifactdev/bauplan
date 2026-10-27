@@ -187,6 +187,38 @@ describe("Bauplan backups", () => {
     expect((await repo.getAll()).projects.map((item) => item.id)).toEqual(["project-1"]);
   });
 
+  it("accepts event backups from before CalDAV and preserves new calendar metadata", async () => {
+    await repo.insert("events", {
+      id: "caldav-backup",
+      title: "Calendar appointment",
+      event_date: "2026-11-02",
+      caldav_uid: "client-calendar-uid",
+      caldav_data: "original-client-calendar",
+    });
+    const entries = unzipSync(await createBackup(repo));
+    const restored = parseBackup(zipSync(entries));
+    expect(
+      restored.database.tables.events.find((event) => event["id"] === "caldav-backup"),
+    ).toMatchObject({
+      caldav_uid: "client-calendar-uid",
+      caldav_data: "original-client-calendar",
+    });
+    const manifest = JSON.parse(strFromU8(entries["backup.json"]!)) as {
+      database: { tables: { events: Record<string, unknown>[] } };
+    };
+    for (const event of manifest.database.tables.events) {
+      delete event["caldav_uid"];
+      delete event["caldav_data"];
+    }
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(
+      parseBackup(zipSync(entries)).database.tables.events.find(
+        (event) => event["id"] === "caldav-backup",
+      ),
+    ).toMatchObject({ caldav_uid: null, caldav_data: null });
+    await repo.remove("events", "caldav-backup");
+  });
+
   it("rolls back database replacement if inserting restored rows fails", async () => {
     const archive = await createBackup(repo);
     const { database, files } = parseBackup(archive);

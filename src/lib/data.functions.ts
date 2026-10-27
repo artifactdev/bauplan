@@ -14,6 +14,27 @@ import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 
+/** CalDAV uses HTTP Basic authentication rather than browser sessions. Never expose as an RPC. */
+export async function calendarAccess(authorization: string | null) {
+  if (!authorization || !/^Basic /i.test(authorization) || authorization.length > 2048) return null;
+  let decoded: string;
+  try {
+    decoded = new TextDecoder("utf-8", { fatal: true }).decode(
+      Uint8Array.from(atob(authorization.slice(6)), (character) => character.charCodeAt(0)),
+    );
+  } catch {
+    return null;
+  }
+  const separator = decoded.indexOf(":");
+  if (separator < 1) return null;
+  const la = await import("@/server/local-auth");
+  const { canAccessData } = await import("@/server/auth-core");
+  const user = await la.checkPassword(decoded.slice(0, separator), decoded.slice(separator + 1));
+  if (!user || !canAccessData(user.role)) return null;
+  const { sqliteRepo } = await import("@/server/repo");
+  return { user, repo: sqliteRepo() };
+}
+
 /**
  * Requires a signed-in member (admin or member; pending accounts see nothing)
  * and provides the local SQLite repository.

@@ -31,6 +31,7 @@ import { OcrSettingsPanel } from "@/components/app/OcrSettingsPanel";
 import { AppearancePanel } from "@/components/app/AppearanceControls";
 import { NavigationPanel } from "@/components/app/NavigationPanel";
 import { PasswordDialog } from "@/components/app/PasswordDialog";
+import { CalendarSyncPanel } from "@/components/app/CalendarSyncPanel";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
@@ -58,6 +59,7 @@ function SettingsPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label={tr("shared.settings")} className="mb-5 flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="personal" className="min-h-11 whitespace-normal text-left">{t("personal")}</TabsTrigger>
+          <TabsTrigger value="calendar" className="min-h-11 whitespace-normal text-left">{t("calendar")}</TabsTrigger>
           <TabsTrigger value="project" className="min-h-11 whitespace-normal text-left">{t("project")}</TabsTrigger>
           {isAdmin && <TabsTrigger value="users" className="min-h-11 whitespace-normal text-left">{t("users")}</TabsTrigger>}
           {isAdmin && <TabsTrigger value="admin" className="min-h-11 whitespace-normal text-left">{t("administration")}</TabsTrigger>}
@@ -80,6 +82,11 @@ function SettingsPage() {
             </Panel>
           </div>
           <NavigationPanel userId={auth.user!.id} />
+        </div>
+      </TabsContent>
+      <TabsContent value="calendar" forceMount hidden={tab !== "calendar"}>
+        <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
+          <CalendarSyncPanel email={auth.user!.email} />
         </div>
       </TabsContent>
       <TabsContent value="project" forceMount hidden={tab !== "project"}>

@@ -8,7 +8,10 @@ import {
   USER_APPEARANCE_TABLE,
   type TableName,
   type Workspace,
+  type CalEvent,
 } from "@/lib/schema";
+import { TABLES } from "@/lib/schema";
+import { calendarEtag, checkConditions, DavError, type DavConditions } from "./caldav-calendar";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_TABLE } from "@/lib/schema";
 import { migrateDatabase } from "./migrations";
@@ -21,6 +24,11 @@ import {
 } from "@/lib/navigation";
 
 export interface Repo {
+  writeCalendarEvent(
+    id: string,
+    value: Omit<CalEvent, "id"> | null,
+    conditions: DavConditions,
+  ): Promise<{ created: boolean; etag: string | null }>;
   readNavigation(userId: string): Promise<NavigationPreferences>;
   writeNavigation(userId: string, value: NavigationPreferences): Promise<void>;
   deleteNavigation(userId: string): Promise<void>;
@@ -128,6 +136,54 @@ export function getSqliteDb(): Promise<SqliteDb> {
 export function sqliteRepo(): Repo {
   const db = () => (dbPromise ??= openDb());
   return {
+    async writeCalendarEvent(id, value, conditions) {
+      const d = await db();
+      d.exec("BEGIN IMMEDIATE");
+      try {
+        const raw = d.prepare("SELECT * FROM events WHERE id = ?").get(id);
+        const current = raw ? (normalize(raw) as CalEvent) : null;
+        checkConditions(current ? calendarEtag(current) : null, conditions);
+        if (!value) {
+          if (!current) throw new DavError(404, "Appointment not found.");
+          d.prepare("DELETE FROM events WHERE id = ?").run(id);
+          d.exec("COMMIT");
+          return { created: false, etag: null };
+        }
+        if (current && (current.caldav_uid || `${id}@bauplan`) !== value.caldav_uid)
+          throw new DavError(409, "An appointment's UID cannot change.", "no-uid-conflict");
+        if (
+          d
+            .prepare(
+              "SELECT id FROM events WHERE COALESCE(caldav_uid, id || '@bauplan') = ? AND id != ?",
+            )
+            .get(value.caldav_uid, id)
+        )
+          throw new DavError(
+            403,
+            "An appointment with this UID already exists.",
+            "no-uid-conflict",
+          );
+        const next: CalEvent = {
+          ...value,
+          id,
+          kind: current?.kind || "termin",
+          trade_id: current?.trade_id || null,
+          created_at: current?.created_at || new Date().toISOString(),
+        };
+        const keys = ["id", "created_at", ...TABLES.events];
+        const record: Record<string, unknown> = next;
+        d.prepare(
+          `INSERT INTO events (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})
+          ON CONFLICT(id) DO UPDATE SET ${TABLES.events.map((key) => `${key}=excluded.${key}`).join(",")}`,
+        ).run(...keys.map((key) => toSql(record[key])));
+        const etag = calendarEtag(next);
+        d.exec("COMMIT");
+        return { created: !current, etag };
+      } catch (error) {
+        d.exec("ROLLBACK");
+        throw error;
+      }
+    },
     async readNavigation(userId) {
       const row = (await db())
         .prepare(`SELECT preferences FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`)

@@ -17,6 +17,9 @@ There is no public registration. Admins create accounts under **Settings → Use
 - Passwords: PBKDF2 (210,000 iterations, WebCrypto).
 - Sessions: random token, 30 days, stored only as a SHA-256 hash, httpOnly cookie `bp_session`.
 - Files under `/api/files/*` require a valid session.
+- CalDAV under `/api/caldav/` uses HTTP Basic with the same email/password, not a browser session.
+  It requires an admin/member role and HTTPS outside localhost. SSO-only users can set a local
+  password in personal settings. See [calendar integration](calendar-feed.md).
 
 ## Optional OIDC (e.g. Pocket ID)
 - Settings → "Sign in with OIDC": issuer, client ID, client secret, public address (behind a reverse proxy).

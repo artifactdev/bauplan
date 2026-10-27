@@ -1,0 +1,16 @@
+{
+  "title": "Kalender synchronisieren (CalDAV)",
+  "description": "Termine mit Apple Kalender anlegen, bearbeiten und löschen. Änderungen werden mit Bauplan synchronisiert.",
+  "deadlines": "Aufgaben und Angebotsfristen",
+  "readonly": "Aufgaben und Angebotsfristen sind schreibgeschützt. Bearbeite sie in Bauplan.",
+  "server": "Serveradresse",
+  "username": "Benutzername",
+  "password": "Verwende dein bestehendes Bauplan-Passwort. Bei SSO-Anmeldung zuerst ein lokales Passwort über „Passwort ändern“ setzen.",
+  "setup": "Apple Kalender: Kalenderaccount hinzufügen → Anderer CalDAV-Account → Manuell. Trage Serveradresse, E-Mail-Adresse und dein Bauplan-Passwort ein. Auf dem iPhone findest du dies in Einstellungen → Apps → Kalender → Kalenderaccounts.",
+  "limits": "Unterstützt einzelne, ganztägige und mehrtägige Termine. Serientermine werden ausdrücklich abgelehnt. Aufgaben und Angebotsfristen erscheinen in einem separaten, schreibgeschützten Kalender. Kein zusätzlicher ICS-Import nötig.",
+  "https": "Verwende außerhalb von localhost ausschließlich HTTPS. Der Server muss für deine Kalender-App erreichbar sein.",
+  "copy": "Serveradresse kopieren",
+  "copied": "Serveradresse kopiert",
+  "copyFailed": "Serveradresse konnte nicht kopiert werden.",
+  "timezone": "Die Kalender-Zeitzone wird serverseitig über CALDAV_TIMEZONE festgelegt (Standard: Europe/Berlin). Änderungen erscheinen nach der nächsten Synchronisierung bzw. Aktualisierung."
+}

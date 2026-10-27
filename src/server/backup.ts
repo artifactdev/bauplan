@@ -89,7 +89,9 @@ function validateDatabase(value: unknown): BackupDatabase {
           ? columns.filter((column) => column !== "valid_until")
           : table === "expenses"
             ? columns.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
-            : columns;
+            : table === "events"
+              ? columns.filter((column) => !["caldav_uid", "caldav_data"].includes(column))
+              : columns;
     const validatedRows = validateRows(
       table === "funding_entries" && !(table in tables) ? [] : tables[table],
       columns,
@@ -107,7 +109,13 @@ function validateDatabase(value: unknown): BackupDatabase {
                 contact_id: row["contact_id"] ?? null,
                 due_date: row["due_date"] ?? null,
               }))
-            : validatedRows;
+            : table === "events"
+              ? validatedRows.map((row) => ({
+                  ...row,
+                  caldav_uid: row["caldav_uid"] ?? null,
+                  caldav_data: row["caldav_data"] ?? null,
+                }))
+              : validatedRows;
     for (const row of rows) {
       for (const [column, item] of Object.entries(row)) {
         if (item !== null && NUMERIC_COLS.has(column) && typeof item !== "number")

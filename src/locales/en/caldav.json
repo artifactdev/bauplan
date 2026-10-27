@@ -1,0 +1,16 @@
+{
+  "title": "Sync calendars (CalDAV)",
+  "description": "Create, edit and delete appointments in Apple Calendar. Changes synchronize with Bauplan.",
+  "deadlines": "Tasks and quote deadlines",
+  "readonly": "Tasks and quote deadlines are read-only. Edit them in Bauplan.",
+  "server": "Server address",
+  "username": "Username",
+  "password": "Use your existing Bauplan password. For SSO accounts, set a local password using “Change password” first.",
+  "setup": "Apple Calendar: Add Calendar Account → Other CalDAV Account → Manual. Enter the server address, email address and your Bauplan password. On iPhone, go to Settings → Apps → Calendar → Calendar Accounts.",
+  "limits": "Supports single, all-day and multi-day appointments. Recurring appointments are explicitly rejected. Tasks and quote deadlines appear in a separate read-only calendar. No additional ICS import is needed.",
+  "https": "Use HTTPS outside localhost. The server must be reachable by your calendar app.",
+  "copy": "Copy server address",
+  "copied": "Server address copied",
+  "copyFailed": "Could not copy the server address.",
+  "timezone": "The calendar timezone is configured on the server using CALDAV_TIMEZONE (default: Europe/Berlin). Changes appear after the next synchronization or refresh."
+}

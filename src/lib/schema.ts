@@ -78,6 +78,8 @@ export const TABLES = {
     "kind",
     "trade_id",
     "notes",
+    "caldav_uid",
+    "caldav_data",
   ],
   ideas: [
     "collection",
@@ -236,6 +238,8 @@ export type CalEvent = Base & {
   kind: "termin" | "frist" | "arbeit";
   trade_id: string | null;
   notes: string | null;
+  caldav_uid?: string | null;
+  caldav_data?: string | null;
 };
 
 export type ExpenseStatus = "offen" | "bezahlt" | "eingereicht" | "erstattet";

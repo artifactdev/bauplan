@@ -63,7 +63,10 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Multi-day entries appear on each day (following days marked "↳").
 - Optional date/time fields start as an "Add date/time" button and can be cleared with "×".
 - Validation: end not before start.
-- Month and list views; iCal subscription: [calendar-feed.md](calendar-feed.md).
+- Month and list views; two-way CalDAV synchronization with Apple Calendar using the existing
+  Bauplan email/password. Single appointments are editable; tasks and quote deadlines appear in a
+  separate read-only calendar. Recurring series are not supported. The read-only iCal subscription
+  remains available: [calendar integration](calendar-feed.md).
 
 ## Collections
 Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, image, notes, tags, room, trade, price, favorite; filterable.
@@ -80,7 +83,7 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 
 - **Password:** the Account card opens a password-change modal. Existing local accounts confirm their current password; OIDC-only accounts can set a local password. Cancelling clears the fields, successful changes close the modal, and errors keep the form open.
 - **Navigation:** approved users can reorder or hide page links under Personal preferences, then save to their account. Drag the handles with a mouse or touch, use Space/arrow keys/Space on a focused handle (Escape cancels), or use the up/down buttons. Only handles initiate dragging so checkboxes and normal page scrolling remain usable. The sidebar follows this order; mobile shows the first four visible pages and puts the rest under More. Settings always stays available, even if all page links are hidden. Restore default layout resets the draft; Save applies it. Hidden links do not restrict page access. Preferences synchronize on reload, sign-in, and window focus.
-- Accessible tabs separate personal preferences (appearance, account, language), project configuration (storage and payment sources), admin-only user management, and admin-only administration (backups, calendar feed, OIDC, OCR), in that order. Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
+- Accessible tabs separate personal preferences (appearance, account, language), calendar synchronization (CalDAV setup), project configuration (storage and payment sources), admin-only user management, and admin-only administration (backups, calendar feed, OIDC, OCR), in that order. Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
 - Account and sign-out; storage mode display.
 - **Language:** German or English, chosen during setup or in Settings; saved per browser.
 - **Appearance:** Current, Blue, Green, or Violet palette, independently combined with Light, Dark, or System mode (default: Current + System). Settings has palette previews and mode controls; the desktop/mobile header has a quick mode menu. Changes save automatically per approved user account and synchronize on sign-in, reload, and window focus. System follows each device's own OS preference. The browser remembers the last appearance for the sign-in/setup screens; the signed-in account always takes precedence. Failed saves restore the previous choice and display an error.

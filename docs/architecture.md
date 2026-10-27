@@ -62,6 +62,12 @@ OCR settings are private `app_settings` data, never included in the Workspace. A
 - `/setup` – initial setup, `/auth` – sign-in.
 - `_ws` – layout without its own path (client-side); checks sign-in/setup and renders navigation. Pages: `/`, `/budget`, `/angebote`, `/ausgaben`, `/dokumente`, `/aufgaben`, `/kalender`, `/sammlungen`, `/kontakte`, `/einstellungen`.
 - Server routes: `/api/files/*` (SQLite files), `/api/oidc/*` (self-hosted OIDC), `/api/public/calendar/*` (iCal).
+- `src/server.ts` dispatches `/api/caldav/*` and `/.well-known/caldav` before TanStack's handler,
+  because CalDAV needs nonstandard HTTP methods (`PROPFIND`, `REPORT`). The protocol handler
+  authenticates existing local credentials through `calendarAccess` in `data.functions.ts`, then
+  uses the SQLite repository. Conditional calendar writes are atomic. `events.caldav_uid` and
+  `events.caldav_data` preserve client UIDs and properties alongside the web app's editable fields.
+  Derived tasks/quote deadlines use a separate read-only collection. See [calendar integration](calendar-feed.md).
 
 ## Key modules
 | File | Purpose |
