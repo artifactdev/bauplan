@@ -1,10 +1,12 @@
 import { tr } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Globe, Mail, MapPin, Pencil, Phone, Plus, Trash2 } from "lucide-react";
+import { ContactRound, Globe, Mail, MapPin, Pencil, Phone, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { eur } from "@/lib/format";
 import { tradeName, tradeOptions } from "@/lib/options";
+import { downloadContactVCard } from "@/lib/vcard";
 import type { Workspace } from "@/lib/schema";
 import { Empty, OFFER_STATUS, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { EntityDialog, type Field } from "@/components/app/EntityDialog";
@@ -94,6 +96,23 @@ function ContactsPage() {
                 {web && <a className="flex items-center gap-2 truncate hover:text-primary" href={web} target="_blank" rel="noreferrer"><Globe className="h-3.5 w-3.5" />{c.website}</a>}
                 {c.address && <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-3.5 w-3.5" />{c.address}</div>}
               </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => {
+                  try {
+                    downloadContactVCard(c);
+                  } catch (error) {
+                    console.error("Could not export contact", error);
+                    toast.error(tr("exportFailed", { ns: "contacts" }));
+                  }
+                }}
+              >
+                <ContactRound data-icon="inline-start" />
+                {tr("saveToPhone", { ns: "contacts" })}
+              </Button>
               {c.notes && <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{c.notes}</p>}
               {offers.length > 0 && (
                 <div className="mt-3 grid gap-1 border-t pt-2 text-xs">

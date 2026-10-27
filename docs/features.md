@@ -74,6 +74,7 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 ## Contacts
 - Person, company, trade, phone, email, website, address, notes; search and trade filter.
 - Each card lists linked quotes with status; selectable in quote and expense forms.
+- **Save to phone contacts** exports one contact as a UTF-8 vCard (`.vcf`), including person, company, phone, email, website, address, and notes. Open the file on Android or iPhone and confirm adding it in the device's contacts app; some browsers save it to Downloads first. No direct address-book access, automatic saving, or ongoing synchronization is involved. Export runs locally and also works with the cached workspace offline.
 
 ## Forms (throughout the app)
 - **Scan receipt** above each create form: photo or file → fields are prefilled, the document is saved and linked. Cancelling the form afterwards (Cancel, Escape or clicking the background) asks whether to delete the uploaded document or keep it in Documents; the same applies to the assign step right after "Upload document" with recognition, and to closing while the upload is still running.
