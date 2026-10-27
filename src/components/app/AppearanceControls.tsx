@@ -1,18 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { Monitor, Moon, Sun } from "lucide-react";
-import { MODES, appearanceSchema } from "@/lib/appearance";
+import { MODES } from "@/lib/appearance";
 import { useAppearance } from "./AppearanceProvider";
 import { Panel } from "./ui-bits";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
-const MODE_ICONS = { light: Sun, dark: Moon, system: Monitor };
 export function AppearancePanel() {
   const { t } = useTranslation("appearance");
   const { appearance, saving, setAppearance } = useAppearance();
@@ -80,42 +69,5 @@ export function AppearancePanel() {
         {saving ? t("saving") : ""}
       </p>
     </Panel>
-  );
-}
-
-export function AppearanceModeMenu() {
-  const { t } = useTranslation("appearance");
-  const { appearance, setAppearance } = useAppearance();
-  const Icon = MODE_ICONS[appearance.mode];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("quickMode", { mode: t(appearance.mode) })}
-        >
-          <Icon className="h-5 w-5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup
-          value={appearance.mode}
-          onValueChange={(mode) => {
-            setAppearance(appearanceSchema.parse({ ...appearance, mode }));
-          }}
-        >
-          {MODES.map((mode) => {
-            const ModeIcon = MODE_ICONS[mode];
-            return (
-              <DropdownMenuRadioItem key={mode} value={mode} className="min-h-11">
-                <ModeIcon className="mr-2 h-4 w-4" />
-                {t(mode)}
-              </DropdownMenuRadioItem>
-            );
-          })}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

@@ -12,7 +12,6 @@ import {
   LogOut,
   Pencil,
   RefreshCw,
-  Wifi,
   WifiOff,
   Download,
   Info,
@@ -39,7 +38,6 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getUpdateReady, subscribeUpdateReady } from "@/lib/sw-update";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
-import { AppearanceModeMenu } from "@/components/app/AppearanceControls";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
 import { SharedImport } from "@/components/app/SharedImport";
 import { navigationItem } from "@/components/app/navigation-items";
@@ -283,19 +281,17 @@ function Shell() {
                 <CircleArrowUp className="h-5 w-5" />
               </Button>
             )}
-            <div
-              className="flex items-center gap-1 text-xs text-muted-foreground"
-              role="status"
-              aria-live="polite"
-            >
-              {sync.online ? (
-                <Wifi className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <WifiOff className="h-4 w-4" aria-hidden="true" />
-              )}
-              <span className="hidden sm:inline">{sync.online ? t("online") : t("offline")}</span>
-              {sync.pending > 0 && <span>{t("pendingSync", { count: sync.pending })}</span>}
-            </div>
+            {(!sync.online || sync.pending > 0) && (
+              <div
+                className="flex items-center gap-1 text-xs text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                {!sync.online && <WifiOff className="h-4 w-4" aria-hidden="true" />}
+                {!sync.online && <span>{t("offline")}</span>}
+                {sync.pending > 0 && <span>{t("pendingSync", { count: sync.pending })}</span>}
+              </div>
+            )}
             {sync.online && sync.pending > 0 && (
               <Button
                 variant="ghost"
@@ -323,7 +319,6 @@ function Shell() {
                 {t("appVersion", { version: appVersion })}
               </PopoverContent>
             </Popover>
-            <AppearanceModeMenu />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" aria-label={t("accountMenu")} className="gap-2 px-3">
