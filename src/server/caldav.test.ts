@@ -260,6 +260,7 @@ describe("read-only projections and account revocation", () => {
     await repo.insert("tasks", {
       id: "task-1",
       title: "Call contractor",
+      start_date: "2026-11-02",
       due_date: "2026-11-04",
       status: "offen",
     });
@@ -273,6 +274,11 @@ describe("read-only projections and account revocation", () => {
     const text = await result.text();
     expect(text).toContain("task-task-1");
     expect(text).toContain("offer-offer-1");
+    const taskCalendar = await (
+      await request(`${deadlines}task-task-1%40bauplan.ics`, "GET")
+    ).text();
+    expect(taskCalendar).toContain("DTSTART;VALUE=DATE:20261102");
+    expect(taskCalendar).toContain("DTEND;VALUE=DATE:20261105");
     expect((await request(`${deadlines}task-task-1%40bauplan.ics`, "DELETE")).status).toBe(403);
     expect((await request(`${deadlines}new.ics`, "PUT", calendar())).status).toBe(403);
     expect((await repo.getAll()).tasks).toHaveLength(1);

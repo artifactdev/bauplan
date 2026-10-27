@@ -94,6 +94,32 @@ afterEach(async () => {
 });
 
 describe("offline mutation completion", () => {
+  it("persists task dates offline and rejects partial changes that reverse the range", async () => {
+    const { result } = renderHook(useMutations, { wrapper: Wrapper });
+    let id = "";
+    await act(async () => {
+      ({ id } = await result.current.create.mutateAsync({
+        table: "tasks",
+        row: { title: "Multi-day", start_date: "2026-11-02", due_date: "2026-11-04" },
+      }));
+    });
+    expect((await loadSnapshot(userId))?.tasks[0]).toMatchObject({
+      start_date: "2026-11-02",
+      due_date: "2026-11-04",
+    });
+    await act(async () => {
+      await expect(
+        result.current.update.mutateAsync({
+          table: "tasks",
+          id,
+          patch: { due_date: "2026-11-01" },
+        }),
+      ).rejects.toThrow("tasks.due_before_start");
+    });
+    expect(await listChanges(userId)).toHaveLength(1);
+    expect(toast.error).toHaveBeenCalledWith("The due date must not be before the start date.");
+    expect((await loadSnapshot(userId))?.tasks[0]?.due_date).toBe("2026-11-04");
+  });
   it("persists a new entry and completes even when React Query is offline", async () => {
     const { result } = renderHook(
       () => ({ mutations: useMutations(), workspace: useWorkspace() }),
