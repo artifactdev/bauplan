@@ -133,6 +133,7 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 
 ## Forms (throughout the app)
 
+- Tasks and calendar entries (appointments, tasks, and quote deadlines) open a read-only detail dialog on normal clicks and task/appointment notification links. Details contain text rather than disabled inputs; **Edit** opens the existing editor. Explicit edit buttons and new-entry actions still open forms directly.
 - **Scan receipt** above each create form: photo or file → fields are prefilled, the document is saved and linked. Cancelling the form afterwards (Cancel, Escape or clicking the background) asks whether to delete the uploaded document or keep it in Documents; the same applies to the assign step right after "Upload document" with recognition, and to closing while the upload is still running.
 - **"+ New"** next to trade, cost item, and contact to create and select an entry directly.
 

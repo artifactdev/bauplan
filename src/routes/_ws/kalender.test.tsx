@@ -96,6 +96,21 @@ function renderCalendar() {
 }
 
 describe("calendar source dialogs", () => {
+  it("opens appointment notification links read-only", () => {
+    window.history.replaceState({}, "", "/kalender?eintrag=same-id");
+    renderCalendar();
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Site visit");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Event notes");
+    expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+    expect(window.location.search).toBe("");
+    window.history.replaceState({}, "", "/");
+  });
+  it("opens new appointments directly in the editor", () => {
+    renderCalendar();
+    fireEvent.click(screen.getByRole("button", { name: "Appointment" }));
+    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("New appointment");
+  });
   it("shows a multi-day task as continuous weekly bars and edits its start date", async () => {
     const month = todayISO().slice(0, 7);
     mocks.start = `${month}-10`;
@@ -109,6 +124,8 @@ describe("calendar source dialogs", () => {
       ),
     ).toBe(3);
     fireEvent.click(bars[0]!);
+    expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByLabelText("Start date")).toHaveValue(mocks.start);
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: `${month}-09` } });
     fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
@@ -138,6 +155,7 @@ describe("calendar source dialogs", () => {
     mocks.remove.mockImplementation((_values, options) => options?.onSuccess());
     renderCalendar();
     fireEvent.click(screen.getByRole("button", { name: /Site visit/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(window.confirm).toHaveBeenCalled();
     expect(mocks.remove).toHaveBeenCalledWith(
@@ -151,6 +169,7 @@ describe("calendar source dialogs", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     renderCalendar();
     fireEvent.click(screen.getByRole("button", { name: /Site visit/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -165,6 +184,9 @@ describe("calendar source dialogs", () => {
           ctrlKey: false,
         });
       fireEvent.click(await screen.findByRole("button", { name: /Remove panels/ }));
+      expect(screen.getByRole("dialog")).toHaveAccessibleName("Remove panels");
+      expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
       expect(screen.getByRole("dialog")).toHaveAccessibleName("Edit task");
       expect(screen.getByLabelText("Title")).toHaveValue("Remove panels");
       expect(screen.getByLabelText("Notes")).toHaveValue("Task notes");
@@ -188,6 +210,8 @@ describe("calendar source dialogs", () => {
           ctrlKey: false,
         });
       fireEvent.click(await screen.findByRole("button", { name: /Roofing.*Roof/ }));
+      expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
       expect(screen.getByRole("dialog")).toHaveAccessibleName("Edit quote");
       expect(screen.getByLabelText("Valid until")).toHaveValue(mocks.date);
       fireEvent.change(screen.getByLabelText(/gross amount/i), { target: { value: "1200" } });
@@ -210,6 +234,9 @@ describe("calendar source dialogs", () => {
           ctrlKey: false,
         });
       fireEvent.click(await screen.findByRole("button", { name: /Site visit/ }));
+      expect(screen.getByRole("dialog")).toHaveAccessibleName("Site visit");
+      expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
       expect(screen.getByLabelText("Title")).toHaveValue("Site visit");
       expect(screen.getByLabelText("Notes")).toHaveValue("Event notes");
       fireEvent.click(screen.getByRole("button", { name: "Speichern" }));

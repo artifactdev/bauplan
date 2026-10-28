@@ -62,10 +62,42 @@ it("keeps the complete title, metadata, range and controls available", () => {
   expect(row.getByText(/28.*31/)).toBeVisible();
   expect(screen.getByRole("combobox", { name: "Group tasks" })).toBeVisible();
 });
-it.each([title, "Edit"])("opens the task editor through %s", (name) => {
+it("opens read-only task details before the editor", () => {
   mount();
-  fireEvent.click(screen.getByRole("button", { name }));
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  const detail = within(screen.getByRole("dialog"));
+  expect(detail.getByText("Include dimensions.")).toBeVisible();
+  expect(detail.getByText("Alice")).toBeVisible();
+  expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+  fireEvent.click(detail.getByRole("button", { name: "Edit" }));
+  expect(screen.getByRole("dialog", { name: "Task editor" })).toHaveTextContent("task");
+});
+it("opens the task editor directly through Edit", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("task");
+});
+it("closes details without changing the task and reopens them read-only", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]!);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mocks.update).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+});
+it("opens task notification links read-only", () => {
+  window.history.replaceState({}, "", "/aufgaben?eintrag=task");
+  mount();
+  expect(screen.getByRole("dialog")).toHaveAccessibleName(title);
+  expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+  expect(window.location.search).toBe("");
+  window.history.replaceState({}, "", "/");
+});
+it("opens new tasks directly in the editor", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Task" }));
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Task editor");
 });
 it("preserves completion and confirmed deletion", () => {
   mount();

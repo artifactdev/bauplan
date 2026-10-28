@@ -22,6 +22,7 @@ import {
   TASK_STATUS,
 } from "@/components/app/ui-bits";
 import { QuickTask } from "@/components/app/quick-actions";
+import { CalendarDetails, type CalendarSource } from "@/components/app/CalendarDetails";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -60,7 +61,8 @@ function TasksPage() {
       : null,
   );
 
-  usePushTarget(ws.tasks, (task) => setDlg({ id: task.id, initial: { ...task } }));
+  const [detail, setDetail] = useState<CalendarSource | null>(null);
+  usePushTarget(ws.tasks, (task) => setDetail({ type: "task", id: task.id }));
   const done = ws.tasks.filter((t) => t.status === "erledigt").length;
 
   const groups = useMemo(() => {
@@ -191,7 +193,7 @@ function TasksPage() {
                     <div className="min-w-0">
                       <button
                         type="button"
-                        onClick={() => setDlg({ id: t.id, initial: { ...t } })}
+                        onClick={() => setDetail({ type: "task", id: t.id })}
                         className={cn(
                           "min-h-11 w-full rounded-sm py-2 text-left text-sm font-medium leading-6 [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                           isDone && "text-muted-foreground line-through",
@@ -282,6 +284,19 @@ function TasksPage() {
           </Empty>
         )}
       </div>
+      {detail && (
+        <CalendarDetails
+          source={detail}
+          onClose={() => setDetail(null)}
+          onEdit={({ id }) => {
+            const task = ws.tasks.find((row) => row.id === id);
+            if (task) {
+              setDetail(null);
+              setDlg({ id, initial: { ...task } });
+            }
+          }}
+        />
+      )}
       <QuickTask
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}

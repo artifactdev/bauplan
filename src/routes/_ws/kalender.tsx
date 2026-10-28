@@ -17,6 +17,7 @@ import { OfferDialog } from "@/components/app/OfferDialog";
 import { taskRange } from "@/lib/tasks";
 import { CalendarViews } from "@/components/app/CalendarViews";
 import type { CalendarItem } from "@/lib/calendar-view";
+import { CalendarDetails, type CalendarSource } from "@/components/app/CalendarDetails";
 
 export const Route = createFileRoute("/_ws/kalender")({
   head: () => ({
@@ -48,8 +49,9 @@ function CalendarPage() {
     null,
   );
 
+  const [detail, setDetail] = useState<CalendarSource | null>(null);
   usePushTarget(ws.events, (event) => {
-    setDlg({ id: event.id, initial: { ...event } });
+    setDetail({ type: "event", id: event.id });
     setSelected(event.event_date);
   });
   const items: CalendarItem[] = useMemo(
@@ -112,8 +114,8 @@ function CalendarPage() {
     const e = ws.events.find((x) => x.id === id);
     if (e) setDlg({ id, initial: { ...e } });
   };
-  const openItem = (item: CalendarItem) => {
-    const { type, id } = item.source;
+  const editSource = ({ type, id }: CalendarSource) => {
+    setDetail(null);
     if (type === "event") return editEvent(id);
     if (type === "task") {
       const task = ws.tasks.find((record) => record.id === id);
@@ -141,11 +143,14 @@ function CalendarPage() {
         items={items}
         selected={selected}
         onSelect={setSelected}
-        onOpen={openItem}
+        onOpen={(item) => setDetail(item.source)}
         onCreate={(date, time) =>
           setDlg({ initial: { kind: "termin", event_date: date, start_time: time ?? null } })
         }
       />
+      {detail && (
+        <CalendarDetails source={detail} onClose={() => setDetail(null)} onEdit={editSource} />
+      )}
       <QuickTask
         open={!!taskDlg}
         onOpenChange={(open) => !open && setTaskDlg(null)}
