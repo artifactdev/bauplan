@@ -52,12 +52,12 @@ The existing read-only ICS feed remains available and unchanged.
   Backups created before CalDAV remain importable.
 - Google Calendar and Outlook subscriptions remain read-only; they do not become CalDAV clients.
 
-## Read-only subscription (iCal)
-1. As an admin: **Settings → Calendar subscription (iCal) → Generate link**.
-2. Copy the link and add it in your calendar app as a **subscription / calendar from URL** (Google Calendar, Outlook, Apple Calendar).
-3. "Generate new link" invalidates the old link; "Deactivate" disables the subscription.
+## Legacy read-only subscription (iCal)
 
-The link is served by the local Bauplan instance and can be used by any calendar client that supports iCal subscriptions.
+The old subscription-link panel has been removed from Settings. Use the app's Calendar
+page and **Settings → Calendar** for CalDAV synchronization instead.
+Previously generated subscription URLs continue to work for compatibility; the underlying
+read-only endpoint and existing tokens are unchanged.
 
 ## Contents
 - All calendar events: all-day (no time) or timed, including multi-day events. Without an end time, a timed event lasts one hour.

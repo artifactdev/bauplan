@@ -3,17 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  CalendarDays,
-  Copy,
-  Database,
-  Download,
-  KeyRound,
-  LogOut,
-  Trash2,
-  Upload,
-  UserPlus,
-} from "lucide-react";
+import { Database, Download, KeyRound, LogOut, Trash2, Upload, UserPlus } from "lucide-react";
 import { PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  createManagedUser, deleteManagedUser, getCalendarFeed, setCalendarFeed, getOidcAdmin, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
+  createManagedUser, deleteManagedUser, getOidcAdmin, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
 } from "@/lib/auth.functions";
 import { importBackup } from "@/lib/data.functions";
 import { signOut } from "./route";
@@ -118,7 +108,6 @@ function SettingsPage() {
         <TabsContent value="admin" forceMount hidden={tab !== "admin"}>
           <div className="grid min-w-0 gap-5 md:grid-cols-2">
             <BackupPanel />
-            <CalendarFeedPanel />
             <OidcPanel />
             <OcrSettingsPanel />
           </div>
@@ -213,39 +202,6 @@ function BackupPanel() {
           </Button>
         </form>
       </div>
-    </Panel>
-  );
-}
-
-function CalendarFeedPanel() {
-  const qc = useQueryClient();
-  const feed = useQuery({ queryKey: ["ics"], queryFn: () => getCalendarFeed() });
-  const set = useMutation({
-    mutationFn: (action: "create" | "disable") => setCalendarFeed({ data: { action } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ics"] }),
-    onError: (e: Error) => toast.error(e.message),
-  });
-  const token = feed.data?.token;
-  const url = token && typeof window !== "undefined" ? `${window.location.origin}/api/public/calendar/${token}.ics` : "";
-  return (
-    <Panel title={tr("settings.calendar_subscription_cal")} className="md:col-span-2">
-      <p className="mb-3 text-sm text-muted-foreground">
-        Termine und offene Aufgaben mit Fälligkeit als Link abonnieren – z. B. in Google Kalender, Outlook oder Apple Kalender. Nur lesend; wer den Link kennt, sieht die Termine.
-      </p>
-      {token ? (
-        <div className="grid gap-2">
-          <div className="flex gap-2">
-            <Input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-            <Button variant="outline" onClick={() => { void navigator.clipboard.writeText(url); toast.success(tr("settings.link_copied")); }}><Copy className="h-4 w-4" /> {tr("settings.copy")}</Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" size="sm" onClick={() => confirm(tr("settings.generate_new_link_old")) && set.mutate("create")}>{tr("settings.generate_new_link")}</Button>
-            <Button variant="ghost" size="sm" onClick={() => confirm(tr("settings.deactivate_calendar_subscription")) && set.mutate("disable")}>{tr("settings.deactivate")}</Button>
-          </div>
-        </div>
-      ) : (
-        <Button onClick={() => set.mutate("create")} disabled={set.isPending || feed.isLoading}><CalendarDays className="h-4 w-4" /> {tr("settings.generate_link")}</Button>
-      )}
     </Panel>
   );
 }

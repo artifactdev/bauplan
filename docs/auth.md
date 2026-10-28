@@ -6,7 +6,7 @@ As long as **no account** exists, the app redirects to `/setup`. The first accou
 ## Roles
 | Role | Permissions |
 | --- | --- |
-| **Admin** | Everything, plus user management, OIDC, calendar subscription |
+| **Admin** | Everything, plus user management, OIDC |
 | **Member** | Read and edit all project data |
 | **Pending** | Signed in, but sees **no data** until an admin approves the account |
 

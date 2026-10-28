@@ -117,8 +117,9 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   Bauplan implements its own presentation adapter using existing components and data.
 - Two-way CalDAV synchronization with Apple Calendar using the existing
   Bauplan email/password. Single appointments are editable; tasks and quote deadlines appear in a
-  separate read-only calendar. Recurring series are not supported. The read-only iCal subscription
-  remains available: [calendar integration](calendar-feed.md).
+  separate read-only calendar. Recurring series are not supported. Previously generated iCal
+  subscription links remain valid, but the legacy link-management panel is no longer shown
+  in Settings: [calendar integration](calendar-feed.md).
 
 ## Collections
 
@@ -139,10 +140,10 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 
 - **Password:** the Account card opens a password-change modal. Existing local accounts confirm their current password; OIDC-only accounts can set a local password. Cancelling clears the fields, successful changes close the modal, and errors keep the form open.
 - **Navigation:** approved users can reorder or hide page links under Personal preferences, then save to their account. Drag the handles with a mouse or touch, use Space/arrow keys/Space on a focused handle (Escape cancels), or use the up/down buttons. Only handles initiate dragging so checkboxes and normal page scrolling remain usable. The sidebar follows this order; mobile shows the first four visible pages and puts the rest under More. Settings always stays available, even if all page links are hidden. Restore default layout resets the draft; Save applies it. Hidden links do not restrict page access. Preferences synchronize on reload, sign-in, and window focus.
-- Accessible tabs separate personal preferences (appearance, account, language), calendar synchronization (CalDAV setup), project configuration (storage and payment sources), admin-only user management, and admin-only administration (backups, calendar feed, OIDC, OCR), in that order. Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
+- Accessible tabs separate personal preferences (appearance, account, language), calendar synchronization (CalDAV setup), project configuration (storage and payment sources), admin-only user management, and admin-only administration (backups, OIDC, OCR), in that order. Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
 - Account and sign-out; storage mode display.
 - **Language:** German or English, chosen during setup or in Settings; saved per browser.
 - **Appearance:** Current, Blue, Green, or Violet palette, independently combined with Light, Dark, or System mode (default: Current + System). Personal Settings has palette previews and mode controls; there is no header mode switch. Changes save automatically per approved user account and synchronize on sign-in, reload, and window focus. System follows each device's own OS preference. The browser remembers the last appearance for the sign-in/setup screens; the signed-in account always takes precedence. Failed saves restore the previous choice and display an error.
 - **Visual design and accessibility:** coordinated neutral light/charcoal dark surfaces, restrained accents, distinct control boundaries, and separate readable status colors. Settings groups personal, project, and administrative options. Theme controls retain keyboard focus while saves are serialized and rapid choices are coalesced; a failed save restores the latest confirmed preference. Visible focus outlines, reduced-motion support, forced-colors selection outlines, and labeled/patterned budget chart series support non-pointer and non-color-dependent use.
-- Admins only: user management, calendar subscription, OIDC sign-in, and shared OCR settings.
+- Admins only: user management, OIDC sign-in, and shared OCR settings.
 - **OCR:** local Tesseract.js recognition for German/English, admin-managed offline language models, embedded PDF text extraction, and local rendering/OCR for scanned pages. See [local OCR](ocr.md).
