@@ -77,6 +77,7 @@ vi.mock("@/hooks/use-paperless", () => ({
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  localStorage.removeItem("bauplan.documents.view");
   mocks.paperlessEnabled = false;
   mocks.paperlessAllowed = true;
   mocks.paperlessConfigured = false;
@@ -117,6 +118,97 @@ async function openMenu() {
 }
 
 describe("document actions menu", () => {
+  it("remembers the last view across unmounts and restores the list when selected again", () => {
+    const Page = Route.options.component!;
+    const show = () =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <Page />
+        </QueryClientProvider>,
+      );
+    let rendered = show();
+    fireEvent.click(screen.getByRole("radio", { name: "List view" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Card view" }));
+    expect(localStorage.getItem("bauplan.documents.view")).toBe("cards");
+    rendered.unmount();
+    rendered = show();
+    expect(screen.getByRole("radio", { name: "Card view" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "List view" }));
+    expect(localStorage.getItem("bauplan.documents.view")).toBe("list");
+    rendered.unmount();
+    show();
+    expect(screen.getByRole("radio", { name: "List view" })).toBeChecked();
+  });
+
+  it("uses the default cards if the stored preference is invalid", () => {
+    localStorage.setItem("bauplan.documents.view", "invalid");
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("radio", { name: "Card view" })).toBeChecked();
+  });
+
+  it("defaults to cards and keeps filters and Paperless selections when changing views", () => {
+    mocks.paperlessEnabled = true;
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    const list = screen.getByRole("radio", { name: "List view" });
+    const cards = screen.getByRole("radio", { name: "Card view" });
+    expect(cards).toBeChecked();
+    expect(screen.getByRole("radiogroup", { name: "Document view" })).toHaveClass("ml-auto");
+    fireEvent.click(list);
+    fireEvent.change(screen.getByPlaceholderText("Search by name, tag…"), {
+      target: { value: "Invoice" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.click(screen.getByLabelText("Select Invoice.pdf"));
+    fireEvent.click(cards);
+    expect(cards).toBeChecked();
+    expect(screen.getByRole("list", { name: "Documents" })).toHaveClass("grid");
+    expect(screen.getByLabelText("Select Invoice.pdf")).toBeChecked();
+    expect(screen.getByPlaceholderText("Search by name, tag…")).toHaveValue("Invoice");
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    fireEvent.click(cards);
+    expect(cards).toBeChecked();
+    fireEvent.click(list);
+    expect(list).toBeChecked();
+    expect(screen.getByRole("list", { name: "Documents" })).toHaveClass("divide-y");
+    expect(screen.getByLabelText("Select Invoice.pdf")).toBeChecked();
+  });
+
+  it.each(["recognize", "preview", "download", "edit", "delete"] as const)(
+    "keeps the %s action working in card view",
+    async (action) => {
+      const Page = Route.options.component!;
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <Page />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("radio", { name: "Card view" }));
+      const labels = {
+        recognize: "Recognize and assign content",
+        preview: "Preview",
+        download: "Download",
+        edit: "Edit",
+        delete: "Delete",
+      };
+      fireEvent.click(screen.getAllByRole("button", { name: labels[action] }).at(-1)!);
+      if (action === "recognize") expect(screen.getByTestId("assign-dialog")).toBeInTheDocument();
+      if (action === "edit") expect(screen.getByTestId("edit-dialog")).toBeInTheDocument();
+      if (action === "preview" || action === "download")
+        await waitFor(() => expect(mocks.resolveFileUrl).toHaveBeenCalledWith("invoice.pdf"));
+      if (action === "delete")
+        expect(mocks.remove).toHaveBeenCalledWith({ table: "documents", id: "document-1" });
+    },
+  );
   it("hides Paperless for denied members while keeping shared local documents usable", () => {
     mocks.paperlessEnabled = true;
     mocks.paperlessConfigured = true;

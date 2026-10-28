@@ -29,9 +29,13 @@ import {
 } from "@/components/app/PaperlessDocumentControls";
 import { PaperlessError } from "@/components/app/paperless-ui";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import {
   Download,
   Eye,
+  LayoutGrid,
+  List,
   FileImage,
   FileSpreadsheet,
   FileText,
@@ -88,6 +92,17 @@ function DocIcon({ mime }: { mime: string | null }) {
 
 function DocsPage() {
   const { t } = useTranslation("paperless");
+  const [view, setView] = useState<"list" | "cards">(() => {
+    try {
+      return localStorage.getItem("bauplan.documents.view") === "list" ? "list" : "cards";
+    } catch (error) {
+      console.warn("[documents] Could not restore the preferred view", error);
+      return "cards";
+    }
+  });
+  const cards = view === "cards";
+  const DocumentsContainer = cards ? "div" : Panel;
+  const DocumentSurface = cards ? Panel : "div";
   const client = useQueryClient();
   const account = getOfflineAccount();
   const paperless = usePaperlessSettings();
@@ -299,6 +314,39 @@ function DocsPage() {
             </Button>
           ))}
         </div>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="lg"
+          value={view}
+          aria-label={tr("documents.view")}
+          className="ml-auto"
+          onValueChange={(value) => {
+            if (value !== "list" && value !== "cards") return;
+            setView(value);
+            try {
+              localStorage.setItem("bauplan.documents.view", value);
+            } catch (error) {
+              console.warn("[documents] Could not save the preferred view", error);
+              toast.warning(tr("documents.view_not_saved"));
+            }
+          }}
+        >
+          <ToggleGroupItem
+            value="list"
+            aria-label={tr("documents.list_view")}
+            title={tr("documents.list_view")}
+          >
+            <List aria-hidden="true" />
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="cards"
+            aria-label={tr("documents.card_view")}
+            title={tr("documents.card_view")}
+          >
+            <LayoutGrid aria-hidden="true" />
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       <PaperlessError
@@ -360,200 +408,234 @@ function DocsPage() {
           />
         )}
       </div>
-      <Panel>
-        <ul className="divide-y">
-          {docs.map((d) => {
+      <DocumentsContainer>
+        <ul
+          aria-label={tr("shared.documents")}
+          className={cn(
+            cards ? "grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3" : "divide-y",
+          )}
+        >
+          {docs.map((d, index) => {
             const related = links(d);
             return (
-              <li
-                key={d.id}
-                className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[2rem_minmax(0,1fr)_auto]"
-              >
-                <div className="flex flex-col items-center gap-2 pt-1">
-                  {paperlessMode && (
-                    <Checkbox
-                      aria-label={t("select", { name: d.name })}
-                      checked={selected.includes(d.id)}
-                      onCheckedChange={(checked) =>
-                        setSelected((previous) =>
-                          checked
-                            ? [...new Set([...previous, d.id])]
-                            : previous.filter((id) => id !== d.id),
-                        )
-                      }
-                    />
+              <li key={d.id} className="min-w-0">
+                <DocumentSurface
+                  className={cn(
+                    "grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3",
+                    cards
+                      ? "h-full grid-rows-[1fr_auto]"
+                      : "py-4 lg:grid-cols-[2rem_minmax(0,1fr)_auto]",
+                    !cards && index === 0 && "pt-0",
+                    !cards && index === docs.length - 1 && "pb-0",
                   )}
-                  <DocIcon mime={d.mime_type} />
-                </div>
-                <div className="min-w-0">
-                  <button
-                    className="block max-w-full text-left text-sm font-medium leading-6 [overflow-wrap:anywhere] hover:underline lg:text-base"
-                    onClick={() => open(d, "preview")}
-                  >
-                    {d.name}
-                  </button>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-muted-foreground">
-                    <Pill tone="primary">{d.category ? tr(d.category) : ""}</Pill>
-                    <span>{fileSize(d.size)}</span>
-                    <span>· {fmtDate(d.created_at ?? null)}</span>
+                >
+                  <div className="flex flex-col items-center gap-2 pt-1">
+                    {paperlessMode && (
+                      <Checkbox
+                        aria-label={t("select", { name: d.name })}
+                        checked={selected.includes(d.id)}
+                        onCheckedChange={(checked) =>
+                          setSelected((previous) =>
+                            checked
+                              ? [...new Set([...previous, d.id])]
+                              : previous.filter((id) => id !== d.id),
+                          )
+                        }
+                      />
+                    )}
+                    <DocIcon mime={d.mime_type} />
                   </div>
-                  {related.length > 0 && (
-                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                      {related.map((l) => (
-                        <li key={l} className="[overflow-wrap:anywhere]">
-                          {l}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {d.tags && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {d.tags
-                        .split(",")
-                        .map((t) => t.trim())
-                        .filter(Boolean)
-                        .map((t) => (
-                          <span
-                            key={t}
-                            className="max-w-full rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]"
-                          >
-                            #{t}
-                          </span>
-                        ))}
+                  <div className="min-w-0">
+                    <button
+                      className="block max-w-full text-left text-sm font-medium leading-6 [overflow-wrap:anywhere] hover:underline lg:text-base"
+                      onClick={() => open(d, "preview")}
+                    >
+                      {d.name}
+                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-muted-foreground">
+                      <Pill tone="primary">{d.category ? tr(d.category) : ""}</Pill>
+                      <span>{fileSize(d.size)}</span>
+                      <span>· {fmtDate(d.created_at ?? null)}</span>
                     </div>
-                  )}
-                  {d.description && (
-                    <p className="mt-2 text-sm text-muted-foreground">{d.description}</p>
-                  )}
-                  {paperlessMode &&
-                    (() => {
-                      const state = stateById.get(d.id);
-                      return (
-                        <PaperlessDocumentStatus
-                          linked={!!state?.link}
-                          state={state?.job?.state ?? null}
-                          url={state?.link?.url ?? null}
-                          checked={
-                            state?.verification?.checkedAt
-                              ? fmtDate(state.verification.checkedAt.slice(0, 10))
-                              : null
-                          }
-                          verification={
-                            state?.verification
-                              ? state.verification.state === "verified"
-                                ? "accessible"
-                                : state.verification.state === "inaccessible"
-                                  ? "inaccessible"
-                                  : "unverified"
-                              : null
-                          }
-                          canResolve={canAct && !!state?.job?.canResolve && !state.link}
-                          canAbandon={!!state?.job?.canAbandon && !state.link}
-                          onResolve={() => setPicker({ documentId: d.id })}
-                          onAbandon={() =>
-                            window.confirm(t("abandonConfirm")) && abandon.mutate(d.id)
-                          }
-                          onCheck={() => checkTransfer.mutate(d.id)}
-                          error={state?.job?.error}
-                        />
-                      );
-                    })()}
-                </div>
-                <div className="col-span-2 flex w-full items-center justify-between gap-2 border-t border-border pt-2 lg:col-span-1 lg:w-auto lg:justify-end lg:border-0 lg:pt-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="lg:hidden"
-                    onClick={() => open(d, "preview")}
+                    {related.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        {related.map((l) => (
+                          <li key={l} className="[overflow-wrap:anywhere]">
+                            {l}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {d.tags && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {d.tags
+                          .split(",")
+                          .map((t) => t.trim())
+                          .filter(Boolean)
+                          .map((t) => (
+                            <span
+                              key={t}
+                              className="max-w-full rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+                            >
+                              #{t}
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                    {d.description && (
+                      <p className="mt-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                        {d.description}
+                      </p>
+                    )}
+                    {paperlessMode &&
+                      (() => {
+                        const state = stateById.get(d.id);
+                        return (
+                          <PaperlessDocumentStatus
+                            linked={!!state?.link}
+                            state={state?.job?.state ?? null}
+                            url={state?.link?.url ?? null}
+                            checked={
+                              state?.verification?.checkedAt
+                                ? fmtDate(state.verification.checkedAt.slice(0, 10))
+                                : null
+                            }
+                            verification={
+                              state?.verification
+                                ? state.verification.state === "verified"
+                                  ? "accessible"
+                                  : state.verification.state === "inaccessible"
+                                    ? "inaccessible"
+                                    : "unverified"
+                                : null
+                            }
+                            canResolve={canAct && !!state?.job?.canResolve && !state.link}
+                            canAbandon={!!state?.job?.canAbandon && !state.link}
+                            onResolve={() => setPicker({ documentId: d.id })}
+                            onAbandon={() =>
+                              window.confirm(t("abandonConfirm")) && abandon.mutate(d.id)
+                            }
+                            onCheck={() => checkTransfer.mutate(d.id)}
+                            error={state?.job?.error}
+                          />
+                        );
+                      })()}
+                  </div>
+                  <div
+                    className={cn(
+                      "col-span-2 flex w-full items-center gap-2 border-t border-border pt-2",
+                      cards
+                        ? "justify-end"
+                        : "justify-between lg:col-span-1 lg:w-auto lg:justify-end lg:border-0 lg:pt-0",
+                    )}
                   >
-                    <Eye className="h-4 w-4" /> {tr("documents.preview")}
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="outline" className="lg:hidden">
-                        {tr("shared.actions")}
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-44 lg:hidden">
-                      <DropdownMenuGroup>
-                        {(d.mime_type === "application/pdf" ||
-                          d.mime_type?.startsWith("image/")) && (
-                          <DropdownMenuItem className="min-h-11" onSelect={() => setAssignId(d.id)}>
-                            <ScanText /> {tr("documents.recognize_assign_content")}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={cn(cards ? "hidden" : "lg:hidden")}
+                      onClick={() => open(d, "preview")}
+                    >
+                      <Eye className="h-4 w-4" /> {tr("documents.preview")}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={cn(cards ? "hidden" : "lg:hidden")}
+                        >
+                          {tr("shared.actions")}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-44 lg:hidden">
+                        <DropdownMenuGroup>
+                          {(d.mime_type === "application/pdf" ||
+                            d.mime_type?.startsWith("image/")) && (
+                            <DropdownMenuItem
+                              className="min-h-11"
+                              onSelect={() => setAssignId(d.id)}
+                            >
+                              <ScanText /> {tr("documents.recognize_assign_content")}
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            className="min-h-11"
+                            onSelect={() => {
+                              void open(d, "download");
+                            }}
+                          >
+                            <Download /> {tr("documents.download")}
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          className="min-h-11"
-                          onSelect={() => {
-                            void open(d, "download");
-                          }}
+                          <DropdownMenuItem className="min-h-11" onSelect={() => setEdit(d)}>
+                            <Pencil /> {tr("shared.edit")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="min-h-11 text-destructive"
+                            onSelect={() => {
+                              if (confirm(tr("documents.delete_document", { name: d.name })))
+                                remove.mutate({ table: "documents", id: d.id });
+                            }}
+                          >
+                            <Trash2 /> {tr("shared.delete")}
+                          </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <div
+                      className={cn(
+                        "items-center gap-1",
+                        cards ? "flex flex-wrap" : "hidden lg:flex",
+                      )}
+                    >
+                      {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tr("documents.recognize_assign_content")}
+                          title={tr("documents.recognize_assign_content")}
+                          onClick={() => setAssignId(d.id)}
                         >
-                          <Download /> {tr("documents.download")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="min-h-11" onSelect={() => setEdit(d)}>
-                          <Pencil /> {tr("shared.edit")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="min-h-11 text-destructive"
-                          onSelect={() => {
-                            if (confirm(tr("documents.delete_document", { name: d.name })))
-                              remove.mutate({ table: "documents", id: d.id });
-                          }}
-                        >
-                          <Trash2 /> {tr("shared.delete")}
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <div className="hidden items-center gap-1 lg:flex">
-                    {(d.mime_type === "application/pdf" || d.mime_type?.startsWith("image/")) && (
+                          <ScanText className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         size="icon"
                         variant="ghost"
-                        aria-label={tr("documents.recognize_assign_content")}
-                        title={tr("documents.recognize_assign_content")}
-                        onClick={() => setAssignId(d.id)}
+                        aria-label={tr("documents.preview")}
+                        onClick={() => open(d, "preview")}
                       >
-                        <ScanText className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </Button>
-                    )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tr("documents.preview")}
-                      onClick={() => open(d, "preview")}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tr("documents.download")}
-                      onClick={() => open(d, "download")}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tr("shared.edit")}
-                      onClick={() => setEdit(d)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tr("shared.delete")}
-                      onClick={() =>
-                        confirm(tr("documents.delete_document", { name: d.name })) &&
-                        remove.mutate({ table: "documents", id: d.id })
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={tr("documents.download")}
+                        onClick={() => open(d, "download")}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={tr("shared.edit")}
+                        onClick={() => setEdit(d)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={tr("shared.delete")}
+                        onClick={() =>
+                          confirm(tr("documents.delete_document", { name: d.name })) &&
+                          remove.mutate({ table: "documents", id: d.id })
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                </DocumentSurface>
               </li>
             );
           })}
@@ -565,7 +647,7 @@ function DocsPage() {
               : tr("documents.no_documents_yet_upload")}
           </Empty>
         )}
-      </Panel>
+      </DocumentsContainer>
 
       <QuickUpload open={uploadOpen} onOpenChange={setUploadOpen} initialFile={scanned} />
       {/* Scan first, then choose category and links in the regular upload form. */}
