@@ -1,6 +1,73 @@
 // Shared data model; SQLite creates and updates these tables at startup.
 
 // Private account metadata must not be included in TABLES or Workspace.
+export const PAPERLESS_TABLES = {
+  app_paperless_config: ["id", "instance_id", "enabled", "api_url", "browser_url"],
+  app_paperless_credentials: ["user_id", "instance_id", "ciphertext"],
+  app_paperless_links: [
+    "document_id",
+    "instance_id",
+    "remote_id",
+    "direction",
+    "linked_at",
+    "checksum",
+    "browser_url",
+  ],
+  app_paperless_jobs: [
+    "id",
+    "document_id",
+    "instance_id",
+    "user_id",
+    "metadata",
+    "state",
+    "task_id",
+    "error",
+    "created_at",
+    "updated_at",
+    "checksum",
+  ],
+  app_paperless_checks: ["user_id", "document_id", "state", "checked_at", "last_verified_at"],
+} as const;
+export const PAPERLESS_DDL = `
+CREATE TABLE IF NOT EXISTS app_paperless_config (
+ id INTEGER PRIMARY KEY CHECK(id = 1), instance_id TEXT NOT NULL, enabled INTEGER NOT NULL,
+ api_url TEXT NOT NULL, browser_url TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS app_paperless_credentials (
+ user_id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, ciphertext TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS app_paperless_links (
+ document_id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, remote_id INTEGER NOT NULL CHECK(remote_id > 0),
+ direction TEXT NOT NULL CHECK(direction IN ('import','export')), linked_at TEXT NOT NULL, checksum TEXT NOT NULL,
+ browser_url TEXT NOT NULL,
+ UNIQUE(instance_id, remote_id)
+);
+CREATE TABLE IF NOT EXISTS app_paperless_jobs (
+ id TEXT PRIMARY KEY, document_id TEXT NOT NULL UNIQUE, instance_id TEXT NOT NULL,
+ user_id TEXT, metadata TEXT NOT NULL, state TEXT NOT NULL, task_id TEXT, error TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, checksum TEXT
+);
+CREATE TABLE IF NOT EXISTS app_paperless_checks (
+ user_id TEXT NOT NULL, document_id TEXT NOT NULL, state TEXT NOT NULL,
+ checked_at TEXT NOT NULL, last_verified_at TEXT, PRIMARY KEY(user_id, document_id)
+);
+CREATE TRIGGER IF NOT EXISTS paperless_document_delete_guard BEFORE DELETE ON documents
+ WHEN EXISTS(SELECT 1 FROM app_paperless_jobs WHERE document_id = OLD.id
+ AND state IN ('queued','transferring','processing','unknown','paused'))
+ BEGIN SELECT RAISE(ABORT, 'paperless.errors.active_transfer'); END;
+CREATE TRIGGER IF NOT EXISTS paperless_document_cleanup AFTER DELETE ON documents
+ BEGIN
+ DELETE FROM app_paperless_links WHERE document_id = OLD.id;
+ DELETE FROM app_paperless_jobs WHERE document_id = OLD.id;
+ DELETE FROM app_paperless_checks WHERE document_id = OLD.id;
+ END;
+CREATE TRIGGER IF NOT EXISTS paperless_document_file_guard BEFORE UPDATE OF storage_path ON documents
+ WHEN OLD.storage_path IS NOT NEW.storage_path AND (
+ EXISTS(SELECT 1 FROM app_paperless_links WHERE document_id = OLD.id) OR
+ EXISTS(SELECT 1 FROM app_paperless_jobs WHERE document_id = OLD.id
+ AND state IN ('queued','transferring','processing','unknown','paused')))
+ BEGIN SELECT RAISE(ABORT, 'paperless.errors.active_transfer'); END;
+`;
 export const PUSH_DDL = `
 CREATE TABLE IF NOT EXISTS app_push_subscriptions (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_hash TEXT NOT NULL,

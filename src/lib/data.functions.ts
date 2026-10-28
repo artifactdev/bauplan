@@ -14,6 +14,118 @@ import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 import { pushSubscriptionSchema } from "./push";
+import {
+  paperlessSettingsSchema,
+  paperlessSearchSchema,
+  paperlessRemoteSchema,
+  paperlessExportSchema,
+  paperlessDocumentIdsSchema,
+  paperlessReconcileSchema,
+} from "./paperless";
+
+/** Approved members share workspace data; pending accounts receive no access. */
+export const dataContext = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  const repoMod = await import("@/server/repo");
+  const { canAccessData } = await import("@/server/auth-core");
+  const la = await import("@/server/local-auth");
+  const u = await la.userFromToken(
+    la.cookieFrom(getRequest()?.headers.get("cookie"), la.SESSION_COOKIE),
+  );
+  if (!u || !canAccessData(u.role)) throw new Error("Unauthorized");
+  return next({ context: { repo: repoMod.sqliteRepo(), user: u } });
+});
+
+export const adminDataContext = createMiddleware({ type: "function" })
+  .middleware([dataContext])
+  .server(async ({ next, context }) => {
+    if (context.user.role !== "admin") throw new Error("Unauthorized");
+    return next();
+  });
+
+export const getPaperlessSettings = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) => (await import("@/server/paperless")).settingsView(context.user));
+
+export const savePaperlessSettings = createServerFn({ method: "POST" })
+  .middleware([adminDataContext])
+  .inputValidator((data: unknown) => paperlessSettingsSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).saveSettings(context.user, data),
+  );
+
+export const connectPaperless = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        token: z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .regex(/^[^\s\p{Cc}]+$/u),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).connect(context.user, data.token),
+  );
+
+export const disconnectPaperless = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .handler(async ({ context }) => (await import("@/server/paperless")).disconnect(context.user.id));
+
+export const searchPaperless = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessSearchSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).search(context.user.id, data),
+  );
+
+export const getPaperlessMetadata = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) => (await import("@/server/paperless")).metadata(context.user.id));
+
+export const previewPaperless = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessRemoteSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).preview(context.user.id, data.remoteId),
+  );
+
+export const importPaperlessDocument = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessRemoteSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).importDocument(context.user.id, data.remoteId),
+  );
+
+export const getPaperlessDocuments = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) =>
+    (await import("@/server/paperless")).documentStates(context.user.id),
+  );
+
+export const exportPaperlessDocuments = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessExportSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).exportDocuments(context.user.id, data.documents),
+  );
+
+export const verifyPaperlessDocuments = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessDocumentIdsSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).verifyDocuments(context.user.id, data.documentIds),
+  );
+
+export const reconcilePaperlessDocument = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessReconcileSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).reconcile(context.user, data),
+  );
 
 /** CalDAV uses HTTP Basic authentication rather than browser sessions. Never expose as an RPC. */
 export async function calendarAccess(authorization: string | null) {
@@ -35,28 +147,6 @@ export async function calendarAccess(authorization: string | null) {
   const { sqliteRepo } = await import("@/server/repo");
   return { user, repo: sqliteRepo() };
 }
-
-/**
- * Requires a signed-in member (admin or member; pending accounts see nothing)
- * and provides the local SQLite repository.
- */
-export const dataContext = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  const repoMod = await import("@/server/repo");
-  const { canAccessData } = await import("@/server/auth-core");
-  const la = await import("@/server/local-auth");
-  const u = await la.userFromToken(
-    la.cookieFrom(getRequest()?.headers.get("cookie"), la.SESSION_COOKIE),
-  );
-  if (!u || !canAccessData(u.role)) throw new Error("Unauthorized");
-  return next({ context: { repo: repoMod.sqliteRepo(), user: u } });
-});
-
-export const adminDataContext = createMiddleware({ type: "function" })
-  .middleware([dataContext])
-  .server(async ({ next, context }) => {
-    if (context.user.role !== "admin") throw new Error("Unauthorized");
-    return next();
-  });
 
 export const getPushConfiguration = createServerFn()
   .middleware([dataContext])
@@ -345,12 +435,14 @@ export const deleteRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((d: unknown) => z.object({ table: tableSchema, id: z.string() }).parse(d))
   .handler(async ({ context, data }) => {
+    let storagePath: string | null = null;
     if (data.table === "documents") {
       const ws = await context.repo.getAll();
       const doc = ws.documents.find((x) => x.id === data.id);
-      if (doc?.storage_path) await context.repo.deleteFile(doc.storage_path);
+      storagePath = doc?.storage_path ?? null;
     }
     await context.repo.remove(data.table, data.id);
+    if (storagePath) await context.repo.deleteFile(storagePath);
     return { ok: true };
   });
 

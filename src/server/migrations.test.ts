@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES } from "@/lib/schema";
+import { BOOL_COLS, NUMERIC_COLS, PAPERLESS_TABLES, TABLE_NAMES, TABLES } from "@/lib/schema";
 import { migrateDatabase } from "./migrations";
+import { paperlessRepository } from "./repo";
 
 const databases: DatabaseSync[] = [];
 function database() {
@@ -33,9 +34,17 @@ describe("database migrations", () => {
         );
       }
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(4);
+    for (const [table, columns] of Object.entries(PAPERLESS_TABLES)) {
+      expect(
+        db
+          .prepare(`PRAGMA table_info(${table})`)
+          .all()
+          .map((column) => column["name"]),
+      ).toEqual(columns);
+    }
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(6);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'app_%'").all()).toHaveLength(
-      10,
+      15,
     );
   });
 
@@ -92,7 +101,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(4);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(6);
     expect(db.prepare("SELECT start_date, due_date FROM tasks WHERE id = 'task'").get()).toEqual({
       start_date: null,
       due_date: "2026-11-01",
@@ -118,6 +127,92 @@ describe("database migrations", () => {
     expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(2);
   });
 
+  it("upgrades v5 Paperless links and preserves their source URL when settings are saved", async () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec(`
+      ALTER TABLE app_paperless_links DROP COLUMN browser_url;
+      PRAGMA user_version = 5;
+      INSERT INTO app_paperless_config VALUES (1, 'instance', 1, 'http://paperless:8000', 'https://archive.example.test');
+      INSERT INTO app_paperless_links VALUES ('doc', 'instance', 42, 'import', '2026-10-28', 'checksum');
+      INSERT INTO app_paperless_credentials VALUES ('user', 'instance', 'encrypted-token');
+    `);
+
+    migrateDatabase(db);
+    migrateDatabase(db);
+
+    expect(db.prepare("SELECT * FROM app_paperless_links").get()).toEqual({
+      document_id: "doc",
+      instance_id: "instance",
+      remote_id: 42,
+      direction: "import",
+      linked_at: "2026-10-28",
+      checksum: "checksum",
+      browser_url: "https://archive.example.test",
+    });
+    const repository = paperlessRepository(async () => db);
+    await repository.configure({
+      id: 1,
+      instance_id: "instance",
+      enabled: 1,
+      api_url: "http://paperless:8000",
+      browser_url: "https://new.example.test",
+    });
+    expect(db.prepare("SELECT browser_url FROM app_paperless_links").get()?.["browser_url"]).toBe(
+      "https://new.example.test",
+    );
+    expect(await repository.credential("user", "instance")).toBe("encrypted-token");
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(6);
+  });
+
+  it("upgrades an empty v5 links table so initial Paperless settings can be saved", async () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec("ALTER TABLE app_paperless_links DROP COLUMN browser_url; PRAGMA user_version = 5;");
+    migrateDatabase(db);
+    const repository = paperlessRepository(async () => db);
+    await repository.configure({
+      id: 1,
+      instance_id: "instance",
+      enabled: 1,
+      api_url: "https://archive.example.test",
+      browser_url: "https://archive.example.test",
+    });
+    expect((await repository.config())?.browser_url).toBe("https://archive.example.test");
+  });
+
+  it("does not overwrite historical URLs in an already complete v5 schema", () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec(`
+      PRAGMA user_version = 5;
+      INSERT INTO app_paperless_links VALUES ('doc', 'old-instance', 42, 'import', '2026-10-28', 'checksum', 'https://old.example.test');
+    `);
+    migrateDatabase(db);
+    expect(db.prepare("SELECT browser_url FROM app_paperless_links").get()?.["browser_url"]).toBe(
+      "https://old.example.test",
+    );
+  });
+
+  it("rolls back a legacy link upgrade if its original instance URL cannot be recovered", () => {
+    const db = database();
+    migrateDatabase(db);
+    db.exec(`
+      ALTER TABLE app_paperless_links DROP COLUMN browser_url;
+      PRAGMA user_version = 5;
+      INSERT INTO app_paperless_links VALUES ('doc', 'old-instance', 42, 'import', '2026-10-28', 'checksum');
+    `);
+    expect(() => migrateDatabase(db)).toThrow("Database migration failed");
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(5);
+    expect(db.prepare("SELECT remote_id FROM app_paperless_links").get()?.["remote_id"]).toBe(42);
+    expect(
+      db
+        .prepare("PRAGMA table_info(app_paperless_links)")
+        .all()
+        .map((column) => column["name"]),
+    ).not.toContain("browser_url");
+  });
+
   it("adds the funding ledger to v2 without changing the existing initial bank budget", () => {
     const db = database();
     migrateDatabase(db);
@@ -130,7 +225,7 @@ describe("database migrations", () => {
     migrateDatabase(db);
     expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
     expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(4);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(6);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

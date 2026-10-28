@@ -13,6 +13,11 @@ docker compose up -d --build
 | --- | --- |
 | `DATA_DIR=/data` | Directory for SQLite (`renovierung.db`) and downloaded OCR language models (`ocr-models/`) |
 | `UPLOADS_DIR=/uploads` | Directory for uploaded files; the Docker image defaults to `/uploads` |
+| `PAPERLESS_SETTINGS_KEY` | Optional 64-character hexadecimal secret (`openssl rand -hex 32`) for encrypting personal Paperless API tokens; required before connecting accounts, never included in portable backups |
+
+### Paperless-ngx
+
+The optional connector contacts only the self-hosted instance configured by an administrator. Each member uses a personal API token. Imports and manual exports retain local file copies and never synchronize later edits or deletions. The document overview shows known-link filters and per-file processing status. See [Paperless integration](paperless.md) for setup, sharing boundaries and unknown-outcome recovery.
 
 ### Push notifications
 

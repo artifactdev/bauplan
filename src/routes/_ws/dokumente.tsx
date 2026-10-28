@@ -1,6 +1,34 @@
 import { tr } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { usePaperlessDocuments, usePaperlessSettings } from "@/hooks/use-paperless";
+import {
+  exportPaperlessDocuments,
+  getPaperlessMetadata,
+  importPaperlessDocument,
+  previewPaperless,
+  reconcilePaperlessDocument,
+  searchPaperless,
+  verifyPaperlessDocuments,
+} from "@/lib/data.functions";
+import { getOfflineAccount } from "@/lib/offline-store";
+import {
+  matchesPaperlessPresence,
+  visibleSelection,
+  type PaperlessPresence,
+} from "@/lib/paperless-view";
+import type { Extraction } from "@/lib/ocr-parse";
+import { PaperlessPicker } from "@/components/app/PaperlessPicker";
+import { PaperlessExportDialog } from "@/components/app/PaperlessExportDialog";
+import {
+  PaperlessDocumentControls,
+  PaperlessDocumentStatus,
+} from "@/components/app/PaperlessDocumentControls";
+import { PaperlessError } from "@/components/app/paperless-ui";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Download,
   Eye,
@@ -9,6 +37,7 @@ import {
   FileText,
   File as FileIcon,
   Pencil,
+  RefreshCw,
   ScanLine,
   ScanText,
   Search,
@@ -58,6 +87,61 @@ function DocIcon({ mime }: { mime: string | null }) {
 }
 
 function DocsPage() {
+  const { t } = useTranslation("paperless");
+  const client = useQueryClient();
+  const account = getOfflineAccount();
+  const paperless = usePaperlessSettings();
+  const [paperlessOpen, setPaperlessOpen] = useState(false);
+  const paperlessMode = paperlessOpen && !!paperless.data?.enabled;
+  const paperlessStates = usePaperlessDocuments(paperless.data?.configured ?? false);
+  const stateById = useMemo(
+    () => new Map(paperlessStates.data?.map((state) => [state.documentId, state])),
+    [paperlessStates.data],
+  );
+  const [presence, setPresence] = useState<PaperlessPresence>("all");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [picker, setPicker] = useState<"import" | { documentId: string } | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [imported, setImported] = useState<{
+    documentId: string;
+    extraction: Extraction | null;
+  } | null>(null);
+  const metadata = useQuery({
+    queryKey: ["paperless", account?.id, paperless.data?.instanceId, "metadata"],
+    queryFn: () => getPaperlessMetadata(),
+    enabled: !!paperless.data?.connected && (picker !== null || exportOpen),
+    gcTime: 0,
+    staleTime: 0,
+    retry: false,
+  });
+  const refreshPaperless = () => client.invalidateQueries({ queryKey: ["paperless"] });
+  const verify = useMutation({
+    mutationFn: (documentIds: string[]) => verifyPaperlessDocuments({ data: { documentIds } }),
+    onSuccess: async () => {
+      await refreshPaperless();
+      toast.success(t("verified"));
+    },
+  });
+  const abandon = useMutation({
+    mutationFn: (documentId: string) =>
+      reconcilePaperlessDocument({
+        data: { documentId, action: "abandon", confirmDuplicateRisk: true },
+      }),
+    onSuccess: async () => {
+      await refreshPaperless();
+      toast.success(t("reconciled"));
+    },
+  });
+  const checkTransfer = useMutation({
+    mutationFn: (documentId: string) =>
+      reconcilePaperlessDocument({
+        data: { documentId, action: "check", confirmDuplicateRisk: false },
+      }),
+    onSuccess: async () => {
+      await refreshPaperless();
+      toast.success(t("reconciled"));
+    },
+  });
   const { ws } = useWorkspace();
   const { update, remove } = useMutations();
   const [q, setQ] = useState("");
@@ -79,6 +163,13 @@ function DocsPage() {
       .filter((d) => !cat || d.category === cat)
       .filter(
         (d) =>
+          !paperlessMode ||
+          presence === "all" ||
+          (!!paperlessStates.data &&
+            matchesPaperlessPresence(presence, !!stateById.get(d.id)?.link)),
+      )
+      .filter(
+        (d) =>
           !s ||
           [d.name, d.tags, d.description, d.category, tradeName(ws, d.trade_id)]
             .join(" ")
@@ -86,7 +177,16 @@ function DocsPage() {
             .includes(s),
       )
       .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
-  }, [ws, q, cat]);
+  }, [ws, q, cat, presence, paperlessMode, paperlessStates.data, stateById]);
+  const visibleIds = docs.map((document) => document.id);
+  const selectedIds = visibleSelection(selected, visibleIds);
+  const selectedDocs = docs.filter((document) => selectedIds.includes(document.id));
+  const exportableDocs = selectedDocs.filter((document) => {
+    const state = stateById.get(document.id);
+    return !state?.link && (!state?.job || ["failed", "abandoned"].includes(state.job.state));
+  });
+  const canAct =
+    !!paperless.data?.enabled && !!paperless.data.connected && !paperlessStates.isError;
 
   const open = async (d: Doc, mode: "preview" | "download") => {
     const url = await resolveFileUrl(d.storage_path);
@@ -138,14 +238,32 @@ function DocsPage() {
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder={tr("documents.search_name_tag")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-72">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder={tr("documents.search_name_tag")}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+          {paperless.data?.enabled && (
+            <Button
+              size="sm"
+              variant={paperlessMode ? "secondary" : "outline"}
+              aria-expanded={paperlessMode}
+              aria-controls="paperless-tools"
+              onClick={() => {
+                setPaperlessOpen(!paperlessMode);
+                setSelected([]);
+                setPresence("all");
+              }}
+            >
+              <RefreshCw data-icon="inline-start" />
+              {t("tools")}
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap gap-1">
           <Button
@@ -168,6 +286,66 @@ function DocsPage() {
         </div>
       </div>
 
+      <PaperlessError
+        error={
+          paperless.error ??
+          paperlessStates.error ??
+          verify.error ??
+          abandon.error ??
+          checkTransfer.error
+        }
+      />
+      {paperlessMode && paperlessStates.isPending && <p role="status">{t("loading")}</p>}
+      {(paperless.isError || paperlessStates.isError) && (
+        <Button
+          variant="outline"
+          onClick={() => {
+            void paperless.refetch();
+            void paperlessStates.refetch();
+          }}
+        >
+          {t("retry")}
+        </Button>
+      )}
+      <div id="paperless-tools" hidden={!paperlessMode}>
+        {paperlessMode && (
+          <PaperlessDocumentControls
+            connected={canAct}
+            presence={presence}
+            onPresence={setPresence}
+            selectedCount={selectedIds.length}
+            exportCount={exportableDocs.length}
+            allSelected={docs.length > 0 && selectedIds.length === docs.length}
+            onSelectAll={(checked) =>
+              setSelected((previous) =>
+                checked
+                  ? [...new Set([...previous, ...visibleIds])]
+                  : previous.filter((id) => !visibleIds.includes(id)),
+              )
+            }
+            onClear={() => setSelected([])}
+            onImport={() => setPicker("import")}
+            onExport={() => {
+              if (selectedIds.length > 50) toast.error(t("selectionLimit"));
+              else if (exportableDocs.length) {
+                const skipped = selectedDocs.length - exportableDocs.length;
+                if (skipped) toast.info(t("skipped", { count: skipped }));
+                setExportOpen(true);
+              }
+            }}
+            onVerify={() => {
+              if (selectedIds.length > 50) toast.error(t("selectionLimit"));
+              else verify.mutate(selectedIds);
+            }}
+            busy={
+              verify.isPending ||
+              abandon.isPending ||
+              checkTransfer.isPending ||
+              paperlessStates.isPending
+            }
+          />
+        )}
+      </div>
       <Panel>
         <ul className="divide-y">
           {docs.map((d) => {
@@ -177,7 +355,20 @@ function DocsPage() {
                 key={d.id}
                 className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[2rem_minmax(0,1fr)_auto]"
               >
-                <div className="pt-1">
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  {paperlessMode && (
+                    <Checkbox
+                      aria-label={t("select", { name: d.name })}
+                      checked={selected.includes(d.id)}
+                      onCheckedChange={(checked) =>
+                        setSelected((previous) =>
+                          checked
+                            ? [...new Set([...previous, d.id])]
+                            : previous.filter((id) => id !== d.id),
+                        )
+                      }
+                    />
+                  )}
                   <DocIcon mime={d.mime_type} />
                 </div>
                 <div className="min-w-0">
@@ -220,6 +411,39 @@ function DocsPage() {
                   {d.description && (
                     <p className="mt-2 text-sm text-muted-foreground">{d.description}</p>
                   )}
+                  {paperlessMode &&
+                    (() => {
+                      const state = stateById.get(d.id);
+                      return (
+                        <PaperlessDocumentStatus
+                          linked={!!state?.link}
+                          state={state?.job?.state ?? null}
+                          url={state?.link?.url ?? null}
+                          checked={
+                            state?.verification?.checkedAt
+                              ? fmtDate(state.verification.checkedAt.slice(0, 10))
+                              : null
+                          }
+                          verification={
+                            state?.verification
+                              ? state.verification.state === "verified"
+                                ? "accessible"
+                                : state.verification.state === "inaccessible"
+                                  ? "inaccessible"
+                                  : "unverified"
+                              : null
+                          }
+                          canResolve={canAct && !!state?.job?.canResolve && !state.link}
+                          canAbandon={!!state?.job?.canAbandon && !state.link}
+                          onResolve={() => setPicker({ documentId: d.id })}
+                          onAbandon={() =>
+                            window.confirm(t("abandonConfirm")) && abandon.mutate(d.id)
+                          }
+                          onCheck={() => checkTransfer.mutate(d.id)}
+                          error={state?.job?.error}
+                        />
+                      );
+                    })()}
                 </div>
                 <div className="col-span-2 flex w-full items-center justify-between gap-2 border-t border-border pt-2 lg:col-span-1 lg:w-auto lg:justify-end lg:border-0 lg:pt-0">
                   <Button
@@ -339,7 +563,118 @@ function DocsPage() {
           setUploadOpen(true);
         }}
       />
-      <AssignDialog documentId={assignId} onClose={() => setAssignId(null)} />
+      <AssignDialog
+        documentId={assignId}
+        onClose={() => {
+          setAssignId(null);
+          setImported(null);
+        }}
+        initialExtraction={imported?.documentId === assignId ? imported.extraction : undefined}
+      />
+      {(picker !== null || exportOpen) && canAct && (
+        <>
+          <PaperlessError error={metadata.error} />
+          {metadata.isPending && <p role="status">{t("loading")}</p>}
+          {metadata.isError && (
+            <Button variant="outline" onClick={() => metadata.refetch()}>
+              {t("retry")}
+            </Button>
+          )}
+          {!metadata.data && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPicker(null);
+                setExportOpen(false);
+              }}
+            >
+              {t("cancel")}
+            </Button>
+          )}
+        </>
+      )}
+      {picker !== null && canAct && account && metadata.data && (
+        <PaperlessPicker
+          key={`${account.id}:${paperless.data?.instanceId}:${typeof picker === "string" ? picker : picker.documentId}`}
+          userId={account.id}
+          instanceKey={paperless.data?.instanceId ?? ""}
+          metadata={metadata.data}
+          reconcile={picker !== "import"}
+          onClose={() => setPicker(null)}
+          search={async (filters) => {
+            const result = await searchPaperless({
+              data: {
+                query: filters.query,
+                page: filters.page,
+                tags: filters.tag ? [filters.tag] : [],
+                ...(filters.documentType ? { documentType: filters.documentType } : {}),
+                ...(filters.correspondent ? { correspondent: filters.correspondent } : {}),
+                ...(filters.dateFrom ? { dateFrom: filters.dateFrom } : {}),
+                ...(filters.dateUntil ? { dateTo: filters.dateUntil } : {}),
+              },
+            });
+            return { ...result, hasNext: result.page * result.pageSize < result.count };
+          }}
+          preview={async (remoteId) => {
+            const result = await previewPaperless({ data: { remoteId } });
+            return new Blob(
+              [Uint8Array.from(atob(result.base64), (character) => character.charCodeAt(0))],
+              { type: result.mime },
+            );
+          }}
+          choose={async (remoteId) => {
+            if (picker !== "import") {
+              await reconcilePaperlessDocument({
+                data: {
+                  documentId: picker.documentId,
+                  action: "link",
+                  remoteId,
+                  confirmDuplicateRisk: false,
+                },
+              });
+              toast.success(t("reconciled"));
+            } else {
+              const result = await importPaperlessDocument({ data: { remoteId } });
+              await client.invalidateQueries({ queryKey: ["ws"] });
+              toast.success(t(result.duplicate ? "alreadyImported" : "imported"));
+              if (!result.duplicate) {
+                setImported({ documentId: result.documentId, extraction: result.extraction });
+                setAssignId(result.documentId);
+                if (result.extractionError) toast.warning(t(`errors.${result.extractionError}`));
+              }
+            }
+            setPicker(null);
+            await refreshPaperless();
+          }}
+        />
+      )}
+      {exportOpen && canAct && metadata.data && (
+        <PaperlessExportDialog
+          documents={exportableDocs}
+          metadata={metadata.data}
+          destination={paperless.data?.browserUrl ?? ""}
+          account={account?.email ?? ""}
+          onClose={() => setExportOpen(false)}
+          onSubmit={async (drafts) => {
+            await exportPaperlessDocuments({
+              data: {
+                documents: drafts.map((draft) => ({
+                  documentId: draft.documentId,
+                  title: draft.title,
+                  documentDate: draft.created ?? null,
+                  tags: draft.tags,
+                  documentType: draft.documentType ?? null,
+                  correspondent: draft.correspondent ?? null,
+                })),
+              },
+            });
+            setExportOpen(false);
+            setSelected([]);
+            await refreshPaperless();
+            toast.info(t("submitted"));
+          }}
+        />
+      )}
       <EntityDialog
         open={!!edit}
         onOpenChange={(o) => !o && setEdit(null)}

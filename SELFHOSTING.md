@@ -26,3 +26,9 @@ On first launch, the setup page creates the admin account. The admin can add use
 Local email/password authentication works without an external service. To enable OIDC, enter the issuer, client ID, and secret under **Settings → Sign in with OIDC**. Register `https://<your-address>/api/oidc/callback` as the callback URL with the provider. Behind a reverse proxy, also enter the public app address. OIDC sign-ins are linked to an existing account with the same email address; only first-time users without a matching account need admin approval. Users can change their own local password under **Settings → Personal → Account**.
 
 OIDC requires outbound access to the provider when enabled. For a fully local setup, leave it disabled. Docker requires network access when pulling base images and downloading build dependencies; the running app does not require cloud services. Downloading OCR language models requires outbound HTTPS access to jsDelivr; no document content is sent.
+
+## Optional Paperless-ngx
+
+Set `PAPERLESS_SETTINGS_KEY` to a 64-character hexadecimal secret on the Bauplan server to encrypt personal Paperless tokens (generate it with `openssl rand -hex 32`). Keep it outside source control. Compose passes this variable from the deployment environment. An administrator configures the instance under Settings; each member connects their own API token. The server must be able to reach the configured Paperless base URL, with a separate browser URL if needed.
+
+Members can import selected archive documents and manually archive selected Bauplan scans/uploads. Local copies remain available; there is no automatic content or deletion synchronization. Imported files are shared with the Bauplan project. Portable backups exclude personal Paperless tokens, so reconnect after restore. See [Paperless integration](docs/paperless.md) for permissions, status filters and interrupted-transfer recovery.

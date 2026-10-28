@@ -12,6 +12,8 @@ import {
 } from "@/lib/schema";
 import { TABLES } from "@/lib/schema";
 import type { PushJob, PushSubscriptionData } from "@/lib/push";
+import type { PaperlessExportMetadata, PaperlessJobState } from "@/lib/paperless";
+import { PaperlessError } from "./paperless-client";
 import { calendarEtag, checkConditions, DavError, type DavConditions } from "./caldav-calendar";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_TABLE } from "@/lib/schema";
@@ -80,6 +82,11 @@ export type BackupDatabase = {
   appearances: Record<string, unknown>[];
   navigation: Record<string, unknown>[];
   syncOperations: Record<string, unknown>[];
+  paperless?: {
+    config: Record<string, unknown>[];
+    links: Record<string, unknown>[];
+    jobs: Record<string, unknown>[];
+  };
 };
 
 export type BackupFile = { name: string; bytes: Uint8Array };
@@ -339,6 +346,22 @@ export function sqliteRepo(): Repo {
           appearances: d.prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} ORDER BY user_id`).all(),
           navigation: d.prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} ORDER BY user_id`).all(),
           syncOperations: d.prepare("SELECT * FROM app_sync_operations ORDER BY id").all(),
+          paperless: {
+            config: d.prepare("SELECT * FROM app_paperless_config").all(),
+            links: d.prepare("SELECT * FROM app_paperless_links ORDER BY document_id").all(),
+            jobs: d
+              .prepare("SELECT * FROM app_paperless_jobs ORDER BY id")
+              .all()
+              .map((job) => ({
+                ...job,
+                state: ["linked", "failed", "abandoned"].includes(String(job["state"]))
+                  ? job["state"]
+                  : "paused",
+                error: ["linked", "failed", "abandoned"].includes(String(job["state"]))
+                  ? job["error"]
+                  : "restored",
+              })),
+          },
         },
         files,
       };
@@ -383,6 +406,9 @@ export function sqliteRepo(): Repo {
         )
           throw new Error("Die Einrichtung wurde bereits abgeschlossen.");
 
+        d.exec(
+          "DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_config;",
+        );
         for (const table of TABLE_NAMES) d.prepare(`DELETE FROM ${table}`).run();
         d.prepare("DELETE FROM app_users").run();
         d.prepare("DELETE FROM app_settings").run();
@@ -412,6 +438,22 @@ export function sqliteRepo(): Repo {
         insertRows(USER_APPEARANCE_TABLE, database.appearances);
         insertRows(USER_NAVIGATION_TABLE, database.navigation);
         insertRows("app_sync_operations", database.syncOperations);
+        if (database.paperless) {
+          insertRows("app_paperless_config", database.paperless.config);
+          insertRows("app_paperless_links", database.paperless.links);
+          insertRows(
+            "app_paperless_jobs",
+            database.paperless.jobs.map((job) => ({
+              ...job,
+              state: ["linked", "failed", "abandoned"].includes(String(job["state"]))
+                ? job["state"]
+                : "paused",
+              error: ["linked", "failed", "abandoned"].includes(String(job["state"]))
+                ? job["error"]
+                : "restored",
+            })),
+          );
+        }
 
         for (const name of await fs.readdir(liveDirectory)) {
           if (name === stageName) continue;
@@ -560,8 +602,9 @@ export function sqliteRepo(): Repo {
       const path = await nodeImport<typeof import("node:path")>("node:" + "path");
       try {
         fs.unlinkSync(path.join(uploadsDir(path), path.basename(p)));
-      } catch {
-        /* already gone */
+      } catch (error) {
+        if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT"))
+          throw error;
       }
     },
     readFile: (p) => readSqliteFile(p),
@@ -588,6 +631,360 @@ export async function readSqliteFile(p: string): Promise<Uint8Array | null> {
   const full = path.join(uploadsDir(path), path.basename(p));
   return fs.existsSync(full) ? new Uint8Array(fs.readFileSync(full)) : null;
 }
+
+export type PaperlessConfig = {
+  id: number;
+  instance_id: string;
+  enabled: number;
+  api_url: string;
+  browser_url: string;
+};
+export type PaperlessLink = {
+  document_id: string;
+  instance_id: string;
+  remote_id: number;
+  direction: "import" | "export";
+  linked_at: string;
+  checksum: string;
+  browser_url: string;
+};
+export type PaperlessJob = {
+  id: string;
+  document_id: string;
+  instance_id: string;
+  user_id: string | null;
+  metadata: string;
+  state: PaperlessJobState;
+  task_id: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  checksum: string | null;
+};
+
+/** Private integration storage. No credential or per-user check enters Workspace. */
+export function paperlessRepository(database: () => Promise<SqliteDb> = getSqliteDb) {
+  return {
+    async config() {
+      return (await database()).prepare("SELECT * FROM app_paperless_config WHERE id = 1").get() as
+        PaperlessConfig | undefined;
+    },
+    async configure(config: PaperlessConfig) {
+      const db = await database();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const old = db.prepare("SELECT * FROM app_paperless_config WHERE id = 1").get();
+        if (old && old["instance_id"] !== config.instance_id) {
+          db.exec("DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks;");
+        }
+        if (!config.enabled || (old && old["instance_id"] !== config.instance_id)) {
+          db.prepare(
+            "UPDATE app_paperless_jobs SET state = 'paused', error = 'configuration_changed', updated_at = ? WHERE state IN ('queued','processing','transferring')",
+          ).run(new Date().toISOString());
+        }
+        db.prepare(
+          `INSERT INTO app_paperless_config (id,instance_id,enabled,api_url,browser_url) VALUES (1,?,?,?,?)
+          ON CONFLICT(id) DO UPDATE SET instance_id=excluded.instance_id, enabled=excluded.enabled, api_url=excluded.api_url,browser_url=excluded.browser_url`,
+        ).run(config.instance_id, config.enabled, config.api_url, config.browser_url);
+        db.prepare("UPDATE app_paperless_links SET browser_url=? WHERE instance_id=?").run(
+          config.browser_url,
+          config.instance_id,
+        );
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async credential(userId: string, instanceId: string) {
+      return (await database())
+        .prepare(
+          "SELECT ciphertext FROM app_paperless_credentials WHERE user_id = ? AND instance_id = ?",
+        )
+        .get(userId, instanceId)?.["ciphertext"] as string | undefined;
+    },
+    async connect(userId: string, instanceId: string, ciphertext: string) {
+      const db = await database();
+      const config = db
+        .prepare("SELECT instance_id,enabled FROM app_paperless_config WHERE id = 1")
+        .get();
+      if (!config || config["instance_id"] !== instanceId || !config["enabled"])
+        throw new PaperlessError("configuration_changed");
+      db.prepare(
+        `INSERT INTO app_paperless_credentials (user_id,instance_id,ciphertext) VALUES (?,?,?)
+        ON CONFLICT(user_id) DO UPDATE SET instance_id=excluded.instance_id,ciphertext=excluded.ciphertext`,
+      ).run(userId, instanceId, ciphertext);
+    },
+    async disconnect(userId: string, deleting = false) {
+      const db = await database();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        db.prepare("DELETE FROM app_paperless_credentials WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM app_paperless_checks WHERE user_id = ?").run(userId);
+        db.prepare(
+          "UPDATE app_paperless_jobs SET state='paused',error=?,updated_at=? WHERE user_id = ? AND state IN ('queued','transferring','processing')",
+        ).run(deleting ? "account_deleted" : "disconnected", new Date().toISOString(), userId);
+        if (deleting)
+          db.prepare("UPDATE app_paperless_jobs SET user_id = NULL WHERE user_id = ?").run(userId);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async allowed(userId: string) {
+      const row = (await database()).prepare("SELECT role FROM app_users WHERE id = ?").get(userId);
+      return row?.["role"] === "admin" || row?.["role"] === "member";
+    },
+    async document(documentId: string) {
+      return (await database()).prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
+    },
+    async link(documentId: string) {
+      return (await database())
+        .prepare("SELECT * FROM app_paperless_links WHERE document_id = ?")
+        .get(documentId) as PaperlessLink | undefined;
+    },
+    async source(instanceId: string, remoteId: number) {
+      return (await database())
+        .prepare("SELECT * FROM app_paperless_links WHERE instance_id = ? AND remote_id = ?")
+        .get(instanceId, remoteId) as PaperlessLink | undefined;
+    },
+    async linkDocument(
+      link: Omit<PaperlessLink, "browser_url">,
+      jobId?: string,
+      expectedState?: PaperlessJobState,
+    ) {
+      const db = await database();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (!db.prepare("SELECT id FROM documents WHERE id = ?").get(link.document_id))
+          throw new PaperlessError("document_missing");
+        const config = db
+          .prepare("SELECT instance_id,browser_url FROM app_paperless_config WHERE id = 1")
+          .get();
+        if (config?.["instance_id"] !== link.instance_id)
+          throw new PaperlessError("configuration_changed");
+        if (
+          db
+            .prepare(
+              "SELECT document_id FROM app_paperless_links WHERE document_id = ? OR (instance_id=? AND remote_id=?)",
+            )
+            .get(link.document_id, link.instance_id, link.remote_id)
+        )
+          throw new PaperlessError("source_conflict");
+        if (jobId) {
+          const job = db.prepare("SELECT * FROM app_paperless_jobs WHERE id = ?").get(jobId);
+          if (
+            !job ||
+            !["processing", "unknown", "paused", "failed"].includes(String(job["state"])) ||
+            (expectedState && job["state"] !== expectedState)
+          )
+            throw new PaperlessError("job_changed");
+        }
+        db.prepare(
+          "INSERT INTO app_paperless_links (document_id,instance_id,remote_id,direction,linked_at,checksum,browser_url) VALUES (?,?,?,?,?,?,?)",
+        ).run(
+          link.document_id,
+          link.instance_id,
+          link.remote_id,
+          link.direction,
+          link.linked_at,
+          link.checksum,
+          config["browser_url"],
+        );
+        if (jobId)
+          db.prepare(
+            "UPDATE app_paperless_jobs SET state='linked',error=NULL,updated_at=? WHERE id=?",
+          ).run(new Date().toISOString(), jobId);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async importDocument(
+      link: Omit<PaperlessLink, "browser_url">,
+      document: Record<string, unknown>,
+    ) {
+      const db = await database();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const existing = db
+          .prepare(
+            "SELECT document_id FROM app_paperless_links WHERE instance_id=? AND remote_id=?",
+          )
+          .get(link.instance_id, link.remote_id);
+        if (existing) {
+          db.exec("COMMIT");
+          return { documentId: String(existing["document_id"]), duplicate: true };
+        }
+        const config = db
+          .prepare("SELECT instance_id,enabled,browser_url FROM app_paperless_config WHERE id=1")
+          .get();
+        if (config?.["instance_id"] !== link.instance_id || !config["enabled"])
+          throw new PaperlessError("configuration_changed");
+        const row = {
+          ...cleanRow("documents", document),
+          id: link.document_id,
+          created_at: link.linked_at,
+        };
+        const keys = Object.keys(row);
+        db.prepare(
+          `INSERT INTO documents (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,
+        ).run(...keys.map((key) => toSql(row[key as keyof typeof row])));
+        db.prepare(
+          "INSERT INTO app_paperless_links (document_id,instance_id,remote_id,direction,linked_at,checksum,browser_url) VALUES (?,?,?,?,?,?,?)",
+        ).run(
+          link.document_id,
+          link.instance_id,
+          link.remote_id,
+          link.direction,
+          link.linked_at,
+          link.checksum,
+          config["browser_url"],
+        );
+        db.exec("COMMIT");
+        return { documentId: link.document_id, duplicate: false };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async claim(
+      documentId: string,
+      userId: string,
+      instanceId: string,
+      metadata: PaperlessExportMetadata,
+      retry = false,
+    ) {
+      const db = await database();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (!db.prepare("SELECT id FROM documents WHERE id = ?").get(documentId))
+          throw new PaperlessError("document_missing");
+        const config = db
+          .prepare("SELECT instance_id,enabled FROM app_paperless_config WHERE id=1")
+          .get();
+        if (config?.["instance_id"] !== instanceId || !config["enabled"])
+          throw new PaperlessError("configuration_changed");
+        if (
+          db
+            .prepare("SELECT document_id FROM app_paperless_links WHERE document_id = ?")
+            .get(documentId)
+        ) {
+          db.exec("COMMIT");
+          return false;
+        }
+        const existing = db
+          .prepare("SELECT * FROM app_paperless_jobs WHERE document_id = ?")
+          .get(documentId);
+        if (
+          existing &&
+          existing["state"] !== "abandoned" &&
+          (!retry ||
+            existing["user_id"] !== userId ||
+            !["failed", "unknown", "paused", "abandoned"].includes(String(existing["state"])))
+        ) {
+          db.exec("COMMIT");
+          return false;
+        }
+        const now = new Date().toISOString();
+        db.prepare(
+          `INSERT INTO app_paperless_jobs (id,document_id,instance_id,user_id,metadata,state,created_at,updated_at) VALUES (?,?,?,?,?,'queued',?,?)
+          ON CONFLICT(document_id) DO UPDATE SET id=excluded.id,instance_id=excluded.instance_id,user_id=excluded.user_id,metadata=excluded.metadata,state='queued',task_id=NULL,error=NULL,created_at=excluded.created_at,updated_at=excluded.updated_at,checksum=NULL`,
+        ).run(
+          crypto.randomUUID(),
+          documentId,
+          instanceId,
+          userId,
+          JSON.stringify(metadata),
+          now,
+          now,
+        );
+        db.exec("COMMIT");
+        return true;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    async job(documentId: string) {
+      return (await database())
+        .prepare("SELECT * FROM app_paperless_jobs WHERE document_id = ?")
+        .get(documentId) as PaperlessJob | undefined;
+    },
+    async jobs() {
+      return (await database())
+        .prepare(
+          "SELECT * FROM app_paperless_jobs WHERE state IN ('queued','processing') ORDER BY created_at LIMIT 50",
+        )
+        .all() as PaperlessJob[];
+    },
+    async transition(
+      id: string,
+      from: PaperlessJobState,
+      state: PaperlessJobState,
+      patch: { taskId?: string; error?: string | null; checksum?: string } = {},
+    ) {
+      const db = await database();
+      const result = db
+        .prepare(
+          `UPDATE app_paperless_jobs SET state=?,updated_at=?,error=?,task_id=COALESCE(?,task_id),checksum=COALESCE(?,checksum) WHERE id=? AND state=?`,
+        )
+        .run(
+          state,
+          new Date().toISOString(),
+          patch.error ?? null,
+          patch.taskId ?? null,
+          patch.checksum ?? null,
+          id,
+          from,
+        ) as { changes: number };
+      return result.changes === 1;
+    },
+    async recover() {
+      (await database())
+        .prepare(
+          "UPDATE app_paperless_jobs SET state='unknown',error='submission_unknown',updated_at=? WHERE state='transferring'",
+        )
+        .run(new Date().toISOString());
+    },
+    async accepted(id: string, taskId: string) {
+      // A disconnect/configuration edit during submission must not discard the accepted task ID.
+      (await database())
+        .prepare(
+          `UPDATE app_paperless_jobs SET task_id=?,updated_at=?,
+        state=CASE WHEN state='transferring' THEN 'processing' ELSE state END
+        WHERE id=? AND state IN ('transferring','paused','unknown')`,
+        )
+        .run(taskId, new Date().toISOString(), id);
+    },
+    async check(
+      userId: string,
+      documentId: string,
+      state: "verified" | "inaccessible" | "unknown",
+    ) {
+      const now = new Date().toISOString();
+      (await database())
+        .prepare(
+          `INSERT INTO app_paperless_checks (user_id,document_id,state,checked_at,last_verified_at) VALUES (?,?,?,?,?)
+        ON CONFLICT(user_id,document_id) DO UPDATE SET state=excluded.state,checked_at=excluded.checked_at,last_verified_at=COALESCE(excluded.last_verified_at,app_paperless_checks.last_verified_at)`,
+        )
+        .run(userId, documentId, state, now, state === "verified" ? now : null);
+    },
+    async states(userId: string) {
+      const db = await database();
+      return {
+        role: db.prepare("SELECT role FROM app_users WHERE id = ?").get(userId)?.["role"],
+        documents: db.prepare("SELECT id FROM documents").all(),
+        links: db.prepare("SELECT * FROM app_paperless_links").all() as PaperlessLink[],
+        jobs: db.prepare("SELECT * FROM app_paperless_jobs").all() as PaperlessJob[],
+        checks: db.prepare("SELECT * FROM app_paperless_checks WHERE user_id = ?").all(userId),
+      };
+    },
+  };
+}
+export const paperlessRepo = paperlessRepository();
 
 /* ------------------------------- helpers ------------------------------- */
 

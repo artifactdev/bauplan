@@ -6,6 +6,7 @@ import { Route as CalendarRoute } from "./kalender";
 import { Route as TasksRoute } from "./aufgaben";
 import { Route as DocumentsRoute } from "./dokumente";
 import { Route as ExpensesRoute } from "./ausgaben";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
@@ -31,6 +32,10 @@ vi.mock("@/hooks/use-workspace", () => ({
 vi.mock("@/hooks/use-task-assignees", () => ({
   useTaskAssignees: () => ({ data: [], isError: false }),
 }));
+vi.mock("@/hooks/use-paperless", () => ({
+  usePaperlessSettings: () => ({ data: { enabled: false }, error: null }),
+  usePaperlessDocuments: () => ({ data: [], error: null }),
+}));
 vi.mock("@/components/app/DocumentScanner", () => ({
   DocumentScanner: ({ open }: { open: boolean }) => (
     <div data-testid="document-scanner" data-open={open} />
@@ -49,7 +54,11 @@ afterEach(cleanup);
 function renderRoute(route: { options: { component?: React.ComponentType } }) {
   const Page = route.options.component;
   if (!Page) throw new Error("Missing route component");
-  render(<Page />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <Page />
+    </QueryClientProvider>,
+  );
 }
 
 describe("PWA shortcut targets", () => {
@@ -73,7 +82,9 @@ describe("PWA shortcut targets", () => {
     renderRoute(DocumentsRoute);
 
     expect(
-      screen.getAllByTestId("document-scanner").some((scanner) => scanner.dataset.open === "true"),
+      screen
+        .getAllByTestId("document-scanner")
+        .some((scanner) => scanner.dataset["open"] === "true"),
     ).toBe(true);
   });
 

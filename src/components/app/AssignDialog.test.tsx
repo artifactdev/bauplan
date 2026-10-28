@@ -28,9 +28,42 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: v
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("filing a recognized offer", () => {
+  it("uses Paperless suggestions without silently running local OCR", async () => {
+    await i18n.changeLanguage("en");
+    const extraction = extractFromText(
+      "Angebot\nAngebotsdatum: 27.10.2026\nAngebotssumme 123,00 EUR",
+    );
+    render(<AssignDialog documentId="doc-1" onClose={() => {}} initialExtraction={extraction} />);
+    expect(
+      await screen.findByText("Suggestions from Paperless. Check all fields before applying."),
+    ).toBeInTheDocument();
+    expect(analyzeDocument).not.toHaveBeenCalled();
+    expect(mutations.create).not.toHaveBeenCalled();
+    vi.mocked(analyzeDocument).mockResolvedValue({ result: extraction, error: null, warnings: [] });
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(screen.getByRole("button", { name: "Run local analysis" }));
+    expect(analyzeDocument).not.toHaveBeenCalled();
+    confirmation.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Run local analysis" }));
+    await waitFor(() => expect(analyzeDocument).toHaveBeenCalledTimes(1));
+  });
+
+  it("allows manual filing when imported Paperless text is empty", async () => {
+    await i18n.changeLanguage("en");
+    render(<AssignDialog documentId="doc-1" onClose={() => {}} initialExtraction={null} />);
+    expect(
+      await screen.findByText(
+        "No usable Paperless text was available. Enter fields manually or run local analysis.",
+      ),
+    ).toBeInTheDocument();
+    expect(analyzeDocument).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Run local analysis" })).toBeEnabled();
+  });
+
   it("reviews and saves offer validity alongside the amount and document date", async () => {
     await i18n.changeLanguage("en");
     const extraction = extractFromText(

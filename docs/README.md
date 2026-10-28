@@ -7,6 +7,7 @@ Bauplan is a private app for managing a home renovation: budget, quotes, invoice
 | [Features](features.md) | All areas of the app and how they work together |
 | [Budget logic](budget.md) | How planned, committed, expected, and paid costs are calculated |
 | [Documents & text recognition (OCR)](ocr.md) | Uploads, camera, form pre-filling, recognition rules |
+| [Paperless-ngx integration](paperless.md) | Personal archive access, reviewed imports, manual batch archiving and known-link filters |
 | [Installable app & offline use](offline.md) | Home-screen installation, offline editing, sync and conflicts |
 | [Backups and restore](backups.md) | Portable backups, included secrets, restore behavior and limits |
 | [Users & sign-in](auth.md) | Initial setup, roles, OIDC (e.g. Pocket ID) |

@@ -102,6 +102,8 @@ export async function updateUser(
 
 export async function deleteUser(id: string) {
   const db = await getSqliteDb();
+  const { paperlessRepo } = await import("./repo");
+  await paperlessRepo.disconnect(id, true);
   await sqliteRepo().deleteAppearance(id);
   await sqliteRepo().deleteNavigation(id);
   await sqliteRepo().deleteSyncOperations(id);
@@ -118,7 +120,9 @@ export async function adminCount() {
 
 export async function hasPassword(id: string) {
   const db = await getSqliteDb();
-  return !!db.prepare("SELECT password_hash FROM app_users WHERE id = ?").get(id)?.["password_hash"];
+  return !!db.prepare("SELECT password_hash FROM app_users WHERE id = ?").get(id)?.[
+    "password_hash"
+  ];
 }
 
 /** Changes the signed-in user's password and ends their other sessions. */
@@ -134,7 +138,10 @@ export async function changeOwnPassword(
   ] as string | null | undefined;
   if (stored && !(await verifyPassword(current, stored)))
     throw new Error("Das aktuelle Passwort ist falsch.");
-  db.prepare("UPDATE app_users SET password_hash = ? WHERE id = ?").run(await hashPassword(next), id);
+  db.prepare("UPDATE app_users SET password_hash = ? WHERE id = ?").run(
+    await hashPassword(next),
+    id,
+  );
   db.prepare("DELETE FROM app_sessions WHERE user_id = ? AND token_hash != ?").run(
     id,
     keepToken ? await sha256(keepToken) : "",

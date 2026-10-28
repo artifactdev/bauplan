@@ -6,6 +6,8 @@ import { navigationSchema } from "@/lib/navigation";
 import { legacyInvoiceExpense } from "@/lib/expenses";
 import { validateFundingEntry } from "@/lib/funding";
 import { z } from "zod";
+import { paperlessExportMetadataSchema } from "@/lib/paperless";
+import { normalizePaperlessUrl } from "./paperless-client";
 import type { BackupDatabase, BackupFile, Repo } from "./repo";
 
 export const MAX_BACKUP_BYTES = 128 * 1024 * 1024;
@@ -66,9 +68,15 @@ function validateDatabase(value: unknown): BackupDatabase {
   if (
     Object.keys(value).some(
       (key) =>
-        !["tables", "users", "settings", "appearances", "navigation", "syncOperations"].includes(
-          key,
-        ),
+        ![
+          "tables",
+          "users",
+          "settings",
+          "appearances",
+          "navigation",
+          "syncOperations",
+          "paperless",
+        ].includes(key),
     )
   )
     fail("Die Backup-Datenbank enthält unbekannte Bereiche.");
@@ -249,7 +257,131 @@ function validateDatabase(value: unknown): BackupDatabase {
     appearances,
     navigation,
     syncOperations: validSyncOperations,
+    ...(value["paperless"] === undefined
+      ? {}
+      : {
+          paperless: validatePaperlessBackup(
+            value["paperless"],
+            new Set(normalizedTables.documents.map((row) => String(row["id"]))),
+            userIds,
+          ),
+        }),
   };
+}
+
+function validatePaperlessBackup(
+  value: unknown,
+  documentIds: Set<string>,
+  userIds: Set<string>,
+): NonNullable<BackupDatabase["paperless"]> {
+  const identifier = z.string().min(1).max(200);
+  const hash = z.string().regex(/^[a-f0-9]{64}$/);
+  const timestamp = z.string().datetime({ offset: true });
+  const parsed = z
+    .object({
+      config: z
+        .array(
+          z
+            .object({
+              id: z.literal(1),
+              instance_id: identifier,
+              enabled: z.union([z.literal(0), z.literal(1)]),
+              api_url: z.string().max(2048),
+              browser_url: z.string().max(2048),
+            })
+            .strict(),
+        )
+        .max(1),
+      links: z.array(
+        z
+          .object({
+            document_id: identifier,
+            instance_id: identifier,
+            remote_id: z.number().int().positive(),
+            direction: z.enum(["import", "export"]),
+            linked_at: timestamp,
+            checksum: hash,
+            browser_url: z.string().max(2048),
+          })
+          .strict(),
+      ),
+      jobs: z.array(
+        z
+          .object({
+            id: identifier,
+            document_id: identifier,
+            instance_id: identifier,
+            user_id: identifier.nullable(),
+            metadata: z.string().max(20000),
+            state: z.enum([
+              "queued",
+              "transferring",
+              "processing",
+              "linked",
+              "failed",
+              "unknown",
+              "paused",
+              "abandoned",
+            ]),
+            task_id: z.string().uuid().nullable(),
+            error: z.string().max(100).nullable(),
+            created_at: timestamp,
+            updated_at: timestamp,
+            checksum: hash.nullable(),
+          })
+          .strict(),
+      ),
+    })
+    .strict()
+    .safeParse(value);
+  if (!parsed.success) fail("paperless.errors.invalid_backup");
+  const data = parsed.data;
+  for (const config of data.config) {
+    if (
+      normalizePaperlessUrl(config.api_url) !== config.api_url ||
+      normalizePaperlessUrl(config.browser_url) !== config.browser_url
+    )
+      fail("paperless.errors.invalid_backup");
+  }
+  const sources = new Set<string>();
+  const linkedDocuments = new Set<string>();
+  for (const link of data.links) {
+    if (normalizePaperlessUrl(link.browser_url) !== link.browser_url)
+      fail("paperless.errors.invalid_backup");
+    const source = `${link.instance_id}:${link.remote_id}`;
+    if (
+      !documentIds.has(link.document_id) ||
+      linkedDocuments.has(link.document_id) ||
+      sources.has(source)
+    )
+      fail("paperless.errors.invalid_backup");
+    linkedDocuments.add(link.document_id);
+    sources.add(source);
+  }
+  const jobDocuments = new Set<string>();
+  const jobIds = new Set<string>();
+  for (const job of data.jobs) {
+    let metadata: unknown;
+    try {
+      metadata = JSON.parse(job.metadata);
+    } catch {
+      fail("paperless.errors.invalid_backup");
+    }
+    const checked = paperlessExportMetadataSchema.safeParse(metadata);
+    if (
+      !checked.success ||
+      checked.data.documentId !== job.document_id ||
+      !documentIds.has(job.document_id) ||
+      jobDocuments.has(job.document_id) ||
+      jobIds.has(job.id) ||
+      (job.user_id !== null && !userIds.has(job.user_id)) ||
+      (job.state === "linked" && !linkedDocuments.has(job.document_id))
+    )
+      fail("paperless.errors.invalid_backup");
+    jobDocuments.add(job.document_id);
+    jobIds.add(job.id);
+  }
+  return data;
 }
 
 function validateKeyValueRows(value: unknown, keyColumn: string, valueColumn: string) {

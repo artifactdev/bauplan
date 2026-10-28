@@ -9,6 +9,7 @@ The full documentation is in the [`docs/`](docs/README.md) folder:
 - [Features](docs/features.md)
 - [Budget logic](docs/budget.md)
 - [Documents & text recognition (OCR)](docs/ocr.md)
+- [Paperless-ngx integration](docs/paperless.md)
 - [Installable app & offline use](docs/offline.md)
 - [Backups and restore](docs/backups.md)
 - [Users & sign-in](docs/auth.md)
@@ -27,6 +28,8 @@ bun install
 bun run dev
 bunx vitest run
 ```
+
+For local Paperless testing with `npm run dev`, export a persistent `PAPERLESS_SETTINGS_KEY` before starting the server. See [local Paperless development](docs/paperless.md#local-development-with-npm) for key generation, restart behavior and URL configuration.
 
 ## Run locally with Docker
 

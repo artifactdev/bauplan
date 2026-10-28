@@ -7,6 +7,7 @@ import {
   USER_APPEARANCE_DDL,
   USER_NAVIGATION_DDL,
   PUSH_DDL,
+  PAPERLESS_DDL,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
 import { legacyInvoiceExpense } from "@/lib/expenses";
@@ -55,6 +56,42 @@ const MIGRATIONS: readonly Migration[] = [
     name: "web-push-notifications",
     up(db) {
       db.exec(PUSH_DDL);
+    },
+  },
+  {
+    version: 5,
+    name: "paperless-private-connector",
+    up(db) {
+      db.exec(PAPERLESS_DDL);
+    },
+  },
+  {
+    version: 6,
+    name: "paperless-link-browser-url",
+    up(db) {
+      const columns = db.prepare("PRAGMA table_info(app_paperless_links)").all();
+      if (columns.some((column) => column["name"] === "browser_url")) return;
+      if (
+        db
+          .prepare(
+            `
+          SELECT document_id FROM app_paperless_links AS link
+          WHERE NOT EXISTS (
+            SELECT 1 FROM app_paperless_config AS config
+            WHERE config.instance_id = link.instance_id AND length(trim(config.browser_url)) > 0
+          ) LIMIT 1
+        `,
+          )
+          .get()
+      )
+        throw new Error("Cannot recover the browser URL for a legacy Paperless link.");
+      db.exec(`
+        ALTER TABLE app_paperless_links ADD COLUMN browser_url TEXT NOT NULL DEFAULT '';
+        UPDATE app_paperless_links SET browser_url = (
+          SELECT browser_url FROM app_paperless_config
+          WHERE app_paperless_config.instance_id = app_paperless_links.instance_id
+        );
+      `);
     },
   },
 ];

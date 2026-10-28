@@ -2,10 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { Route } from "./dokumente";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   resolveFileUrl: vi.fn(),
+  paperlessEnabled: false,
 }));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
@@ -46,11 +48,37 @@ vi.mock("@/components/app/AssignDialog", () => ({
 vi.mock("@/components/app/quick-actions", () => ({ QuickUpload: () => null }));
 vi.mock("@/components/app/DocumentScanner", () => ({ DocumentScanner: () => null }));
 vi.mock("@/components/app/DocumentPreview", () => ({ DocumentPreview: () => null }));
+vi.mock("@/hooks/use-paperless", () => ({
+  usePaperlessSettings: () => ({
+    data: { enabled: mocks.paperlessEnabled, connected: false },
+    error: null,
+  }),
+  usePaperlessDocuments: () => ({
+    data: [
+      {
+        documentId: "document-1",
+        link: { remoteId: 8, url: "https://paperless.example.test/documents/8/details" },
+        job: null,
+        verification: null,
+      },
+    ],
+    error: null,
+  }),
+}));
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.paperlessEnabled = false;
   await i18n.changeLanguage("en");
   vi.stubGlobal("PointerEvent", MouseEvent);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   HTMLElement.prototype.scrollIntoView = vi.fn();
   mocks.resolveFileUrl.mockResolvedValue("/api/files/invoice.pdf");
   vi.spyOn(window, "open").mockImplementation(() => null);
@@ -64,7 +92,11 @@ afterEach(() => {
 
 async function openMenu() {
   const Page = Route.options.component!;
-  render(<Page />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <Page />
+    </QueryClientProvider>,
+  );
   fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
     button: 0,
     ctrlKey: false,
@@ -73,6 +105,76 @@ async function openMenu() {
 }
 
 describe("document actions menu", () => {
+  it("filters actual document rows by known Paperless linkage", () => {
+    mocks.paperlessEnabled = true;
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Invoice.pdf" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "absent" } });
+    expect(screen.queryByRole("button", { name: "Invoice.pdf" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "present" } });
+    expect(screen.getByRole("button", { name: "Invoice.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Paperless" })).toHaveAttribute(
+      "href",
+      "https://paperless.example.test/documents/8/details",
+    );
+  });
+
+  it("counts only visible selected documents for manual transfer", () => {
+    mocks.paperlessEnabled = true;
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.click(screen.getByLabelText("Select Invoice.pdf"));
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "absent" } });
+    expect(screen.getByText("0 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Transfer to Paperless" })).toBeDisabled();
+  });
+
+  it("initially hides Paperless tools, document selection and source details", () => {
+    mocks.paperlessEnabled = true;
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    const toggle = screen.getByRole("button", { name: "Paperless" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("combobox", { name: "Paperless status" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open in Paperless" })).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Select Invoice.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Paperless" })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Select Invoice.pdf"));
+    fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "absent" } });
+    expect(screen.queryByRole("button", { name: "Invoice.pdf" })).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "Invoice.pdf" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Paperless status")).toHaveValue("all");
+    expect(screen.getByText("0 selected")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select Invoice.pdf")).not.toBeChecked();
+  });
+
+  it("does not offer Paperless mode when the integration is disabled", async () => {
+    await openMenu();
+    expect(screen.queryByRole("button", { name: "Paperless" })).not.toBeInTheDocument();
+  });
+
   it("closes when clicking outside", async () => {
     await openMenu();
     fireEvent.pointerDown(document.body, { button: 0 });

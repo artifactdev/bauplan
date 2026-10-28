@@ -17,6 +17,8 @@ import { EXPENSE_CATEGORIES } from "@/lib/schema";
 import { EntityDialog, type Field } from "./EntityDialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 type Target = "ausgabe" | "angebot" | "ablegen";
 
@@ -56,18 +58,24 @@ export function AssignDialog({
   documentId,
   onClose,
   fresh = false,
+  initialExtraction,
 }: {
   documentId: string | null;
   onClose: () => void;
   /** The document was uploaded just for this step; cancelling asks whether to delete it. */
   fresh?: boolean;
+  initialExtraction?: Extraction | null | undefined;
 }) {
+  const { t } = useTranslation("paperless");
   const { ws } = useWorkspace();
   const { create, update } = useMutations();
   const [loading, setLoading] = useState(false);
   const [ex, setEx] = useState<Extraction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<Target>("ablegen");
+  const [localRequest, setLocalRequest] = useState<{ documentId: string; attempt: number } | null>(
+    null,
+  );
   const doc = ws.documents.find((d) => d.id === documentId);
   const docName = doc?.name;
   const uploaded = useMemo(
@@ -77,6 +85,13 @@ export function AssignDialog({
 
   useEffect(() => {
     if (!documentId) return;
+    if (initialExtraction !== undefined && localRequest?.documentId !== documentId) {
+      setLoading(false);
+      setError(null);
+      setEx(initialExtraction);
+      setTarget(initialExtraction ? targetFor(initialExtraction.doc_type) : "ablegen");
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setEx(null);
@@ -97,7 +112,7 @@ export function AssignDialog({
     return () => {
       cancelled = true;
     };
-  }, [documentId]);
+  }, [documentId, initialExtraction, localRequest]);
 
   const initial = useMemo(() => {
     const trade = ws.trades.find((t) => t.name === ex?.trade);
@@ -316,6 +331,29 @@ export function AssignDialog({
           ) : null}
         </span>
       </div>
+      {initialExtraction !== undefined && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {initialExtraction ? t("suggestions") : t("noSuggestions")}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading || !documentId}
+            onClick={() =>
+              documentId &&
+              window.confirm(t("reanalyzeConfirm")) &&
+              setLocalRequest((previous) => ({
+                documentId,
+                attempt: (previous?.attempt ?? 0) + 1,
+              }))
+            }
+          >
+            <ScanText data-icon="inline-start" /> {t("localAnalysis")}
+          </Button>
+        </div>
+      )}
       <ToggleGroup
         type="single"
         value={target}
@@ -342,6 +380,7 @@ export function AssignDialog({
 
   return (
     <EntityDialog
+      key={`${documentId}:${loading}:${ex !== null}`}
       open={!!documentId}
       onOpenChange={(o) => !o && onClose()}
       title={`Zuordnen: ${doc?.name ?? "Dokument"}`}

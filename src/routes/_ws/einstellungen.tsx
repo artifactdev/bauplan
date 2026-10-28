@@ -23,6 +23,7 @@ import { NavigationPanel } from "@/components/app/NavigationPanel";
 import { PasswordDialog } from "@/components/app/PasswordDialog";
 import { CalendarSyncPanel } from "@/components/app/CalendarSyncPanel";
 import { PushSettingsPanel } from "@/components/app/PushSettingsPanel";
+import { PaperlessSettings } from "@/components/app/PaperlessSettings";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
@@ -74,6 +75,7 @@ function SettingsPage() {
           </div>
           <NavigationPanel userId={auth.user!.id} />
           <PushSettingsPanel userId={auth.user!.id} />
+          <PaperlessSettings />
         </div>
       </TabsContent>
       <TabsContent value="calendar" forceMount hidden={tab !== "calendar"}>
@@ -108,6 +110,7 @@ function SettingsPage() {
         <TabsContent value="admin" forceMount hidden={tab !== "admin"}>
           <div className="grid min-w-0 gap-5 md:grid-cols-2">
             <BackupPanel />
+            <PaperlessSettings admin />
             <OidcPanel />
             <OcrSettingsPanel />
           </div>

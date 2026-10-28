@@ -7,4 +7,5 @@ services:
       - "./dokumente:/uploads"
     environment:
       UPLOADS_DIR: /uploads
+      PAPERLESS_SETTINGS_KEY: "${PAPERLESS_SETTINGS_KEY:-}"
     restart: unless-stopped
