@@ -33,6 +33,7 @@ Admins can export and restore a complete database-and-documents backup from Sett
 
 ## Quotes
 
+- **View document** opens the integrated document viewer in both card and table views, including all-page PDF rendering and full-screen viewing, without opening a new tab. The viewer still offers an explicit action to open the original file.
 - Status: **Requested** → **Received** → **Accepted** / **Rejected**.
 - "Record request": company/contact, work, request date — without an amount. Shows "requested N days ago" and a count of open requests.
 - "Quote received" opens the request to add amount and quote date (never prefilled).

@@ -21,10 +21,12 @@ import {
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { eur, fmtDate, todayISO } from "@/lib/format";
 import { contactLabel, contactOptions, tradeName, tradeOptions } from "@/lib/options";
-import type { Offer } from "@/lib/schema";
+import type { Doc, Offer } from "@/lib/schema";
+import { toast } from "sonner";
 import { Empty, OFFER_STATUS, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { OfferDialog } from "@/components/app/OfferDialog";
 import { resolveFileUrl } from "@/components/app/doc-open";
+import { DocumentPreview } from "@/components/app/DocumentPreview";
 import { QuickTask } from "@/components/app/quick-actions";
 import { offerDecisionTitle } from "@/lib/offer-deadlines";
 import { Button } from "@/components/ui/button";
@@ -92,6 +94,7 @@ function OffersPage() {
   } | null>(null);
   const today = todayISO();
   const [q, setQ] = useState("");
+  const [preview, setPreview] = useState<{ doc: Doc; url: string } | null>(null);
   const [decisionTask, setDecisionTask] = useState<Record<string, unknown> | null>(null);
   const prepareDecisionTask = (offer: Offer) =>
     setDecisionTask({
@@ -162,8 +165,12 @@ function OffersPage() {
 
   const openDoc = async (docId: string | null) => {
     const d = ws.documents.find((x) => x.id === docId);
-    const url = await resolveFileUrl(d?.storage_path ?? null);
-    if (url) window.open(url, "_blank");
+    if (!d?.storage_path) {
+      toast.error(tr("doc-open.file_not_available"));
+      return;
+    }
+    const url = await resolveFileUrl(d.storage_path);
+    if (url) setPreview({ doc: d, url });
   };
 
   return (
@@ -541,6 +548,14 @@ function OffersPage() {
         )}
       </div>
 
+      {preview && (
+        <DocumentPreview
+          name={preview.doc.name}
+          mime={preview.doc.mime_type}
+          url={preview.url}
+          onClose={() => setPreview(null)}
+        />
+      )}
       <OfferDialog
         open={!!offerDlg}
         onOpenChange={(o) => !o && setOfferDlg(null)}
