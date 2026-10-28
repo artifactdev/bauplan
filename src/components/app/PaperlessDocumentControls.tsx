@@ -35,9 +35,9 @@ export function PaperlessDocumentControls({
 }) {
   const { t } = useTranslation("paperless");
   return (
-    <section aria-label={t("title")} className="mb-4 flex flex-col gap-3 rounded-lg border p-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex min-w-0 flex-col gap-2">
+    <section aria-label={t("title")} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex min-w-0 flex-col gap-2 sm:w-72">
           <Label htmlFor="paperless-presence">{t("presence")}</Label>
           <select
             id="paperless-presence"
@@ -59,44 +59,50 @@ export function PaperlessDocumentControls({
           {t("import")}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">{t("presenceHint")}</p>
       {!connected && <p className="text-sm text-muted-foreground">{t("notConnected")}</p>}
-      <div className="flex flex-wrap items-center gap-3">
-        <Label className="flex items-center gap-2">
-          <Checkbox
-            checked={allSelected}
-            disabled={busy}
-            onCheckedChange={(checked) => onSelectAll(checked === true)}
-          />
-          {t("selectVisible")}
-        </Label>
-        <span className="text-sm" role="status">
-          {t("selected", { count: selectedCount })}
-        </span>
-        {selectedCount > 0 && (
-          <Button size="sm" variant="ghost" onClick={onClear}>
-            {t("clear")}
+      <div className="flex flex-col gap-4 rounded-lg bg-muted/40 p-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Label className="flex items-center gap-2">
+            <Checkbox
+              checked={allSelected}
+              disabled={busy}
+              onCheckedChange={(checked) => onSelectAll(checked === true)}
+            />
+            {t("selectVisible")}
+          </Label>
+          <span className="ml-auto text-sm tabular-nums text-muted-foreground" role="status">
+            {t("selected", { count: selectedCount })}
+          </span>
+          {selectedCount > 0 && (
+            <Button size="sm" variant="ghost" onClick={onClear}>
+              {t("clear")}
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!connected || !selectedCount || exportCount === 0 || busy}
+            onClick={onExport}
+          >
+            <Archive data-icon="inline-start" />
+            {t("export")}
           </Button>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!connected || !selectedCount || exportCount === 0 || busy}
-          onClick={onExport}
-        >
-          <Archive data-icon="inline-start" />
-          {t("export")}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!connected || !selectedCount || busy}
-          onClick={onVerify}
-        >
-          <RefreshCw data-icon="inline-start" />
-          {t("verify")}
-        </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!connected || !selectedCount || busy}
+            onClick={onVerify}
+          >
+            <RefreshCw data-icon="inline-start" />
+            {t("verify")}
+          </Button>
+        </div>
       </div>
+      <p className="max-w-prose text-xs leading-relaxed text-muted-foreground">
+        {t("presenceHint")}
+      </p>
     </section>
   );
 }

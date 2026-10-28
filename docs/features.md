@@ -58,6 +58,8 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 
 ## Documents
 
+- Search and category filters each occupy their own full-width row. The right-aligned view toggle sits on a separate row below the filters.
+
 - Switch between the default responsive card view and a list using the right-aligned view control beside the filters, including on mobile. Cards show one column on narrow screens, two on medium desktops and three on wide screens, with document actions aligned at the bottom. Switching preserves search, category filters and Paperless selections. The last selected view is remembered in this browser across navigation and reloads; a saved list preference takes precedence over the default.
 
 - **Optional Paperless-ngx integration:** administrators grant access per member (off by default); administrators always retain access. Includes personal archive search and reviewed imports, opt-in automatic Paperless → Bauplan imports by tag with source-ID/content duplicate prevention, manual multi-document archiving of Bauplan scans/uploads, source links, known-presence filters and manual status checks. Local files remain independent and shared with all project members; later changes and deletions do not synchronize. See [Paperless integration](paperless.md).

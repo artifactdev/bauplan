@@ -167,7 +167,7 @@ describe("document actions menu", () => {
     fireEvent.change(screen.getByPlaceholderText("Search by name, tag…"), {
       target: { value: "Invoice" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Paperless / }));
     fireEvent.click(screen.getByLabelText("Select Invoice.pdf"));
     fireEvent.click(cards);
     expect(cards).toBeChecked();
@@ -220,7 +220,7 @@ describe("document actions menu", () => {
         <Page />
       </QueryClientProvider>,
     );
-    expect(screen.queryByRole("button", { name: "Paperless" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Paperless / })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
@@ -236,7 +236,7 @@ describe("document actions menu", () => {
         <Page />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Paperless / }));
     expect(screen.getByRole("link", { name: "Open in Paperless" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import from Paperless" })).toBeDisabled();
   });
@@ -249,7 +249,7 @@ describe("document actions menu", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByRole("button", { name: "Invoice.pdf" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Paperless / }));
     fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "absent" } });
     expect(screen.queryByRole("button", { name: "Invoice.pdf" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "present" } });
@@ -268,7 +268,7 @@ describe("document actions menu", () => {
         <Page />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Paperless / }));
     fireEvent.click(screen.getByLabelText("Select Invoice.pdf"));
     expect(screen.getByText("1 selected")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Paperless status"), { target: { value: "absent" } });
@@ -284,13 +284,21 @@ describe("document actions menu", () => {
         <Page />
       </QueryClientProvider>,
     );
-    const toggle = screen.getByRole("button", { name: "Paperless" });
+    const toggle = screen.getByRole("button", { name: "Paperless Hidden" });
+    expect(
+      toggle.compareDocumentPosition(screen.getByPlaceholderText("Search by name, tag…")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("combobox", { name: "Paperless status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open in Paperless" })).not.toBeInTheDocument();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAccessibleName("Paperless Shown");
+    expect(toggle.parentElement).toContainElement(
+      screen.getByRole("region", { name: "Paperless-ngx" }),
+    );
     expect(screen.getByLabelText("Select Invoice.pdf")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in Paperless" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Select Invoice.pdf"));
@@ -298,6 +306,7 @@ describe("document actions menu", () => {
     expect(screen.queryByRole("button", { name: "Invoice.pdf" })).not.toBeInTheDocument();
     fireEvent.click(toggle);
     expect(screen.getByRole("button", { name: "Invoice.pdf" })).toBeInTheDocument();
+    expect(toggle).toHaveAccessibleName("Paperless Hidden");
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     fireEvent.click(toggle);
     expect(screen.getByLabelText("Paperless status")).toHaveValue("all");
@@ -307,7 +316,7 @@ describe("document actions menu", () => {
 
   it("does not offer Paperless mode when the integration is disabled", async () => {
     await openMenu();
-    expect(screen.queryByRole("button", { name: "Paperless" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Paperless / })).not.toBeInTheDocument();
   });
 
   it("closes when clicking outside", async () => {

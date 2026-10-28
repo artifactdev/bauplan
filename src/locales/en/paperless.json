@@ -1,6 +1,8 @@
 {
   "title": "Paperless-ngx",
   "tools": "Paperless",
+  "toolsShown": "Shown",
+  "toolsHidden": "Hidden",
   "userAccess": "Paperless access",
   "userAccessLabel": "Paperless access for {{name}}",
   "adminAccess": "Administrators always have access.",

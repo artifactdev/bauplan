@@ -33,6 +33,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import {
   Download,
+  ChevronDown,
+  ChevronUp,
   Eye,
   LayoutGrid,
   List,
@@ -267,9 +269,80 @@ function DocsPage() {
           </>
         }
       />
+      {paperlessVisible && (
+        <div className="mb-5 overflow-hidden rounded-xl border bg-card">
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+            aria-expanded={paperlessMode}
+            aria-controls="paperless-tools"
+            onClick={() => {
+              setPaperlessOpen(!paperlessMode);
+              setSelected([]);
+              setPresence("all");
+            }}
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <RefreshCw className="size-4" aria-hidden="true" />
+            </span>
+            <span className="text-sm font-semibold">{t("tools")}</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {t(paperlessMode ? "toolsShown" : "toolsHidden")}
+            </span>
+            {paperlessMode ? (
+              <ChevronUp className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            )}
+          </button>
+          <div
+            id="paperless-tools"
+            hidden={!paperlessMode}
+            className={cn(paperlessMode && "border-t p-4 sm:p-5")}
+          >
+            {paperlessMode && (
+              <PaperlessDocumentControls
+                connected={canAct}
+                presence={presence}
+                onPresence={setPresence}
+                selectedCount={selectedIds.length}
+                exportCount={exportableDocs.length}
+                allSelected={docs.length > 0 && selectedIds.length === docs.length}
+                onSelectAll={(checked) =>
+                  setSelected((previous) =>
+                    checked
+                      ? [...new Set([...previous, ...visibleIds])]
+                      : previous.filter((id) => !visibleIds.includes(id)),
+                  )
+                }
+                onClear={() => setSelected([])}
+                onImport={() => setPicker("import")}
+                onExport={() => {
+                  if (selectedIds.length > 50) toast.error(t("selectionLimit"));
+                  else if (exportableDocs.length) {
+                    const skipped = selectedDocs.length - exportableDocs.length;
+                    if (skipped) toast.info(t("skipped", { count: skipped }));
+                    setExportOpen(true);
+                  }
+                }}
+                onVerify={() => {
+                  if (selectedIds.length > 50) toast.error(t("selectionLimit"));
+                  else verify.mutate(selectedIds);
+                }}
+                busy={
+                  verify.isPending ||
+                  abandon.isPending ||
+                  checkTransfer.isPending ||
+                  paperlessStates.isPending
+                }
+              />
+            )}
+          </div>
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <div className="relative min-w-0 flex-1 sm:w-72">
+        <div className="flex w-full items-center gap-2">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
@@ -278,24 +351,8 @@ function DocsPage() {
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          {paperlessVisible && (
-            <Button
-              size="sm"
-              variant={paperlessMode ? "secondary" : "outline"}
-              aria-expanded={paperlessMode}
-              aria-controls="paperless-tools"
-              onClick={() => {
-                setPaperlessOpen(!paperlessMode);
-                setSelected([]);
-                setPresence("all");
-              }}
-            >
-              <RefreshCw data-icon="inline-start" />
-              {t("tools")}
-            </Button>
-          )}
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex w-full flex-wrap gap-1">
           <Button
             size="sm"
             variant={cat === null ? "secondary" : "ghost"}
@@ -369,45 +426,6 @@ function DocsPage() {
           {t("retry")}
         </Button>
       )}
-      <div id="paperless-tools" hidden={!paperlessMode}>
-        {paperlessMode && (
-          <PaperlessDocumentControls
-            connected={canAct}
-            presence={presence}
-            onPresence={setPresence}
-            selectedCount={selectedIds.length}
-            exportCount={exportableDocs.length}
-            allSelected={docs.length > 0 && selectedIds.length === docs.length}
-            onSelectAll={(checked) =>
-              setSelected((previous) =>
-                checked
-                  ? [...new Set([...previous, ...visibleIds])]
-                  : previous.filter((id) => !visibleIds.includes(id)),
-              )
-            }
-            onClear={() => setSelected([])}
-            onImport={() => setPicker("import")}
-            onExport={() => {
-              if (selectedIds.length > 50) toast.error(t("selectionLimit"));
-              else if (exportableDocs.length) {
-                const skipped = selectedDocs.length - exportableDocs.length;
-                if (skipped) toast.info(t("skipped", { count: skipped }));
-                setExportOpen(true);
-              }
-            }}
-            onVerify={() => {
-              if (selectedIds.length > 50) toast.error(t("selectionLimit"));
-              else verify.mutate(selectedIds);
-            }}
-            busy={
-              verify.isPending ||
-              abandon.isPending ||
-              checkTransfer.isPending ||
-              paperlessStates.isPending
-            }
-          />
-        )}
-      </div>
       <DocumentsContainer>
         <ul
           aria-label={tr("shared.documents")}

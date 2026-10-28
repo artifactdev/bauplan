@@ -94,7 +94,7 @@ Mixed selections can partially succeed. Check the result for each document; a su
 
 ## Presence filters and status checks
 
-Paperless tools are initially collapsed. Use the **Paperless** button next to the document search to show the filters, transfer actions, document checkboxes and source-link details. Closing the tools clears the selection and resets the Paperless filter to all documents; ordinary search and category filters remain unchanged. Collapsing the tools does not cancel submitted transfers.
+Paperless tools are initially collapsed. A full-width **Paperless** header and its expandable tools share one panel above the document search. The header displays whether the tools are shown or hidden, with a matching chevron and accessible expanded state. Inside, filtering/import and selection actions are grouped separately. Expand it to show filters, transfer actions, document checkboxes and source-link details. Closing the tools clears the selection and resets the Paperless filter to all documents; ordinary search and category filters remain unchanged. Collapsing the tools does not cancel submitted transfers.
 
 When the integration is enabled, Documents offers:
 
