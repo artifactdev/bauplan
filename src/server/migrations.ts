@@ -9,6 +9,7 @@ import {
   PUSH_DDL,
   PAPERLESS_DDL,
   PAPERLESS_AUTO_IMPORT_DDL,
+  PAPERLESS_ACCESS_DDL,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
 import { legacyInvoiceExpense } from "@/lib/expenses";
@@ -100,6 +101,13 @@ const MIGRATIONS: readonly Migration[] = [
     name: "paperless-tag-auto-import",
     up(db) {
       db.exec(PAPERLESS_AUTO_IMPORT_DDL);
+    },
+  },
+  {
+    version: 8,
+    name: "paperless-per-user-access",
+    up(db) {
+      db.exec(PAPERLESS_ACCESS_DDL);
     },
   },
 ];

@@ -11,6 +11,7 @@ export function usePaperlessSettings() {
     staleTime: 0,
     gcTime: 0,
     retry: false,
+    refetchInterval: 30_000,
   });
 }
 

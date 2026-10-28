@@ -1,6 +1,13 @@
 {
   "title": "Paperless-ngx",
   "tools": "Paperless",
+  "userAccess": "Paperless access",
+  "userAccessLabel": "Paperless access for {{name}}",
+  "adminAccess": "Administrators always have access.",
+  "revokeAccessConfirm": "Revoke Paperless access? The personal token and automatic import rule will be removed. Transfers are paused; tasks already accepted by Paperless may continue there. Local documents are retained.",
+  "errors.user_missing": "The user no longer exists.",
+  "errors.admin_access": "Paperless access cannot be revoked from administrators.",
+  "errors.access_revoked": "An administrator revoked Paperless access. After access is granted and reconnected, the transfer outcome must be checked.",
   "autoTitle": "Automatically import from Paperless",
   "autoHint": "Choose an existing Paperless tag. Bauplan checks up to 25 existing and new matches per server-side pass every 5 minutes. Only local documents are created, not offers or expenses. Paperless is unchanged.",
   "autoTag": "Tag for automatic import",

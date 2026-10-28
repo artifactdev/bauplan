@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   enabled: true,
   connected: false,
+  allowed: true,
 }));
 vi.mock("@/lib/data.functions", () => ({
   connectPaperless: mocks.connect,
@@ -19,7 +20,12 @@ vi.mock("@/lib/data.functions", () => ({
 }));
 vi.mock("@/hooks/use-paperless", () => ({
   usePaperlessSettings: () => ({
-    data: { enabled: mocks.enabled, connected: mocks.connected, encryptionReady: true },
+    data: {
+      allowed: mocks.allowed,
+      enabled: mocks.enabled,
+      connected: mocks.connected,
+      encryptionReady: true,
+    },
     isPending: false,
     isError: false,
     error: null,
@@ -31,6 +37,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.enabled = true;
   mocks.connected = false;
+  mocks.allowed = true;
   await i18n.changeLanguage("en");
 });
 afterEach(() => {
@@ -47,6 +54,12 @@ function show() {
 }
 
 describe("personal Paperless settings", () => {
+  it("hides the personal panel when the administrator has not granted access", () => {
+    mocks.allowed = false;
+    show();
+    expect(screen.queryByText("Your Paperless connection")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Personal API token")).not.toBeInTheDocument();
+  });
   it("sends a personal token only on explicit connection and clears the input on success", async () => {
     mocks.connect.mockResolvedValue({});
     const storage = vi.spyOn(Storage.prototype, "setItem");

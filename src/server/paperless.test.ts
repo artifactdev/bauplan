@@ -11,6 +11,7 @@ import {
   documentStates,
   exportDocuments,
   importDocument,
+  preview,
   reconcile,
   saveSettings,
   search,
@@ -124,7 +125,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await stopPaperless();
   db.exec(
-    "DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_config; DELETE FROM documents; DELETE FROM app_users;",
+    "DELETE FROM app_paperless_access; DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_config; DELETE FROM documents; DELETE FROM app_users;",
   );
   for (const [id, role] of [
     ["admin", "admin"],
@@ -160,6 +161,7 @@ beforeEach(async () => {
   await startPaperless();
   await stopPaperless();
   await connect(admin, "admin-token");
+  await paperlessRepo.setAccess(admin.id, member.id, true);
   await connect(member, "member-token");
 });
 afterEach(async () => {
@@ -617,6 +619,7 @@ describe("Paperless private integration", () => {
     expect(JSON.stringify(parsed.database)).not.toContain("member-token");
     expect(parsed.database.paperless?.jobs[0]).toMatchObject({ state: "paused", task_id: taskId });
     await restoreBackup(repo, archive);
+    await paperlessRepo.setAccess(admin.id, member.id, true);
     expect((await paperlessRepo.link(importedId))?.remote_id).toBe(42);
     expect((await settingsView(member)).connected).toBe(false);
     requests.length = 0;
@@ -656,6 +659,150 @@ describe("Paperless private integration", () => {
     await reconcile(admin, { documentId: "local", action: "abandon", confirmDuplicateRisk: true });
     await repo.remove("documents", "local");
     expect(await paperlessRepo.job("local")).toBeUndefined();
+  });
+});
+
+describe("per-user Paperless access", () => {
+  it("defaults existing members to denied while administrators remain allowed", async () => {
+    await paperlessRepo.setAccess(admin.id, member.id, false);
+    expect(await paperlessRepo.allowed(member.id)).toBe(false);
+    expect(await paperlessRepo.allowed(admin.id)).toBe(true);
+    expect(await settingsView(member)).toEqual({
+      allowed: false,
+      instanceId: null,
+      enabled: false,
+      configured: false,
+      encryptionReady: false,
+      connected: false,
+      browserUrl: null,
+      apiUrl: null,
+      config: null,
+    });
+    expect(await settingsView(admin)).toMatchObject({ allowed: true, configured: true });
+    requests.length = 0;
+    for (const action of [
+      () => connect(member, "token"),
+      () => search(member.id, { query: "", page: 1, tags: [] }),
+      () => importDocument(member.id, 42),
+      () => preview(member.id, 42),
+      () => documentStates(member.id),
+      () => verifyDocuments(member.id, ["local"]),
+      () => exportDocuments(member.id, [exportMetadata()]),
+      () => autoImportSettings(member.id),
+      () => saveAutoImport(member.id, { tagId: 11, confirmSharing: true }),
+      () =>
+        reconcile(member, { documentId: "local", action: "abandon", confirmDuplicateRisk: true }),
+    ])
+      await expect(action()).rejects.toThrow("unauthorized");
+    expect(requests).toHaveLength(0);
+    await paperlessRepo.setAccess(admin.id, member.id, true);
+    expect(await settingsView(member)).toMatchObject({ allowed: true, connected: false });
+    await connect(member, "member-token");
+    expect(await settingsView(member)).toMatchObject({ connected: true });
+  });
+
+  it("only lets administrators manage grants and never lets them revoke admin access", async () => {
+    await expect(paperlessRepo.setAccess(member.id, member.id, true)).rejects.toThrow(
+      "unauthorized",
+    );
+    await expect(paperlessRepo.setAccess(admin.id, admin.id, false)).rejects.toThrow(
+      "admin_access",
+    );
+    await expect(paperlessRepo.setAccess(admin.id, "missing", true)).rejects.toThrow(
+      "user_missing",
+    );
+    expect(await paperlessRepo.allowed(admin.id)).toBe(true);
+    expect(await paperlessRepo.accessList()).toContain(member.id);
+  });
+
+  it("revocation removes personal automation and credentials, pauses transfers and retains local documents", async () => {
+    await local();
+    await paperlessRepo.claim(
+      "local",
+      member.id,
+      (await paperlessRepo.config())!.instance_id,
+      exportMetadata(),
+    );
+    autoTag = true;
+    await saveAutoImport(member.id, { tagId: 11, confirmSharing: true });
+    const lease = (await paperlessRepo.claimAutoImport())!;
+    await paperlessRepo.setAccess(admin.id, member.id, false);
+    expect(await paperlessRepo.autoImportCurrent(lease)).toBe(false);
+    expect(await paperlessRepo.autoImport(member.id)).toBeUndefined();
+    expect(await paperlessRepo.job("local")).toMatchObject({
+      state: "paused",
+      error: "access_revoked",
+    });
+    expect((await repo.getAll()).documents).toHaveLength(1);
+    requests.length = 0;
+    await processAutoImports();
+    expect(requests).toHaveLength(0);
+  });
+
+  it("blocks an in-flight manual import after access was revoked", async () => {
+    const commit = paperlessRepo.importDocument;
+    const spy = vi.spyOn(paperlessRepo, "importDocument").mockImplementation(async (...args) => {
+      await paperlessRepo.setAccess(admin.id, member.id, false);
+      return commit(...args);
+    });
+    try {
+      await expect(importDocument(member.id, 42)).rejects.toThrow("unauthorized");
+      expect((await repo.getAll()).documents).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("preserves administrator visibility when the configured integration is switched off", async () => {
+    await paperlessRepo.configure({ ...(await paperlessRepo.config())!, enabled: 0 });
+    expect(await settingsView(admin)).toMatchObject({
+      allowed: true,
+      configured: true,
+      enabled: false,
+    });
+  });
+
+  it("does not grant pending users access and applies role changes on the next operation", async () => {
+    await paperlessRepo.setAccess(admin.id, "pending", true);
+    expect(await paperlessRepo.allowed("pending")).toBe(false);
+    await expect(connect({ id: "pending", role: "pending" }, "token")).rejects.toThrow(
+      "unauthorized",
+    );
+    db.prepare("UPDATE app_users SET role='pending' WHERE id=?").run(member.id);
+    expect(await paperlessRepo.allowed(member.id)).toBe(false);
+    await expect(search(member.id, { query: "", page: 1, tags: [] })).rejects.toThrow(
+      "unauthorized",
+    );
+    db.prepare("UPDATE app_users SET role='admin' WHERE id=?").run("pending");
+    expect(await paperlessRepo.allowed("pending")).toBe(true);
+    db.prepare("UPDATE app_users SET role='member' WHERE id=?").run(admin.id);
+    expect(await paperlessRepo.allowed(admin.id)).toBe(false);
+  });
+
+  it("retains accepted task identity if access is revoked during an upload", async () => {
+    await local();
+    const upload = vi.spyOn(PaperlessClient.prototype, "upload").mockImplementation(async () => {
+      await paperlessRepo.setAccess(admin.id, member.id, false);
+      return taskId;
+    });
+    try {
+      await exportDocuments(member.id, [exportMetadata()]);
+      await work();
+      expect(await paperlessRepo.job("local")).toMatchObject({
+        state: "paused",
+        task_id: taskId,
+        error: "access_revoked",
+      });
+      requests.length = 0;
+      await work();
+      expect(requests).toHaveLength(0);
+      await paperlessRepo.setAccess(admin.id, member.id, true);
+      await connect(member, "member-token");
+      expect(await paperlessRepo.job("local")).toMatchObject({ state: "paused", task_id: taskId });
+      expect(upload).toHaveBeenCalledTimes(1);
+    } finally {
+      upload.mockRestore();
+    }
   });
 });
 
@@ -869,7 +1016,8 @@ describe("tag-based automatic imports", () => {
     const backup = await repo.exportBackup();
     expect(JSON.stringify(backup.database)).not.toContain("app_paperless_auto_import");
     await repo.restoreBackup(backup.database, backup.files);
-    expect(await autoImportSettings(member.id)).toBeNull();
+    expect(await paperlessRepo.autoImport(member.id)).toBeUndefined();
+    expect(await paperlessRepo.allowed(member.id)).toBe(false);
   });
 });
 

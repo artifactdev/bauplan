@@ -407,7 +407,7 @@ export function sqliteRepo(): Repo {
           throw new Error("Die Einrichtung wurde bereits abgeschlossen.");
 
         d.exec(
-          "DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_config;",
+          "DELETE FROM app_paperless_access; DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_config;",
         );
         for (const table of TABLE_NAMES) d.prepare(`DELETE FROM ${table}`).run();
         d.prepare("DELETE FROM app_users").run();
@@ -675,6 +675,16 @@ export type PaperlessAutoImportRule = {
   failed: number;
   error: string | null;
 };
+function paperlessAllowed(db: SqliteDb, userId: string) {
+  const row = db
+    .prepare(
+      `SELECT role FROM app_users WHERE id=?
+    AND (role='admin' OR (role='member' AND EXISTS(
+      SELECT 1 FROM app_paperless_access WHERE user_id=app_users.id)))`,
+    )
+    .get(userId);
+  return Boolean(row);
+}
 function autoImportCurrent(db: SqliteDb, rule: PaperlessAutoImportRule) {
   return Boolean(
     db
@@ -683,7 +693,8 @@ function autoImportCurrent(db: SqliteDb, rule: PaperlessAutoImportRule) {
     JOIN app_paperless_config config ON config.instance_id=rule.instance_id AND config.enabled=1
     JOIN app_users account ON account.id=rule.user_id AND account.role IN ('admin','member')
     JOIN app_paperless_credentials credential ON credential.user_id=rule.user_id AND credential.instance_id=rule.instance_id
-    WHERE rule.user_id=? AND rule.revision=? AND rule.lease_until=?`,
+    WHERE rule.user_id=? AND rule.revision=? AND rule.lease_until=?
+    AND (account.role='admin' OR EXISTS(SELECT 1 FROM app_paperless_access access WHERE access.user_id=account.id))`,
       )
       .get(rule.user_id, rule.revision, rule.lease_until),
   );
@@ -734,6 +745,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
     },
     async connect(userId: string, instanceId: string, ciphertext: string) {
       const db = await database();
+      if (!paperlessAllowed(db, userId)) throw new PaperlessError("unauthorized");
       const config = db
         .prepare("SELECT instance_id,enabled FROM app_paperless_config WHERE id = 1")
         .get();
@@ -756,6 +768,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
         ).run(deleting ? "account_deleted" : "disconnected", new Date().toISOString(), userId);
         if (deleting)
           db.prepare("UPDATE app_paperless_jobs SET user_id = NULL WHERE user_id = ?").run(userId);
+        if (deleting) db.prepare("DELETE FROM app_paperless_access WHERE user_id=?").run(userId);
         db.exec("COMMIT");
       } catch (error) {
         db.exec("ROLLBACK");
@@ -763,8 +776,39 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       }
     },
     async allowed(userId: string) {
-      const row = (await database()).prepare("SELECT role FROM app_users WHERE id = ?").get(userId);
-      return row?.["role"] === "admin" || row?.["role"] === "member";
+      return paperlessAllowed(await database(), userId);
+    },
+    async accessList() {
+      return (await database())
+        .prepare("SELECT user_id FROM app_paperless_access")
+        .all()
+        .map((row) => String(row["user_id"]));
+    },
+    async setAccess(actorId: string, userId: string, enabled: boolean) {
+      const db = await database();
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (db.prepare("SELECT role FROM app_users WHERE id=?").get(actorId)?.["role"] !== "admin")
+          throw new PaperlessError("unauthorized");
+        const target = db.prepare("SELECT role FROM app_users WHERE id=?").get(userId);
+        if (!target) throw new PaperlessError("user_missing");
+        if (target["role"] === "admin") throw new PaperlessError("admin_access");
+        if (enabled)
+          db.prepare("INSERT OR IGNORE INTO app_paperless_access (user_id) VALUES (?)").run(userId);
+        else {
+          db.prepare("DELETE FROM app_paperless_access WHERE user_id=?").run(userId);
+          db.prepare("DELETE FROM app_paperless_auto_import WHERE user_id=?").run(userId);
+          db.prepare("DELETE FROM app_paperless_credentials WHERE user_id=?").run(userId);
+          db.prepare("DELETE FROM app_paperless_checks WHERE user_id=?").run(userId);
+          db.prepare(
+            "UPDATE app_paperless_jobs SET state='paused',error='access_revoked',updated_at=? WHERE user_id=? AND state IN ('queued','transferring','processing')",
+          ).run(new Date().toISOString(), userId);
+        }
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     },
     async autoImport(userId: string) {
       return (await database())
@@ -773,6 +817,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
     },
     async saveAutoImport(userId: string, instanceId: string | null, tagId: number | null) {
       const db = await database();
+      if (!paperlessAllowed(db, userId)) throw new PaperlessError("unauthorized");
       if (tagId === null) {
         db.prepare("DELETE FROM app_paperless_auto_import WHERE user_id=?").run(userId);
         return;
@@ -809,6 +854,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
           JOIN app_users account ON account.id=rule.user_id AND account.role IN ('admin','member')
           JOIN app_paperless_credentials credential ON credential.user_id=rule.user_id AND credential.instance_id=rule.instance_id
           WHERE rule.next_run<=? AND (rule.lease_until IS NULL OR rule.lease_until<=?)
+          AND (account.role='admin' OR EXISTS(SELECT 1 FROM app_paperless_access access WHERE access.user_id=account.id))
           ORDER BY rule.next_run LIMIT 1) RETURNING *`,
         )
         .get(new Date(Date.now() + 35 * 60_000).toISOString(), timestamp, timestamp) as
@@ -883,6 +929,8 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
           throw new PaperlessError("source_conflict");
         if (jobId) {
           const job = db.prepare("SELECT * FROM app_paperless_jobs WHERE id = ?").get(jobId);
+          if (job?.["user_id"] && !paperlessAllowed(db, String(job["user_id"])))
+            throw new PaperlessError("unauthorized");
           if (
             !job ||
             !["processing", "unknown", "paused", "failed"].includes(String(job["state"])) ||
@@ -914,6 +962,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
     async importDocument(
       link: Omit<PaperlessLink, "browser_url">,
       document: Record<string, unknown>,
+      actorId: string,
       autoRule?: PaperlessAutoImportRule,
     ) {
       const db = await database();
@@ -922,6 +971,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       const { createHash } = await nodeImport<typeof import("node:crypto")>("node:" + "crypto");
       db.exec("BEGIN IMMEDIATE");
       try {
+        if (!paperlessAllowed(db, actorId)) throw new PaperlessError("unauthorized");
         if (autoRule && !autoImportCurrent(db, autoRule))
           throw new PaperlessError("configuration_changed");
         const existing = db
@@ -1014,6 +1064,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       const db = await database();
       db.exec("BEGIN IMMEDIATE");
       try {
+        if (!paperlessAllowed(db, userId)) throw new PaperlessError("unauthorized");
         if (!db.prepare("SELECT id FROM documents WHERE id = ?").get(documentId))
           throw new PaperlessError("document_missing");
         const config = db
@@ -1119,12 +1170,12 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       state: "verified" | "inaccessible" | "unknown",
     ) {
       const now = new Date().toISOString();
-      (await database())
-        .prepare(
-          `INSERT INTO app_paperless_checks (user_id,document_id,state,checked_at,last_verified_at) VALUES (?,?,?,?,?)
+      const db = await database();
+      if (!paperlessAllowed(db, userId)) throw new PaperlessError("unauthorized");
+      db.prepare(
+        `INSERT INTO app_paperless_checks (user_id,document_id,state,checked_at,last_verified_at) VALUES (?,?,?,?,?)
         ON CONFLICT(user_id,document_id) DO UPDATE SET state=excluded.state,checked_at=excluded.checked_at,last_verified_at=COALESCE(excluded.last_verified_at,app_paperless_checks.last_verified_at)`,
-        )
-        .run(userId, documentId, state, now, state === "verified" ? now : null);
+      ).run(userId, documentId, state, now, state === "verified" ? now : null);
     },
     async states(userId: string) {
       const db = await database();

@@ -1,4 +1,5 @@
 import { tr } from "@/i18n";
+import { PaperlessUserAccess } from "@/components/app/PaperlessUserAccess";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -235,6 +236,7 @@ function UsersPanel({ selfId }: { selfId: string }) {
               <div className="truncate text-xs text-muted-foreground">{u.email}{u.sso && " · OIDC"}</div>
             </div>
             {u.role === "pending" && <Pill tone="warning">{tr("settings.pending")}</Pill>}
+            <PaperlessUserAccess userId={u.id} role={u.role} name={u.name || u.email} />
             <select
               aria-label={tr("settings.role")}
               className="h-9 rounded-md border bg-background px-2 text-sm"

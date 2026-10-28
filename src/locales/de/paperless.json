@@ -1,6 +1,13 @@
 {
   "title": "Paperless-ngx",
   "tools": "Paperless",
+  "userAccess": "Paperless-Zugriff",
+  "userAccessLabel": "Paperless-Zugriff für {{name}}",
+  "adminAccess": "Administratoren haben immer Zugriff.",
+  "revokeAccessConfirm": "Paperless-Zugriff entziehen? Der persönliche Token und die automatische Import-Regel werden entfernt. Laufende Übertragungen werden pausiert; bereits angenommene Paperless-Aufträge können dort weiterlaufen. Lokale Dokumente bleiben erhalten.",
+  "errors.user_missing": "Der Benutzer existiert nicht mehr.",
+  "errors.admin_access": "Paperless-Zugriff kann Administratoren nicht entzogen werden.",
+  "errors.access_revoked": "Der Paperless-Zugriff wurde vom Administrator entzogen. Die Übertragung muss nach erneuter Freigabe und Verbindung geprüft werden.",
   "autoTitle": "Automatisch aus Paperless importieren",
   "autoHint": "Wähle einen vorhandenen Paperless-Tag. Bauplan prüft serverseitig alle 5 Minuten bis zu 25 bestehende und neue Treffer pro Durchlauf. Es werden nur lokale Dokumente angelegt, keine Angebote oder Ausgaben. Paperless bleibt unverändert.",
   "autoTag": "Tag für automatischen Import",

@@ -2,6 +2,7 @@
 
 // Private account metadata must not be included in TABLES or Workspace.
 export const PAPERLESS_TABLES = {
+  app_paperless_access: ["user_id"],
   app_paperless_auto_import: [
     "user_id",
     "instance_id",
@@ -42,6 +43,9 @@ export const PAPERLESS_TABLES = {
   ],
   app_paperless_checks: ["user_id", "document_id", "state", "checked_at", "last_verified_at"],
 } as const;
+export const PAPERLESS_ACCESS_DDL = `
+CREATE TABLE IF NOT EXISTS app_paperless_access (user_id TEXT PRIMARY KEY);
+`;
 export const PAPERLESS_AUTO_IMPORT_DDL = `
 CREATE TABLE IF NOT EXISTS app_paperless_auto_import (
  user_id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, tag_id INTEGER NOT NULL CHECK(tag_id > 0),

@@ -47,6 +47,27 @@ export const getPaperlessSettings = createServerFn()
   .middleware([dataContext])
   .handler(async ({ context }) => (await import("@/server/paperless")).settingsView(context.user));
 
+export const getPaperlessUserAccess = createServerFn()
+  .middleware([adminDataContext])
+  .handler(async () => (await import("@/server/repo")).paperlessRepo.accessList());
+
+export const setPaperlessUserAccess = createServerFn({ method: "POST" })
+  .middleware([adminDataContext])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        userId: z.string().min(1).max(200),
+        enabled: z.boolean(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    await (
+      await import("@/server/repo")
+    ).paperlessRepo.setAccess(context.user.id, data.userId, data.enabled);
+    return { ok: true };
+  });
+
 export const getPaperlessAutoImport = createServerFn()
   .middleware([dataContext])
   .handler(async ({ context }) =>

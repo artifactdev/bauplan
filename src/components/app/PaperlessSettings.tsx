@@ -56,6 +56,7 @@ export function PaperlessSettings({ admin = false }: { admin?: boolean }) {
   const data = settings.data;
   const value = draft ?? data?.config;
   const busy = save.isPending || connect.isPending || disconnect.isPending;
+  if (!admin && data?.allowed === false) return null;
   return (
     <Panel title={t(admin ? "adminTitle" : "personalTitle")}>
       <div className="flex flex-col gap-4">

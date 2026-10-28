@@ -64,6 +64,7 @@ export type PaperlessJobState =
   | "paused"
   | "abandoned";
 export type PaperlessSettingsView = {
+  allowed: boolean;
   instanceId: string | null;
   enabled: boolean;
   configured: boolean;

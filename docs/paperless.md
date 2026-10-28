@@ -1,6 +1,6 @@
 # Paperless-ngx integration
 
-The optional integration connects Bauplan to one self-hosted Paperless-ngx instance. Each approved Bauplan member uses their **own Paperless API token**. Paperless remains the archive; Bauplan stores local document copies for project work.
+The optional integration connects Bauplan to one self-hosted Paperless-ngx instance. Each authorized Bauplan member uses their **own Paperless API token**. Paperless remains the archive; Bauplan stores local document copies for project work.
 
 Transfers can be manual in either direction or use an explicitly enabled tag-based import from Paperless, **not continuous two-way synchronization**. Changing metadata, replacing files or deleting a document in either app does not change the other app.
 
@@ -9,7 +9,12 @@ Transfers can be manual in either direction or use an explicitly enabled tag-bas
 1. Configure `PAPERLESS_SETTINGS_KEY` on the Bauplan server before connecting personal accounts. It must contain exactly 64 hexadecimal characters (32 random bytes); generate it with `openssl rand -hex 32` and keep it outside source control. The key encrypts stored personal API tokens; do not casually rotate it or lose it. Docker Compose passes the variable from your deployment environment.
 2. An administrator enables Paperless in **Settings → Administration** and enters the Paperless base URL, without `/api`. This URL must be reachable from the Bauplan container/server. `localhost` inside a container means that container, not the host.
 3. Configure the browser-facing URL if it differs from the internal server URL. Links use this URL; they do not carry API tokens.
-4. Each member connects a personal token under **Settings → Personal**. Create it in the Paperless profile. Search and preview use only that member's permissions. Export additionally requires upload permissions.
+4. In **Settings → Users**, enable **Paperless access** for each member who should use the connector. All members start without access, including existing members when upgrading to database migration v8. Administrators always have access without a grant; pending accounts never have data access.
+5. Each authorized member connects a personal token under **Settings → Personal**. Create it in the Paperless profile. Search and preview use only that member's permissions. Export additionally requires upload permissions.
+
+Members without a grant see neither the personal Paperless panel nor the document toolbar, selections or source/status controls. Server functions and background workers enforce the same restriction; hiding UI is not the authorization boundary. Administrator settings remain available, and configured document tools remain visible to authorized users even when transfers are globally disabled. Open pages refresh access settings every 30 seconds; server-side revocation applies immediately to new operations and import commits.
+
+Revoking access requires confirmation, removes the personal token and automatic tag-import rule, and pauses queued/active export tracking while preserving accepted task IDs. A request already accepted by Paperless may still finish remotely; revocation cannot recall it. After granting access again, the member must reconnect their token, explicitly re-enable any automation, and reconcile paused transfers before retrying. Already imported local files and shared source links are not deleted; all approved project members can still use the ordinary local documents.
 
 Use HTTPS outside a trusted local container network. Bauplan contacts only the configured destination; requests must not redirect credentials to a different host. No cloud service receives document content.
 
@@ -110,7 +115,7 @@ Resolve the transfer by finding and linking the existing authorized Paperless do
 
 ## Backups and deployment
 
-Local file copies and established source links belong in Bauplan backups. Personal Paperless tokens are excluded from portable backups; reconnect after restoring. Restoring must not replay old upload requests. Keep a separate backup of Paperless itself: Bauplan does not back up the remote archive.
+Local file copies and established source links belong in Bauplan backups. Personal Paperless tokens, automatic import rules and per-user access grants are excluded from portable backups. After restoring, administrators must explicitly grant member access again before members reconnect and opt into automation. Administrators retain their implicit access. Restoring must not replay old upload requests. Keep a separate backup of Paperless itself: Bauplan does not back up the remote archive.
 
 The environment encryption key is not part of portable backups. Filesystem backups containing the live SQLite database may contain encrypted tokens and must be protected alongside the deployment secret.
 

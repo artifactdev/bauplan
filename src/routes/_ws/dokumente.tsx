@@ -92,16 +92,20 @@ function DocsPage() {
   const account = getOfflineAccount();
   const paperless = usePaperlessSettings();
   useEffect(() => {
-    if (!paperless.data?.enabled) return;
+    if (paperless.data?.allowed === false || !paperless.data?.enabled) return;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible")
         void client.invalidateQueries({ queryKey: ["ws"] });
     }, 30_000);
     return () => clearInterval(timer);
-  }, [client, paperless.data?.enabled]);
+  }, [client, paperless.data?.allowed, paperless.data?.enabled]);
   const [paperlessOpen, setPaperlessOpen] = useState(false);
-  const paperlessMode = paperlessOpen && !!paperless.data?.enabled;
-  const paperlessStates = usePaperlessDocuments(paperless.data?.configured ?? false);
+  const paperlessVisible =
+    paperless.data?.allowed !== false && !!(paperless.data?.configured || paperless.data?.enabled);
+  const paperlessMode = paperlessOpen && paperlessVisible;
+  const paperlessStates = usePaperlessDocuments(
+    paperlessVisible && (paperless.data?.configured ?? false),
+  );
   const stateById = useMemo(
     () => new Map(paperlessStates.data?.map((state) => [state.documentId, state])),
     [paperlessStates.data],
@@ -117,7 +121,7 @@ function DocsPage() {
   const metadata = useQuery({
     queryKey: ["paperless", account?.id, paperless.data?.instanceId, "metadata"],
     queryFn: () => getPaperlessMetadata(),
-    enabled: !!paperless.data?.connected && (picker !== null || exportOpen),
+    enabled: paperlessVisible && !!paperless.data?.connected && (picker !== null || exportOpen),
     gcTime: 0,
     staleTime: 0,
     retry: false,
@@ -194,7 +198,10 @@ function DocsPage() {
     return !state?.link && (!state?.job || ["failed", "abandoned"].includes(state.job.state));
   });
   const canAct =
-    !!paperless.data?.enabled && !!paperless.data.connected && !paperlessStates.isError;
+    paperlessVisible &&
+    !!paperless.data?.enabled &&
+    !!paperless.data.connected &&
+    !paperlessStates.isError;
 
   const open = async (d: Doc, mode: "preview" | "download") => {
     const url = await resolveFileUrl(d.storage_path);
@@ -256,7 +263,7 @@ function DocsPage() {
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          {paperless.data?.enabled && (
+          {paperlessVisible && (
             <Button
               size="sm"
               variant={paperlessMode ? "secondary" : "outline"}
@@ -297,19 +304,18 @@ function DocsPage() {
       <PaperlessError
         error={
           paperless.error ??
-          paperlessStates.error ??
-          verify.error ??
-          abandon.error ??
-          checkTransfer.error
+          (paperlessVisible
+            ? (paperlessStates.error ?? verify.error ?? abandon.error ?? checkTransfer.error)
+            : null)
         }
       />
       {paperlessMode && paperlessStates.isPending && <p role="status">{t("loading")}</p>}
-      {(paperless.isError || paperlessStates.isError) && (
+      {(paperless.isError || (paperlessVisible && paperlessStates.isError)) && (
         <Button
           variant="outline"
           onClick={() => {
             void paperless.refetch();
-            void paperlessStates.refetch();
+            if (paperlessVisible) void paperlessStates.refetch();
           }}
         >
           {t("retry")}

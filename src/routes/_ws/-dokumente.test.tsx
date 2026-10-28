@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   resolveFileUrl: vi.fn(),
   paperlessEnabled: false,
+  paperlessAllowed: true,
+  paperlessConfigured: false,
+  paperlessError: null as Error | null,
 }));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
@@ -50,7 +53,12 @@ vi.mock("@/components/app/DocumentScanner", () => ({ DocumentScanner: () => null
 vi.mock("@/components/app/DocumentPreview", () => ({ DocumentPreview: () => null }));
 vi.mock("@/hooks/use-paperless", () => ({
   usePaperlessSettings: () => ({
-    data: { enabled: mocks.paperlessEnabled, connected: false },
+    data: {
+      allowed: mocks.paperlessAllowed,
+      configured: mocks.paperlessConfigured,
+      enabled: mocks.paperlessEnabled,
+      connected: false,
+    },
     error: null,
   }),
   usePaperlessDocuments: () => ({
@@ -62,13 +70,17 @@ vi.mock("@/hooks/use-paperless", () => ({
         verification: null,
       },
     ],
-    error: null,
+    error: mocks.paperlessError,
+    isError: mocks.paperlessError !== null,
   }),
 }));
 
 beforeEach(async () => {
   vi.clearAllMocks();
   mocks.paperlessEnabled = false;
+  mocks.paperlessAllowed = true;
+  mocks.paperlessConfigured = false;
+  mocks.paperlessError = null;
   await i18n.changeLanguage("en");
   vi.stubGlobal("PointerEvent", MouseEvent);
   vi.stubGlobal(
@@ -105,6 +117,37 @@ async function openMenu() {
 }
 
 describe("document actions menu", () => {
+  it("hides Paperless for denied members while keeping shared local documents usable", () => {
+    mocks.paperlessEnabled = true;
+    mocks.paperlessConfigured = true;
+    mocks.paperlessAllowed = false;
+    mocks.paperlessError = new Error("paperless.errors.unauthorized");
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Paperless" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open in Paperless" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Invoice.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument();
+  });
+  it("retains Paperless tools for allowed users when the instance is configured but disabled", () => {
+    mocks.paperlessConfigured = true;
+    const Page = Route.options.component!;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Page />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Paperless" }));
+    expect(screen.getByRole("link", { name: "Open in Paperless" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import from Paperless" })).toBeDisabled();
+  });
   it("filters actual document rows by known Paperless linkage", () => {
     mocks.paperlessEnabled = true;
     const Page = Route.options.component!;

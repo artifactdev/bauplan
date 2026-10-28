@@ -52,8 +52,22 @@ async function connection(userId: string) {
   };
 }
 export async function settingsView(user: Actor): Promise<PaperlessSettingsView> {
+  const allowed = await paperlessRepo.allowed(user.id);
+  if (!allowed)
+    return {
+      allowed: false,
+      instanceId: null,
+      enabled: false,
+      configured: false,
+      encryptionReady: false,
+      connected: false,
+      browserUrl: null,
+      apiUrl: null,
+      config: null,
+    };
   const config = await paperlessRepo.config();
   return {
+    allowed: true,
     instanceId: config?.instance_id ?? null,
     enabled: Boolean(config?.enabled),
     configured: Boolean(config),
@@ -91,6 +105,7 @@ export async function saveSettings(user: Actor, input: PaperlessSettings) {
   return settingsView(user);
 }
 export async function connect(user: Actor, token: string) {
+  if (!(await paperlessRepo.allowed(user.id))) throw new PaperlessError("unauthorized");
   const config = await paperlessRepo.config();
   if (!config?.enabled) throw new PaperlessError("disabled");
   const encrypted = encryptToken(token, user.id, config.instance_id);
@@ -101,6 +116,7 @@ export async function connect(user: Actor, token: string) {
   return settingsView(user);
 }
 export async function disconnect(userId: string) {
+  if (!(await paperlessRepo.allowed(userId))) throw new PaperlessError("unauthorized");
   await paperlessRepo.disconnect(userId);
   return { ok: true as const };
 }
@@ -208,6 +224,7 @@ export async function importDocument(
         task_id: null,
         cost_item_id: null,
       },
+      userId,
       autoRule,
     );
     retained = !result.duplicate;
@@ -287,6 +304,7 @@ export async function importDocument(
   };
 }
 export async function documentStates(userId: string): Promise<PaperlessDocumentState[]> {
+  if (!(await paperlessRepo.allowed(userId))) throw new PaperlessError("unauthorized");
   const [config, rows] = await Promise.all([paperlessRepo.config(), paperlessRepo.states(userId)]);
   const links = new Map(rows.links.map((link) => [link.document_id, link]));
   const jobs = new Map(rows.jobs.map((job) => [job.document_id, job]));
@@ -400,6 +418,7 @@ export async function reconcile(
     confirmDuplicateRisk: boolean;
   },
 ) {
+  if (!(await paperlessRepo.allowed(user.id))) throw new PaperlessError("unauthorized");
   const job = await paperlessRepo.job(input.documentId);
   if (!job) throw new PaperlessError("job_missing");
   if (
@@ -556,6 +575,7 @@ async function processJob(job: PaperlessJob) {
       "unauthorized",
       "not_owner",
       "configuration_changed",
+      "access_revoked",
     ].includes(error.code);
     await paperlessRepo.transition(
       job.id,
