@@ -2,7 +2,7 @@
 
 The optional integration connects Bauplan to one self-hosted Paperless-ngx instance. Each approved Bauplan member uses their **own Paperless API token**. Paperless remains the archive; Bauplan stores local document copies for project work.
 
-This is deliberate transfer in either direction, **not continuous two-way synchronization**. Changing metadata, replacing files or deleting a document in either app does not change the other app.
+Transfers can be manual in either direction or use an explicitly enabled tag-based import from Paperless, **not continuous two-way synchronization**. Changing metadata, replacing files or deleting a document in either app does not change the other app.
 
 ## Configure the instance
 
@@ -51,6 +51,23 @@ Choose **Import from Paperless** in Documents. Search the personal archive, filt
 Paperless text and metadata supply suggestions to Bauplan's existing rule-based field extraction. Review and confirm the amount, dates, contact, trade and assignment as an expense, offer or filed document. Import does not automatically create a financial record. Raw Paperless text is not retained as another full-text archive. If text is missing or insufficient, enter fields manually or explicitly request local analysis.
 
 An already linked Paperless document resolves to the existing Bauplan document, without another file or financial record. File limits and supported formats still apply.
+
+### Automatic import by tag (Paperless → Bauplan only)
+
+Under **Settings → Personal → Your Paperless connection**, connect your own token, then choose an existing tag under **Automatically import from Paperless**. Confirm that every matching document's local copy will be shared with all approved Bauplan members and save the rule. The rule is off by default and personal to that account; another member cannot read or change it.
+
+The running Bauplan server checks existing and newly tagged documents every five minutes, even with no browser open. Saving schedules the first pass immediately (normally within the worker's 15-second wake interval). One pass processes at most 25 matches in stable ID order. Larger result sets resume on the next page in subsequent passes, then start again at page one. The settings show the last pass's imported, skipped and failed counts plus any error. Failures are retried on subsequent scans; if a changing remote result set invalidates a page, the next pass starts at page one.
+
+Imports create local documents only, retaining the original and the usual Paperless link. Suggested metadata is available through the existing assignment workflow, but no offer, expense, contact or payment is created automatically. The automation never uploads to Paperless, changes its tags or deletes remote documents. Removing the tag does not delete a local copy. Deleting a local copy while its source remains tagged allows it to be imported again.
+
+Duplicate prevention is shared by automatic and manual imports:
+
+- The same configured instance and Paperless document ID resolve to the existing shared source, including documents previously exported by Bauplan.
+- Original SHA-256 contents are compared with local files of the same size, inside the import transaction. Byte-identical files reuse the existing document without overwriting reviewed fields. Different bytes are not considered duplicates based on names or OCR text.
+- An unlinked identical local document receives the source link unless it has an unresolved transfer. If it already has a different source or unresolved transfer, that tracking is preserved and the new match is skipped. Such matches may be downloaded again in later scans for content comparison, but do not create another local copy.
+- A durable per-rule lease prevents concurrent workers from claiming the same pass; the import transaction also prevents duplicate local creation by concurrent manual or automatic imports.
+
+Select **Disable automatic import** and save to remove the rule. Disabling the integration or losing the owner's approved role pauses processing; disconnecting/deleting the account or changing the configured instance removes its rule. A running download cannot commit after its rule has been removed or replaced. Personal rules are excluded from portable backups and cleared on restore, so restoring cannot unexpectedly start new imports. Reconnect and explicitly enable the rule again.
 
 ## Archive Bauplan scans and uploads
 

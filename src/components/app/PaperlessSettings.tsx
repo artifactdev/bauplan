@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Panel } from "./ui-bits";
 import { PaperlessError } from "./paperless-ui";
+import { PaperlessAutoImportSettings } from "./PaperlessAutoImportSettings";
 
 export function PaperlessSettings({ admin = false }: { admin?: boolean }) {
   const { t } = useTranslation("paperless");
@@ -159,6 +160,9 @@ export function PaperlessSettings({ admin = false }: { admin?: boolean }) {
           ) : (
             <p className="text-sm text-muted-foreground">{t("disabled")}</p>
           ))}
+        {!admin && data?.enabled && data.connected && (
+          <PaperlessAutoImportSettings key={data.instanceId} instanceId={data.instanceId} />
+        )}
       </div>
     </Panel>
   );

@@ -407,7 +407,7 @@ export function sqliteRepo(): Repo {
           throw new Error("Die Einrichtung wurde bereits abgeschlossen.");
 
         d.exec(
-          "DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_config;",
+          "DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_config;",
         );
         for (const table of TABLE_NAMES) d.prepare(`DELETE FROM ${table}`).run();
         d.prepare("DELETE FROM app_users").run();
@@ -661,6 +661,33 @@ export type PaperlessJob = {
   updated_at: string;
   checksum: string | null;
 };
+export type PaperlessAutoImportRule = {
+  user_id: string;
+  instance_id: string;
+  tag_id: number;
+  revision: string;
+  page: number;
+  next_run: string;
+  lease_until: string | null;
+  last_run: string | null;
+  imported: number;
+  skipped: number;
+  failed: number;
+  error: string | null;
+};
+function autoImportCurrent(db: SqliteDb, rule: PaperlessAutoImportRule) {
+  return Boolean(
+    db
+      .prepare(
+        `SELECT rule.user_id FROM app_paperless_auto_import rule
+    JOIN app_paperless_config config ON config.instance_id=rule.instance_id AND config.enabled=1
+    JOIN app_users account ON account.id=rule.user_id AND account.role IN ('admin','member')
+    JOIN app_paperless_credentials credential ON credential.user_id=rule.user_id AND credential.instance_id=rule.instance_id
+    WHERE rule.user_id=? AND rule.revision=? AND rule.lease_until=?`,
+      )
+      .get(rule.user_id, rule.revision, rule.lease_until),
+  );
+}
 
 /** Private integration storage. No credential or per-user check enters Workspace. */
 export function paperlessRepository(database: () => Promise<SqliteDb> = getSqliteDb) {
@@ -675,7 +702,9 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       try {
         const old = db.prepare("SELECT * FROM app_paperless_config WHERE id = 1").get();
         if (old && old["instance_id"] !== config.instance_id) {
-          db.exec("DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks;");
+          db.exec(
+            "DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks;",
+          );
         }
         if (!config.enabled || (old && old["instance_id"] !== config.instance_id)) {
           db.prepare(
@@ -720,6 +749,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       db.exec("BEGIN IMMEDIATE");
       try {
         db.prepare("DELETE FROM app_paperless_credentials WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM app_paperless_auto_import WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM app_paperless_checks WHERE user_id = ?").run(userId);
         db.prepare(
           "UPDATE app_paperless_jobs SET state='paused',error=?,updated_at=? WHERE user_id = ? AND state IN ('queued','transferring','processing')",
@@ -735,6 +765,85 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
     async allowed(userId: string) {
       const row = (await database()).prepare("SELECT role FROM app_users WHERE id = ?").get(userId);
       return row?.["role"] === "admin" || row?.["role"] === "member";
+    },
+    async autoImport(userId: string) {
+      return (await database())
+        .prepare("SELECT * FROM app_paperless_auto_import WHERE user_id=?")
+        .get(userId) as PaperlessAutoImportRule | undefined;
+    },
+    async saveAutoImport(userId: string, instanceId: string | null, tagId: number | null) {
+      const db = await database();
+      if (tagId === null) {
+        db.prepare("DELETE FROM app_paperless_auto_import WHERE user_id=?").run(userId);
+        return;
+      }
+      const config = db
+        .prepare("SELECT instance_id,enabled FROM app_paperless_config WHERE id=1")
+        .get();
+      if (!config?.["enabled"] || config["instance_id"] !== instanceId)
+        throw new PaperlessError("configuration_changed");
+      if (
+        !db
+          .prepare(
+            "SELECT user_id FROM app_paperless_credentials WHERE user_id=? AND instance_id=?",
+          )
+          .get(userId, instanceId)
+      )
+        throw new PaperlessError("not_connected");
+      db.prepare(
+        `INSERT INTO app_paperless_auto_import (user_id,instance_id,tag_id,revision,next_run)
+        VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
+        instance_id=excluded.instance_id,tag_id=excluded.tag_id,revision=excluded.revision,
+        page=1,next_run=excluded.next_run,lease_until=NULL,last_run=NULL,imported=0,skipped=0,failed=0,error=NULL`,
+      ).run(userId, instanceId, tagId, crypto.randomUUID(), new Date().toISOString());
+    },
+    async claimAutoImport() {
+      const db = await database();
+      const timestamp = new Date().toISOString();
+      // One durable lease keeps concurrent server workers from processing the same rule.
+      return db
+        .prepare(
+          `UPDATE app_paperless_auto_import SET lease_until=?
+        WHERE user_id=(SELECT rule.user_id FROM app_paperless_auto_import rule
+          JOIN app_paperless_config config ON config.instance_id=rule.instance_id AND config.enabled=1
+          JOIN app_users account ON account.id=rule.user_id AND account.role IN ('admin','member')
+          JOIN app_paperless_credentials credential ON credential.user_id=rule.user_id AND credential.instance_id=rule.instance_id
+          WHERE rule.next_run<=? AND (rule.lease_until IS NULL OR rule.lease_until<=?)
+          ORDER BY rule.next_run LIMIT 1) RETURNING *`,
+        )
+        .get(new Date(Date.now() + 35 * 60_000).toISOString(), timestamp, timestamp) as
+        PaperlessAutoImportRule | undefined;
+    },
+    async autoImportCurrent(rule: PaperlessAutoImportRule) {
+      return autoImportCurrent(await database(), rule);
+    },
+    async finishAutoImport(
+      rule: PaperlessAutoImportRule,
+      result: {
+        page: number;
+        imported: number;
+        skipped: number;
+        failed: number;
+        error: string | null;
+      },
+    ) {
+      (await database())
+        .prepare(
+          `UPDATE app_paperless_auto_import SET page=?,last_run=?,next_run=?,
+        lease_until=NULL,imported=?,skipped=?,failed=?,error=? WHERE user_id=? AND revision=? AND lease_until=?`,
+        )
+        .run(
+          result.page,
+          new Date().toISOString(),
+          new Date(Date.now() + 5 * 60_000).toISOString(),
+          result.imported,
+          result.skipped,
+          result.failed,
+          result.error,
+          rule.user_id,
+          rule.revision,
+          rule.lease_until,
+        );
     },
     async document(documentId: string) {
       return (await database()).prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
@@ -805,10 +914,16 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
     async importDocument(
       link: Omit<PaperlessLink, "browser_url">,
       document: Record<string, unknown>,
+      autoRule?: PaperlessAutoImportRule,
     ) {
       const db = await database();
+      const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
+      const path = await nodeImport<typeof import("node:path")>("node:" + "path");
+      const { createHash } = await nodeImport<typeof import("node:crypto")>("node:" + "crypto");
       db.exec("BEGIN IMMEDIATE");
       try {
+        if (autoRule && !autoImportCurrent(db, autoRule))
+          throw new PaperlessError("configuration_changed");
         const existing = db
           .prepare(
             "SELECT document_id FROM app_paperless_links WHERE instance_id=? AND remote_id=?",
@@ -823,6 +938,45 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
           .get();
         if (config?.["instance_id"] !== link.instance_id || !config["enabled"])
           throw new PaperlessError("configuration_changed");
+        const candidates = db
+          .prepare("SELECT id,storage_path FROM documents WHERE size=?")
+          .all(document["size"]);
+        for (const candidate of candidates) {
+          if (typeof candidate["storage_path"] !== "string") continue;
+          const file = path.join(uploadsDir(path), path.basename(candidate["storage_path"]));
+          if (!fs.existsSync(file)) {
+            console.warn("[paperless] Duplicate check found a missing local file", candidate["id"]);
+            continue;
+          }
+          if (createHash("sha256").update(fs.readFileSync(file)).digest("hex") !== link.checksum)
+            continue;
+          const documentId = String(candidate["id"]);
+          const linked = db
+            .prepare("SELECT document_id FROM app_paperless_links WHERE document_id=?")
+            .get(documentId);
+          const job = db
+            .prepare("SELECT state FROM app_paperless_jobs WHERE document_id=?")
+            .get(documentId);
+          // Keep the existing shared source and unresolved transfer tracking unchanged.
+          if (
+            !linked &&
+            (!job || ["failed", "abandoned", "linked"].includes(String(job["state"])))
+          ) {
+            db.prepare(
+              "INSERT INTO app_paperless_links (document_id,instance_id,remote_id,direction,linked_at,checksum,browser_url) VALUES (?,?,?,?,?,?,?)",
+            ).run(
+              documentId,
+              link.instance_id,
+              link.remote_id,
+              link.direction,
+              link.linked_at,
+              link.checksum,
+              config["browser_url"],
+            );
+          }
+          db.exec("COMMIT");
+          return { documentId, duplicate: true };
+        }
         const row = {
           ...cleanRow("documents", document),
           id: link.document_id,

@@ -8,6 +8,7 @@ import {
   USER_NAVIGATION_DDL,
   PUSH_DDL,
   PAPERLESS_DDL,
+  PAPERLESS_AUTO_IMPORT_DDL,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
 import { legacyInvoiceExpense } from "@/lib/expenses";
@@ -92,6 +93,13 @@ const MIGRATIONS: readonly Migration[] = [
           WHERE app_paperless_config.instance_id = app_paperless_links.instance_id
         );
       `);
+    },
+  },
+  {
+    version: 7,
+    name: "paperless-tag-auto-import",
+    up(db) {
+      db.exec(PAPERLESS_AUTO_IMPORT_DDL);
     },
   },
 ];

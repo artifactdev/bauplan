@@ -230,6 +230,22 @@ export class PaperlessClient {
   async detail(id: number) {
     return this.parse(remoteSchema, await this.json(`api/documents/${id}/`));
   }
+  async tagged(tagId: number, page: number) {
+    const query = new URLSearchParams({
+      tags__id__all: String(tagId),
+      ordering: "id",
+      page: String(page),
+      page_size: "25",
+    });
+    const data = this.parse(
+      envelope.extend({ results: z.array(remoteSchema).max(25) }),
+      await this.json(`api/documents/?${query}`),
+    );
+    return {
+      documents: data.results.map(remoteView),
+      hasNext: Boolean(data.next),
+    };
+  }
   async names(kind: "tags" | "document_types" | "correspondents") {
     const results: z.infer<typeof namedSchema>[] = [];
     for (let page = 1; page <= 20; page++) {

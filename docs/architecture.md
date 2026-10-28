@@ -58,7 +58,7 @@ OCR settings are private `app_settings` data, never included in the Workspace. A
 
 `cleanRow()` only lets known columns through and normalizes numbers/booleans.
 
-The optional Paperless connector uses personal encrypted API tokens outside the shared Workspace. Access goes through authenticated data server functions and repository methods. Documents retain local copies plus unique source links; explicit export jobs track Paperless consumption separately from upload acceptance. Shared linkage state supports presence filters, while live search and verification use only the requesting member's credentials. See [Paperless integration](paperless.md).
+The optional Paperless connector uses personal encrypted API tokens outside the shared Workspace. Access goes through authenticated data server functions and repository methods. Documents retain local copies plus unique source links; explicit export jobs track Paperless consumption separately from upload acceptance. Opt-in personal tag-import rules use durable leases and five-minute server-side passes, with transactional source-ID and SHA-256 content deduplication. Rules are removed on disconnect/instance change and excluded from portable backups. Shared linkage state supports presence filters, while live search and verification use only the requesting member's credentials. See [Paperless integration](paperless.md).
 
 ## Routing
 - `/setup` – initial setup, `/auth` – sign-in.

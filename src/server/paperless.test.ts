@@ -17,6 +17,9 @@ import {
   settingsView,
   startPaperless,
   stopPaperless,
+  autoImportSettings,
+  saveAutoImport,
+  processAutoImports,
   verifyDocuments,
 } from "./paperless";
 import {
@@ -46,6 +49,8 @@ let metadataForbidden = false;
 let emptyContent = false;
 let originalMissing = false;
 let correspondentId: number | null = null;
+let autoTag = false;
+let tagNext = false;
 const requests: { url: string; token: string; options: RequestInit }[] = [];
 
 function json(value: unknown, status = 200) {
@@ -59,7 +64,7 @@ function detail(id = remoteId) {
     id,
     title: "Invoice roof",
     created: "2026-10-15T00:00:00Z",
-    tags: metadataForbidden ? [1] : [],
+    tags: autoTag ? [11] : metadataForbidden ? [1] : [],
     correspondent: correspondentId,
     document_type: null,
     original_file_name: "invoice.pdf",
@@ -97,8 +102,14 @@ const request = vi.fn(async (url: string | URL | Request, options: RequestInit =
       ? json({}, 404)
       : json(detail(Number(address.match(/documents\/(\d+)/)?.[1])));
   if (address.includes("/api/documents/"))
-    return json({ count: 1, next: null, results: [detail()] });
+    return json({
+      count: 1,
+      next: tagNext ? "http://paperless:8000/api/documents/?page=2" : null,
+      results: [detail()],
+    });
   if (metadataForbidden && address.includes("/api/tags/")) return json({}, 403);
+  if (address.includes("/api/tags/") && autoTag)
+    return json({ count: 1, next: null, results: [{ id: 11, name: "Bauplan" }] });
   if (address.includes("/api/correspondents/"))
     return json({ count: 1, next: null, results: [{ id: 7, name: "Roofing Ltd" }] });
   return json({ count: 0, next: null, results: [] });
@@ -113,7 +124,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await stopPaperless();
   db.exec(
-    "DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_config; DELETE FROM documents; DELETE FROM app_users;",
+    "DELETE FROM app_paperless_auto_import; DELETE FROM app_paperless_jobs; DELETE FROM app_paperless_links; DELETE FROM app_paperless_credentials; DELETE FROM app_paperless_checks; DELETE FROM app_paperless_config; DELETE FROM documents; DELETE FROM app_users;",
   );
   for (const [id, role] of [
     ["admin", "admin"],
@@ -139,6 +150,8 @@ beforeEach(async () => {
   emptyContent = false;
   originalMissing = false;
   correspondentId = null;
+  autoTag = false;
+  tagNext = false;
   await saveSettings(admin, {
     enabled: true,
     apiUrl: "http://paperless.internal:8000",
@@ -265,6 +278,7 @@ describe("Paperless private integration", () => {
     expect((await repo.getAll()).documents).toHaveLength(1);
     metadataForbidden = false;
     emptyContent = true;
+    original = new TextEncoder().encode("%PDF-1.7\nDifferent original without text\n");
     const empty = await importDocument(member.id, 43);
     expect(empty).toMatchObject({
       duplicate: false,
@@ -295,6 +309,7 @@ describe("Paperless private integration", () => {
       date: "2026-10-15",
     });
     await repo.insert("contacts", { id: "other-roofing", name: "Roofing Ltd" });
+    original = new TextEncoder().encode("%PDF-1.7\nDifferent original with correspondent\n");
     const ambiguous = await importDocument(member.id, 43);
     expect(ambiguous.extraction).toMatchObject({
       vendor: "Roofing Ltd",
@@ -644,7 +659,235 @@ describe("Paperless private integration", () => {
   });
 });
 
+describe("tag-based automatic imports", () => {
+  async function enable() {
+    autoTag = true;
+    await saveAutoImport(member.id, { tagId: 11, confirmSharing: true });
+    requests.length = 0;
+  }
+  function due() {
+    db.exec("UPDATE app_paperless_auto_import SET next_run='2000-01-01T00:00:00Z'");
+  }
+
+  it("requires explicit sharing consent and an existing authorized tag", async () => {
+    autoTag = true;
+    await expect(saveAutoImport(member.id, { tagId: 11, confirmSharing: false })).rejects.toThrow(
+      "confirmation_required",
+    );
+    await expect(saveAutoImport(member.id, { tagId: 12, confirmSharing: true })).rejects.toThrow(
+      "invalid_metadata",
+    );
+    await expect(saveAutoImport("pending", { tagId: 11, confirmSharing: true })).rejects.toThrow(
+      "unauthorized",
+    );
+    expect(await autoImportSettings(member.id)).toBeNull();
+  });
+
+  it("imports existing and later tagged files without financial entries, using only the owner's token", async () => {
+    await enable();
+    await processAutoImports();
+    let workspace = await repo.getAll();
+    expect(workspace.documents).toHaveLength(1);
+    expect(workspace.offers).toHaveLength(0);
+    expect(workspace.expenses).toHaveLength(0);
+    expect(await autoImportSettings(member.id)).toMatchObject({
+      imported: 1,
+      skipped: 0,
+      failed: 0,
+      error: null,
+    });
+    expect(await autoImportSettings(admin.id)).toBeNull();
+    expect(requests.every((call) => call.token === "Token member-token")).toBe(true);
+    expect(requests.some((call) => call.url.includes("tags__id__all=11"))).toBe(true);
+    expect(requests.some((call) => call.options.method === "POST")).toBe(false);
+    requests.length = 0;
+    await processAutoImports();
+    expect(requests).toHaveLength(0);
+    due();
+    await processAutoImports();
+    expect(await autoImportSettings(member.id)).toMatchObject({ imported: 0, skipped: 1 });
+    expect(requests.some((call) => call.url.includes("/download/"))).toBe(false);
+    remoteId = 43;
+    original = new TextEncoder().encode("%PDF-1.7\nAnother invoice\n");
+    due();
+    await processAutoImports();
+    workspace = await repo.getAll();
+    expect(workspace.documents).toHaveLength(2);
+    expect(await autoImportSettings(member.id)).toMatchObject({ imported: 1, failed: 0 });
+  });
+
+  it("runs due imports through the server worker on startup", async () => {
+    await enable();
+    await startPaperless();
+    await vi.waitFor(async () => {
+      expect((await autoImportSettings(member.id))?.lastRun).not.toBeNull();
+      expect((await repo.getAll()).documents).toHaveLength(1);
+    });
+    await stopPaperless();
+  });
+
+  it("reuses identical local content and preserves its fields instead of creating duplicates", async () => {
+    await local();
+    await repo.update("documents", "local", { name: "Reviewed title", category: "Plan" });
+    const filesBefore = readdirSync(join(directory, "uploads")).length;
+    await enable();
+    await processAutoImports();
+    const config = (await paperlessRepo.config())!;
+    expect((await paperlessRepo.source(config.instance_id, 42))?.document_id).toBe("local");
+    expect((await repo.getAll()).documents).toHaveLength(1);
+    expect(await paperlessRepo.document("local")).toMatchObject({
+      name: "Reviewed title",
+      category: "Plan",
+    });
+    expect(readdirSync(join(directory, "uploads"))).toHaveLength(filesBefore);
+    expect(await autoImportSettings(member.id)).toMatchObject({ skipped: 1, imported: 0 });
+    remoteId = 43;
+    due();
+    await processAutoImports();
+    expect((await repo.getAll()).documents).toHaveLength(1);
+    expect((await paperlessRepo.link("local"))?.remote_id).toBe(42);
+  });
+
+  it("prevents concurrent imports of different remote IDs with identical originals", async () => {
+    const results = await Promise.all([
+      importDocument(member.id, 42),
+      importDocument(admin.id, 43),
+    ]);
+    expect(results.map((result) => result.duplicate).sort()).toEqual([false, true]);
+    expect(results[0]?.documentId).toBe(results[1]?.documentId);
+    expect((await repo.getAll()).documents).toHaveLength(1);
+  });
+
+  it("does not mistake a same-size different original for a duplicate", async () => {
+    await local();
+    original = new TextEncoder().encode(
+      new TextDecoder().decode(bytes).replace("Invoice", "Another"),
+    );
+    expect(original.length).toBe(bytes.length);
+    await enable();
+    await processAutoImports();
+    expect((await repo.getAll()).documents).toHaveLength(2);
+    expect(await autoImportSettings(member.id)).toMatchObject({ imported: 1, skipped: 0 });
+  });
+
+  it("does not process a revoked member's rule", async () => {
+    await enable();
+    db.prepare("UPDATE app_users SET role='pending' WHERE id=?").run(member.id);
+    await processAutoImports();
+    expect(requests).toHaveLength(0);
+    await expect(autoImportSettings(member.id)).rejects.toThrow("unauthorized");
+    expect((await repo.getAll()).documents).toHaveLength(0);
+  });
+
+  it("removes the rule when its owner is deleted", async () => {
+    await enable();
+    await paperlessRepo.disconnect(member.id, true);
+    expect(await paperlessRepo.autoImport(member.id)).toBeUndefined();
+  });
+
+  it("resumes bounded pages and starts the next complete scan at page one", async () => {
+    await enable();
+    tagNext = true;
+    await processAutoImports();
+    expect((await paperlessRepo.autoImport(member.id))?.page).toBe(2);
+    tagNext = false;
+    due();
+    requests.length = 0;
+    await processAutoImports();
+    expect(requests.some((call) => call.url.includes("ordering=id&page=2&page_size=25"))).toBe(
+      true,
+    );
+    expect((await paperlessRepo.autoImport(member.id))?.page).toBe(1);
+  });
+
+  it("leases a rule once, recovers expired leases, and invalidates leases when disabled", async () => {
+    await enable();
+    const rule = await paperlessRepo.claimAutoImport();
+    expect(rule).toBeDefined();
+    expect(await paperlessRepo.claimAutoImport()).toBeUndefined();
+    db.exec("UPDATE app_paperless_auto_import SET lease_until='2000-01-01T00:00:00Z'");
+    const recovered = await paperlessRepo.claimAutoImport();
+    expect(recovered).toBeDefined();
+    await saveAutoImport(member.id, { tagId: null, confirmSharing: false });
+    expect(await paperlessRepo.autoImportCurrent(recovered!)).toBe(false);
+    expect(await autoImportSettings(member.id)).toBeNull();
+  });
+
+  it("cannot commit an in-flight automatic import after its rule was disabled", async () => {
+    await enable();
+    const rule = (await paperlessRepo.claimAutoImport())!;
+    const commit = paperlessRepo.importDocument;
+    const spy = vi.spyOn(paperlessRepo, "importDocument").mockImplementation(async (...args) => {
+      await saveAutoImport(member.id, { tagId: null, confirmSharing: false });
+      return commit(...args);
+    });
+    try {
+      await expect(importDocument(member.id, 42, rule)).rejects.toThrow("configuration_changed");
+      expect((await repo.getAll()).documents).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("pauses without a connection or enabled instance and removes rules on disconnect or instance change", async () => {
+    await enable();
+    const config = (await paperlessRepo.config())!;
+    await paperlessRepo.configure({ ...config, enabled: 0 });
+    await processAutoImports();
+    expect(requests).toHaveLength(0);
+    await paperlessRepo.configure({ ...config, enabled: 1 });
+    await disconnect(member.id);
+    expect(await autoImportSettings(member.id)).toBeNull();
+    await connect(member, "member-token");
+    await enable();
+    await paperlessRepo.configure({ ...config, instance_id: "new-instance" });
+    expect(await autoImportSettings(member.id)).toBeNull();
+  });
+
+  it("reports failed downloads and retries on later passes without duplicate entries", async () => {
+    await enable();
+    originalMissing = true;
+    await processAutoImports();
+    expect(await autoImportSettings(member.id)).toMatchObject({ failed: 1, error: "not_found" });
+    expect((await repo.getAll()).documents).toHaveLength(0);
+    originalMissing = false;
+    due();
+    await processAutoImports();
+    expect(await autoImportSettings(member.id)).toMatchObject({ imported: 1, error: null });
+  });
+
+  it("does not import files when their tag no longer matches", async () => {
+    await enable();
+    const rule = (await paperlessRepo.claimAutoImport())!;
+    autoTag = false;
+    await expect(importDocument(member.id, 42, rule)).rejects.toThrow("tag_removed");
+    expect((await repo.getAll()).documents).toHaveLength(0);
+  });
+
+  it("excludes personal rules from backups and disables them on restore", async () => {
+    await enable();
+    const backup = await repo.exportBackup();
+    expect(JSON.stringify(backup.database)).not.toContain("app_paperless_auto_import");
+    await repo.restoreBackup(backup.database, backup.files);
+    expect(await autoImportSettings(member.id)).toBeNull();
+  });
+});
+
 describe("Paperless HTTP boundary", () => {
+  it("enforces the automatic import page size instead of processing unbounded responses", async () => {
+    const client = new PaperlessClient(
+      "https://archive.example.test",
+      "secret",
+      vi.fn(async () =>
+        json({
+          count: 26,
+          next: null,
+          results: Array.from({ length: 26 }, (_, index) => detail(index + 1)),
+        }),
+      ),
+    );
+    await expect(client.tagged(11, 1)).rejects.toThrow("incompatible_api");
+  });
   it("permits explicitly configured LAN destinations but rejects unsafe protocols, credentials and redirects", async () => {
     expect(normalizePaperlessUrl("http://paperless:8000/")).toBe("http://paperless:8000");
     for (const value of [

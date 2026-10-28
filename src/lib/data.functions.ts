@@ -21,6 +21,7 @@ import {
   paperlessExportSchema,
   paperlessDocumentIdsSchema,
   paperlessReconcileSchema,
+  paperlessAutoImportSchema,
 } from "./paperless";
 
 /** Approved members share workspace data; pending accounts receive no access. */
@@ -45,6 +46,23 @@ export const adminDataContext = createMiddleware({ type: "function" })
 export const getPaperlessSettings = createServerFn()
   .middleware([dataContext])
   .handler(async ({ context }) => (await import("@/server/paperless")).settingsView(context.user));
+
+export const getPaperlessAutoImport = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) =>
+    (await import("@/server/paperless")).autoImportSettings(context.user.id),
+  );
+
+export const getPaperlessImportTags = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) => (await import("@/server/paperless")).importTags(context.user.id));
+
+export const savePaperlessAutoImport = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => paperlessAutoImportSchema.parse(data))
+  .handler(async ({ context, data }) =>
+    (await import("@/server/paperless")).saveAutoImport(context.user.id, data),
+  );
 
 export const savePaperlessSettings = createServerFn({ method: "POST" })
   .middleware([adminDataContext])

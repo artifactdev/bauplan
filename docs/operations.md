@@ -17,7 +17,7 @@ docker compose up -d --build
 
 ### Paperless-ngx
 
-The optional connector contacts only the self-hosted instance configured by an administrator. Each member uses a personal API token. Imports and manual exports retain local file copies and never synchronize later edits or deletions. The document overview shows known-link filters and per-file processing status. See [Paperless integration](paperless.md) for setup, sharing boundaries and unknown-outcome recovery.
+The optional connector contacts only the self-hosted instance configured by an administrator. Each member uses a personal API token. Imports and manual exports retain local file copies and never synchronize later edits or deletions. Members can explicitly enable automatic imports by tag; the server processes up to 25 matches every five minutes per rule without requiring an open browser. Personal settings show results and errors; rules are excluded from portable backups. The document overview shows known-link filters and per-file processing status. See [Paperless integration](paperless.md) for setup, sharing boundaries and unknown-outcome recovery.
 
 ### Push notifications
 

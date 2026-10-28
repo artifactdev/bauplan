@@ -2,6 +2,20 @@
 
 // Private account metadata must not be included in TABLES or Workspace.
 export const PAPERLESS_TABLES = {
+  app_paperless_auto_import: [
+    "user_id",
+    "instance_id",
+    "tag_id",
+    "revision",
+    "page",
+    "next_run",
+    "lease_until",
+    "last_run",
+    "imported",
+    "skipped",
+    "failed",
+    "error",
+  ],
   app_paperless_config: ["id", "instance_id", "enabled", "api_url", "browser_url"],
   app_paperless_credentials: ["user_id", "instance_id", "ciphertext"],
   app_paperless_links: [
@@ -28,6 +42,14 @@ export const PAPERLESS_TABLES = {
   ],
   app_paperless_checks: ["user_id", "document_id", "state", "checked_at", "last_verified_at"],
 } as const;
+export const PAPERLESS_AUTO_IMPORT_DDL = `
+CREATE TABLE IF NOT EXISTS app_paperless_auto_import (
+ user_id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, tag_id INTEGER NOT NULL CHECK(tag_id > 0),
+ revision TEXT NOT NULL, page INTEGER NOT NULL DEFAULT 1, next_run TEXT NOT NULL,
+ lease_until TEXT, last_run TEXT, imported INTEGER NOT NULL DEFAULT 0,
+ skipped INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, error TEXT
+);
+`;
 export const PAPERLESS_DDL = `
 CREATE TABLE IF NOT EXISTS app_paperless_config (
  id INTEGER PRIMARY KEY CHECK(id = 1), instance_id TEXT NOT NULL, enabled INTEGER NOT NULL,

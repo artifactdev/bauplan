@@ -2,6 +2,20 @@ import { z } from "zod";
 import type { Extraction } from "./ocr-parse";
 
 const remoteId = z.number().int().positive();
+export const paperlessAutoImportSchema = z.object({
+  tagId: remoteId.nullable(),
+  confirmSharing: z.boolean(),
+});
+export type PaperlessAutoImportInput = z.infer<typeof paperlessAutoImportSchema>;
+export type PaperlessAutoImportView = {
+  tagId: number;
+  lastRun: string | null;
+  nextRun: string;
+  imported: number;
+  skipped: number;
+  failed: number;
+  error: string | null;
+} | null;
 export const paperlessSettingsSchema = z.object({
   enabled: z.boolean(),
   apiUrl: z.string().max(2048),

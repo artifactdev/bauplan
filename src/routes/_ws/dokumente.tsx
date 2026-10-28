@@ -1,6 +1,6 @@
 import { tr } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -91,6 +91,14 @@ function DocsPage() {
   const client = useQueryClient();
   const account = getOfflineAccount();
   const paperless = usePaperlessSettings();
+  useEffect(() => {
+    if (!paperless.data?.enabled) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible")
+        void client.invalidateQueries({ queryKey: ["ws"] });
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [client, paperless.data?.enabled]);
   const [paperlessOpen, setPaperlessOpen] = useState(false);
   const paperlessMode = paperlessOpen && !!paperless.data?.enabled;
   const paperlessStates = usePaperlessDocuments(paperless.data?.configured ?? false);

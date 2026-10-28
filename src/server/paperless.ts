@@ -6,11 +6,13 @@ import type {
   PaperlessSearch,
   PaperlessSettings,
   PaperlessSettingsView,
+  PaperlessAutoImportInput,
+  PaperlessAutoImportView,
 } from "@/lib/paperless";
 import { paperlessExportMetadataSchema } from "@/lib/paperless";
 import { extractFromText } from "@/lib/ocr-parse";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
-import { paperlessRepo, sqliteRepo, type PaperlessJob } from "./repo";
+import { paperlessRepo, sqliteRepo, type PaperlessJob, type PaperlessAutoImportRule } from "./repo";
 import {
   decryptToken,
   encryptToken,
@@ -114,16 +116,57 @@ export async function metadata(userId: string) {
   ]);
   return { tags, documentTypes, correspondents };
 }
+export async function autoImportSettings(userId: string): Promise<PaperlessAutoImportView> {
+  if (!(await paperlessRepo.allowed(userId))) throw new PaperlessError("unauthorized");
+  const rule = await paperlessRepo.autoImport(userId);
+  return rule
+    ? {
+        tagId: rule.tag_id,
+        lastRun: rule.last_run,
+        nextRun: rule.next_run,
+        imported: rule.imported,
+        skipped: rule.skipped,
+        failed: rule.failed,
+        error: rule.error,
+      }
+    : null;
+}
+export async function importTags(userId: string) {
+  return (await connection(userId)).client.names("tags");
+}
+export async function saveAutoImport(userId: string, input: PaperlessAutoImportInput) {
+  if (!(await paperlessRepo.allowed(userId))) throw new PaperlessError("unauthorized");
+  if (input.tagId === null) {
+    await paperlessRepo.saveAutoImport(userId, null, null);
+  } else {
+    if (!input.confirmSharing) throw new PaperlessError("confirmation_required");
+    const { config, client } = await connection(userId);
+    if (!(await client.names("tags")).some((tag) => tag.id === input.tagId))
+      throw new PaperlessError("invalid_metadata");
+    await paperlessRepo.saveAutoImport(userId, config.instance_id, input.tagId);
+    wakePaperless();
+  }
+  return autoImportSettings(userId);
+}
 export async function preview(userId: string, remoteId: number) {
   return (await connection(userId)).client.preview(remoteId);
 }
 export async function importDocument(
   userId: string,
   remoteId: number,
+  autoRule?: PaperlessAutoImportRule,
 ): Promise<PaperlessImportResult> {
   const { config, client } = await connection(userId);
+  if (
+    autoRule &&
+    (autoRule.user_id !== userId ||
+      config.instance_id !== autoRule.instance_id ||
+      !(await paperlessRepo.autoImportCurrent(autoRule)))
+  )
+    throw new PaperlessError("configuration_changed");
   // Resolve access with the requesting user even for an already-known project source.
   const remote = await client.detail(remoteId);
+  if (autoRule && !remote.tags.includes(autoRule.tag_id)) throw new PaperlessError("tag_removed");
   const existing = await paperlessRepo.source(config.instance_id, remoteId);
   if (existing) {
     await paperlessRepo.check(userId, existing.document_id, "verified");
@@ -165,6 +208,7 @@ export async function importDocument(
         task_id: null,
         cost_item_id: null,
       },
+      autoRule,
     );
     retained = !result.duplicate;
     documentId = result.documentId;
@@ -522,6 +566,57 @@ async function processJob(job: PaperlessJob) {
   }
 }
 
+export async function processAutoImports() {
+  const rule = await paperlessRepo.claimAutoImport();
+  if (!rule) return;
+  const result = {
+    page: rule.page,
+    imported: 0,
+    skipped: 0,
+    failed: 0,
+    error: null as string | null,
+  };
+  try {
+    const { client } = await connection(rule.user_id);
+    // Validate the tag so a deleted tag cannot silently turn into an unfiltered import.
+    if (!(await client.names("tags")).some((tag) => tag.id === rule.tag_id))
+      throw new PaperlessError("invalid_metadata");
+    const batch = await client.tagged(rule.tag_id, rule.page);
+    for (const document of batch.documents) {
+      if (!(await paperlessRepo.autoImportCurrent(rule))) return;
+      try {
+        if (!document.tags.includes(rule.tag_id)) throw new PaperlessError("tag_removed");
+        if (await paperlessRepo.source(rule.instance_id, document.id)) {
+          result.skipped++;
+          continue;
+        }
+        const imported = await importDocument(rule.user_id, document.id, rule);
+        if (imported.duplicate) result.skipped++;
+        else {
+          result.imported++;
+          if (imported.extractionError) result.error = imported.extractionError;
+        }
+      } catch (error) {
+        if (!(error instanceof PaperlessError)) throw error;
+        if (error.code === "tag_removed") result.skipped++;
+        else {
+          result.failed++;
+          result.error = error.code;
+        }
+      }
+    }
+    result.page = batch.hasNext ? rule.page + 1 : 1;
+  } catch (error) {
+    result.failed++;
+    // A changed remote list may make a saved page invalid; restart the next pass.
+    if (error instanceof PaperlessError && error.code === "not_found") result.page = 1;
+    result.error = error instanceof PaperlessError ? error.code : "internal_error";
+    console.error("[paperless] Automatic import failed", result.error);
+  } finally {
+    await paperlessRepo.finishAutoImport(rule, result);
+  }
+}
+
 let running: Promise<void> | null = null;
 let closing = false;
 export function wakePaperless() {
@@ -531,6 +626,7 @@ export function wakePaperless() {
     // At most two remote requests in flight. One bounded pass; the server lifecycle wakes again.
     for (let index = 0; index < jobs.length; index += 2)
       await Promise.all(jobs.slice(index, index + 2).map(processJob));
+    if (!closing) await processAutoImports();
   })()
     .catch((error: unknown) => {
       console.error(

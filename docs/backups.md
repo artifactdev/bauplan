@@ -10,7 +10,7 @@ OCR language models are stored separately under `DATA_DIR/ocr-models` and are no
 
 Web Push VAPID keys are sensitive application settings and are included. Device subscriptions and notification jobs/delivery history are excluded from portable backups and cleared on restore. Users must explicitly enable push again on each device after signing in.
 
-Paperless source links and local document copies are preserved. Personal Paperless API tokens are excluded; members reconnect after restore. Historical unresolved transfers must be reconciled explicitly, not replayed as new uploads. The deployment encryption key is external to the archive. Bauplan backups do not replace a backup of the Paperless archive. See [Paperless integration](paperless.md).
+Paperless source links and local document copies are preserved. Personal Paperless API tokens and automatic tag-import rules are excluded; members reconnect and explicitly re-enable automation after restore. Historical unresolved transfers must be reconciled explicitly, not replayed as new uploads. The deployment encryption key is external to the archive. Bauplan backups do not replace a backup of the Paperless archive. See [Paperless integration](paperless.md).
 
 The application accepts ZIP backups up to 128 MB and limits expanded archive contents to 256 MB. Only archives created with a supported Bauplan backup format version are accepted.
 
