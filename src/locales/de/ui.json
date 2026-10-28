@@ -713,6 +713,7 @@
   "tasks.tasks_bauplan": "Aufgaben – Bauplan",
   "tasks.trade": "Nach Gewerk",
   "tasks.start_date": "Startdatum",
+  "tasks.group_by": "Aufgaben gruppieren",
   "tasks.invalid_date": "Bitte ein gültiges Start- und Fälligkeitsdatum eingeben.",
   "tasks.due_before_start": "Die Fälligkeit darf nicht vor dem Startdatum liegen.",
   "tasks.assignee": "Zuständig",

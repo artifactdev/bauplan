@@ -68,6 +68,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - **Push notifications:** assigning a task to another approved user sends a generic notification to their opted-in devices after the server saves it, including offline sync. Open tasks remind the assignee; open quote/payment deadlines and timed calendar appointments remind all opted-in members. Tapping opens the matching area (Tasks, Quotes, Expenses or Calendar) and its record editor. Device activation and a test button are in personal Settings. See [push setup and reminder rules](operations.md#push-notifications).
 
 - Title, trade, phase, priority, status, optional start and due dates, notes. The due date cannot be before the start.
+- Mobile task rows reserve the main width for a wrapping, tappable title, with metadata beneath and dates/actions in a separate footer. Completion has a 44-pixel touch target; filters share the available width instead of forcing horizontal overflow.
 - Tasks with both dates appear on every day from start through due date in the calendar and as multi-day entries in iCal and the read-only CalDAV calendar. A start-only or due-only task appears on that single day; undated tasks do not appear in the calendar. Completed tasks remain excluded from calendar subscriptions. Overdue status and push deadline reminders still depend on the due date, not the start.
 
 ## Calendar

@@ -10,6 +10,7 @@ import { fmtDate } from "@/lib/format";
 import { tradeName } from "@/lib/options";
 import { taskRange } from "@/lib/tasks";
 import { rangeLabel } from "@/lib/events";
+import { cn } from "@/lib/utils";
 import { PHASES, type Task } from "@/lib/schema";
 import {
   Bar,
@@ -127,7 +128,10 @@ function TasksPage() {
       {ws.tasks.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-2">
           <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger
+              className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+              aria-label={tr("shared.status")}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -137,7 +141,10 @@ function TasksPage() {
             </SelectContent>
           </Select>
           <Select value={groupBy} onValueChange={(v) => setGroupBy(v as typeof groupBy)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger
+              className="min-w-0 flex-1 sm:w-48 sm:flex-none"
+              aria-label={tr("tasks.group_by")}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -159,26 +166,40 @@ function TasksPage() {
                 const range = taskRange(t);
                 const doc = ws.documents.find((d) => d.id === t.document_id);
                 return (
-                  <li key={t.id} className="flex flex-wrap items-start gap-3 py-2.5">
-                    <Checkbox
-                      className="mt-0.5"
-                      checked={isDone}
-                      aria-label={tr("shared.done")}
-                      onCheckedChange={(c) =>
-                        update.mutate({
-                          table: "tasks",
-                          id: t.id,
-                          patch: { status: c ? "erledigt" : "offen" },
-                        })
-                      }
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={`text-sm ${isDone ? "text-muted-foreground line-through" : "font-medium"}`}
+                  <li
+                    key={t.id}
+                    className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-start gap-x-2 gap-y-2 py-4 sm:gap-x-3"
+                  >
+                    <label
+                      htmlFor={`task-done-${t.id}`}
+                      className="flex size-11 cursor-pointer items-center justify-center"
+                    >
+                      <Checkbox
+                        id={`task-done-${t.id}`}
+                        className="size-5"
+                        checked={isDone}
+                        aria-label={`${tr("shared.done")}: ${t.title}`}
+                        onCheckedChange={(c) =>
+                          update.mutate({
+                            table: "tasks",
+                            id: t.id,
+                            patch: { status: c ? "erledigt" : "offen" },
+                          })
+                        }
+                      />
+                    </label>
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setDlg({ id: t.id, initial: { ...t } })}
+                        className={cn(
+                          "min-h-11 w-full rounded-sm py-2 text-left text-sm font-medium leading-6 [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                          isDone && "text-muted-foreground line-through",
+                        )}
                       >
                         {t.title}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      </button>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground [&>span]:max-w-full [&>span]:whitespace-normal [&>span]:[overflow-wrap:anywhere]">
                         {groupBy !== "trade" && t.trade_id && (
                           <span>{tradeName(ws, t.trade_id)}</span>
                         )}
@@ -194,40 +215,51 @@ function TasksPage() {
                           </Pill>
                         )}
                         {doc && (
-                          <span className="inline-flex items-center gap-0.5">
-                            <FileText className="h-3 w-3" />
-                            {doc.name}
+                          <span className="inline-flex min-w-0 items-start gap-1">
+                            <FileText className="mt-0.5 size-3 shrink-0" />
+                            <span className="min-w-0 [overflow-wrap:anywhere]">{doc.name}</span>
                           </span>
                         )}
                       </div>
-                      {t.notes && <p className="mt-1 text-xs text-muted-foreground">{t.notes}</p>}
+                      {t.notes && (
+                        <p className="mt-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                          {t.notes}
+                        </p>
+                      )}
                     </div>
-                    <span
-                      className={`tabular text-xs ${od ? "font-medium text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {od ? tr("tasks.overdue") : ""}
-                      {range ? rangeLabel(range, fmtDate) : fmtDate(null)}
-                    </span>
-                    <div className="flex">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={tr("shared.edit")}
-                        onClick={() => setDlg({ id: t.id, initial: { ...t } })}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={tr("shared.delete")}
-                        onClick={() =>
-                          confirm(tr("tasks.delete_task")) &&
-                          remove.mutate({ table: "tasks", id: t.id })
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 sm:col-span-1 sm:col-start-2">
+                      {range && (
+                        <span
+                          className={cn(
+                            "min-w-0 tabular text-xs leading-5",
+                            od ? "font-medium text-destructive" : "text-muted-foreground",
+                          )}
+                        >
+                          {od ? tr("tasks.overdue") : ""}
+                          {rangeLabel(range, fmtDate)}
+                        </span>
+                      )}
+                      <div className="ml-auto flex shrink-0">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tr("shared.edit")}
+                          onClick={() => setDlg({ id: t.id, initial: { ...t } })}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tr("shared.delete")}
+                          onClick={() =>
+                            confirm(tr("tasks.delete_task")) &&
+                            remove.mutate({ table: "tasks", id: t.id })
+                          }
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
                     </div>
                   </li>
                 );

@@ -713,6 +713,7 @@
   "tasks.tasks_bauplan": "Tasks – Bauplan",
   "tasks.trade": "By trade",
   "tasks.start_date": "Start date",
+  "tasks.group_by": "Group tasks",
   "tasks.invalid_date": "Please enter valid start and due dates.",
   "tasks.due_before_start": "The due date must not be before the start date.",
   "tasks.assignee": "Assignee",
