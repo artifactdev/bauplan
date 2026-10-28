@@ -84,13 +84,16 @@ describe("registerServiceWorker", () => {
     stop();
   });
 
-  it("reloads directly when the page is in the background", () => {
+  it("offers an update without reloading and losing drafts in the background", () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
     const onUpdateReady = vi.fn();
     const stop = registerServiceWorker({ onUpdateReady, onError: vi.fn() });
     sw.dispatchEvent(new Event("controllerchange"));
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(onUpdateReady).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(onUpdateReady).toHaveBeenCalledTimes(1);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(reload).not.toHaveBeenCalled();
     stop();
   });
 

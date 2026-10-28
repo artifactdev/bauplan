@@ -40,7 +40,7 @@ export function reloadForUpdate(): boolean {
 /**
  * Registers the service worker and keeps the open app in step with deployments.
  * The worker activates immediately (skipWaiting); once it takes control, the page still runs
- * the old bundle, so it reloads at once when hidden or lets the user reload via `onUpdateReady`.
+ * the old bundle, so `onUpdateReady` lets the user reload after saving any open drafts.
  */
 export function registerServiceWorker({
   onUpdateReady,
@@ -57,8 +57,7 @@ export function registerServiceWorker({
   const onControllerChange = () => {
     if (!hadController || notified) return;
     notified = true;
-    if (document.visibilityState === "hidden") reloadForUpdate();
-    else onUpdateReady();
+    onUpdateReady();
   };
   const checkForUpdate = () => {
     if (navigator.onLine) void registration?.update().catch(() => {});

@@ -1,5 +1,5 @@
 import { tr } from "@/i18n";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -108,14 +108,20 @@ export function EntityDialog({
   const [askDiscard, setAskDiscard] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const { create, remove } = useMutations();
+  const initialized = useRef(false);
   useEffect(() => {
-    if (open) {
-      setValues(initial ?? {});
-      setAdding(null);
-      setNewName("");
-      setShown(new Set());
-      setShowUploadOptions(false);
+    if (!open) {
+      initialized.current = false;
+      return;
     }
+    // Refetches may recreate initial values; they must not replace an open form's draft.
+    if (initialized.current) return;
+    initialized.current = true;
+    setValues(initial ?? {});
+    setAdding(null);
+    setNewName("");
+    setShown(new Set());
+    setShowUploadOptions(false);
   }, [open, initial]);
   // Only on opening: `initial` may change while open (e.g. after a refetch) and must not forget uploads.
   useEffect(() => {
