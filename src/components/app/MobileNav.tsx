@@ -86,12 +86,12 @@ export function MobileNav({ items, label }: { items: Item[]; label: string }) {
             key={n.to}
             to={n.to}
             activeOptions={{ exact: n.to === "/" }}
-            className="flex min-h-16 w-[18%] min-w-16 shrink-0 snap-center flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-xs text-muted-foreground transition-colors"
+            className="flex min-h-16 min-w-[18%] shrink-0 snap-center flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs text-muted-foreground transition-colors"
             activeProps={{ className: "bg-primary/10 text-primary font-semibold" }}
             onFocus={(e) => e.currentTarget.scrollIntoView({ inline: "center", block: "nearest" })}
           >
             <n.icon className="h-5 w-5" aria-hidden="true" />
-            <span className="max-w-full truncate">{n.label}</span>
+            <span className="whitespace-nowrap">{n.label}</span>
           </Link>
         ))}
       </div>
