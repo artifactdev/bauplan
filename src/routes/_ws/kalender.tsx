@@ -2,21 +2,21 @@ import { tr } from "@/i18n";
 import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { fmtDate, todayISO } from "@/lib/format";
 import { tradeName, tradeOptions } from "@/lib/options";
-import { Empty, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
+import { PageHeader } from "@/components/app/ui-bits";
 import { EntityDialog } from "@/components/app/EntityDialog";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { coversDay, eventEnd, rangeError, rangeLabel } from "@/lib/events";
+import { eventEnd, rangeError, rangeLabel } from "@/lib/events";
 import { offerDeadlines } from "@/lib/offer-deadlines";
 import { QuickTask } from "@/components/app/quick-actions";
 import { OfferDialog } from "@/components/app/OfferDialog";
 import { taskRange } from "@/lib/tasks";
+import { CalendarViews } from "@/components/app/CalendarViews";
+import type { CalendarItem } from "@/lib/calendar-view";
 
 export const Route = createFileRoute("/_ws/kalender")({
   head: () => ({
@@ -30,58 +30,11 @@ export const Route = createFileRoute("/_ws/kalender")({
   component: CalendarPage,
 });
 
-type Item = {
-  id: string;
-  title: string;
-  date: string;
-  end: string;
-  label: string;
-  start_time: string | null;
-  kind: "termin" | "frist" | "arbeit" | "aufgabe";
-  trade_id: string | null;
-  source: { type: "event" | "task" | "offer"; id: string };
-  done?: boolean;
-  deadline?: string | null;
-};
-const KIND: Record<
-  Item["kind"],
-  { label: string; tone: "info" | "danger" | "primary" | "warning"; dot: string }
-> = {
-  termin: { label: tr("shared.appointment"), tone: "info", dot: "bg-info" },
-  frist: { label: tr("shared.deadline"), tone: "danger", dot: "bg-destructive" },
-  arbeit: { label: tr("shared.work"), tone: "primary", dot: "bg-primary" },
-  aufgabe: { label: tr("shared.task"), tone: "warning", dot: "bg-warning" },
-};
-const WD = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((d) => tr(d));
-const MONTHS = [
-  "Januar",
-  "Februar",
-  "März",
-  "April",
-  "Mai",
-  "Juni",
-  "Juli",
-  "August",
-  "September",
-  "Oktober",
-  "November",
-  "Dezember",
-].map((m) => tr(m));
-const pad = (n: number) => String(n).padStart(2, "0");
-
 function CalendarPage() {
   const { ws } = useWorkspace();
   const { create, update, remove } = useMutations();
   const today = todayISO();
-  const [cursor, setCursor] = useState(() => ({
-    y: Number(today.slice(0, 4)),
-    m: Number(today.slice(5, 7)) - 1,
-  }));
-  const [view, setView] = useState<"month" | "list">(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
-      ? "list"
-      : "month",
-  );
+  const [selected, setSelected] = useState(today);
   const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(() =>
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("aktion") === "neu"
@@ -97,12 +50,9 @@ function CalendarPage() {
 
   usePushTarget(ws.events, (event) => {
     setDlg({ id: event.id, initial: { ...event } });
-    setCursor({
-      y: Number(event.event_date.slice(0, 4)),
-      m: Number(event.event_date.slice(5, 7)) - 1,
-    });
+    setSelected(event.event_date);
   });
-  const items: Item[] = useMemo(
+  const items: CalendarItem[] = useMemo(
     () =>
       [
         ...ws.events.map((e) => ({
@@ -112,8 +62,10 @@ function CalendarPage() {
           end: eventEnd(e),
           label: rangeLabel(e, fmtDate),
           start_time: e.start_time,
+          end_time: e.end_time,
           kind: e.kind,
           trade_id: e.trade_id,
+          tradeLabel: e.trade_id ? tradeName(ws, e.trade_id) : null,
           source: { type: "event" as const, id: e.id },
         })),
         ...ws.tasks.flatMap((t) => {
@@ -129,6 +81,7 @@ function CalendarPage() {
               start_time: null,
               kind: "aufgabe" as const,
               trade_id: t.trade_id,
+              tradeLabel: t.trade_id ? tradeName(ws, t.trade_id) : null,
               source: { type: "task" as const, id: t.id },
               done: t.status === "erledigt",
               deadline: t.due_date,
@@ -144,6 +97,7 @@ function CalendarPage() {
           start_time: null,
           kind: e.kind,
           trade_id: e.trade_id,
+          tradeLabel: e.trade_id ? tradeName(ws, e.trade_id) : null,
           source: { type: "offer" as const, id: e.offer_id },
           deadline: e.event_date,
         })),
@@ -154,27 +108,11 @@ function CalendarPage() {
     [ws],
   );
 
-  const first = new Date(cursor.y, cursor.m, 1);
-  const offset = (first.getDay() + 6) % 7;
-  const days = new Date(cursor.y, cursor.m + 1, 0).getDate();
-  const cells = Array.from({ length: Math.ceil((offset + days) / 7) * 7 }, (_, i) => {
-    const d = i - offset + 1;
-    return d >= 1 && d <= days ? `${cursor.y}-${pad(cursor.m + 1)}-${pad(d)}` : null;
-  });
-  const shift = (n: number) =>
-    setCursor((c) => {
-      const d = new Date(c.y, c.m + n, 1);
-      return { y: d.getFullYear(), m: d.getMonth() };
-    });
-
-  const upcoming = items.filter((i) => i.end >= today && !i.done);
-  const overdue = items.filter((i) => i.deadline && i.deadline < today && !i.done);
-
   const editEvent = (id: string) => {
     const e = ws.events.find((x) => x.id === id);
     if (e) setDlg({ id, initial: { ...e } });
   };
-  const openItem = (item: Item) => {
+  const openItem = (item: CalendarItem) => {
     const { type, id } = item.source;
     if (type === "event") return editEvent(id);
     if (type === "task") {
@@ -185,48 +123,6 @@ function CalendarPage() {
       if (offer) setOfferDlg({ id, initial: { ...offer } });
     }
   };
-
-  const Row = ({ i }: { i: Item }) => (
-    <li className="flex flex-wrap items-center gap-2 py-3 text-sm sm:gap-3">
-      <span className="w-full tabular text-xs text-muted-foreground sm:w-44">{i.label}</span>
-      <Pill tone={KIND[i.kind].tone}>{KIND[i.kind].label}</Pill>
-      <button
-        type="button"
-        className="min-w-0 flex-1 break-words text-left hover:underline"
-        onClick={() => openItem(i)}
-      >
-        {i.title}
-      </button>
-      {i.trade_id && (
-        <span className="w-full text-xs text-muted-foreground sm:w-auto">
-          {tradeName(ws, i.trade_id)}
-        </span>
-      )}
-      {i.source.type === "event" && (
-        <span className="flex">
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={tr("shared.edit")}
-            onClick={() => editEvent(i.id)}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={tr("shared.delete")}
-            onClick={() =>
-              confirm(tr("calendar.delete_appointment")) &&
-              remove.mutate({ table: "events", id: i.id })
-            }
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </span>
-      )}
-    </li>
-  );
 
   return (
     <>
@@ -241,123 +137,15 @@ function CalendarPage() {
           </Button>
         }
       />
-      <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-        <TabsList>
-          <TabsTrigger value="month">{tr("shared.month_2")}</TabsTrigger>
-          <TabsTrigger value="list">{tr("calendar.list")}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="month" className="mt-4">
-          <Panel>
-            <div className="mb-3 flex items-center justify-between">
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={tr("calendar.previous_month")}
-                onClick={() => shift(-1)}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <h2 className="font-semibold">
-                {MONTHS[cursor.m]} {cursor.y}
-              </h2>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={tr("calendar.next_month")}
-                onClick={() => shift(1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border bg-border text-xs">
-              {WD.map((d) => (
-                <div key={d} className="bg-muted px-2 py-1.5 font-medium text-muted-foreground">
-                  {d}
-                </div>
-              ))}
-              {cells.map((d, idx) => {
-                const its = d
-                  ? items.filter((i) => coversDay({ event_date: i.date, end_date: i.end }, d))
-                  : [];
-                return (
-                  <div
-                    key={idx}
-                    className={cn("min-h-16 bg-card p-1 md:min-h-24", !d && "bg-muted/40")}
-                  >
-                    {d && (
-                      <div
-                        className={cn(
-                          "mb-1 inline-flex h-5 w-5 items-center justify-center rounded-full tabular",
-                          d === today && "bg-primary text-primary-foreground",
-                        )}
-                      >
-                        {Number(d.slice(8))}
-                      </div>
-                    )}
-                    <div className="grid gap-0.5">
-                      {its.slice(0, 3).map((i) => (
-                        <button
-                          key={`${i.source.type}-${i.id}`}
-                          onClick={() => openItem(i)}
-                          aria-label={`${i.title} · ${i.label}`}
-                          className={cn(
-                            "flex items-center gap-1 truncate rounded px-1 text-left hover:bg-muted",
-                            i.done && "line-through opacity-50",
-                            i.source.type !== "event" &&
-                              i.date < today &&
-                              !i.done &&
-                              "text-destructive",
-                          )}
-                          title={`${i.title} · ${i.label}`}
-                        >
-                          <span
-                            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", KIND[i.kind].dot)}
-                          />
-                          <span className="hidden truncate md:inline">
-                            {i.date === d && i.start_time ? `${i.start_time} ` : ""}
-                            {i.date !== d ? "↳ " : ""}
-                            {i.title}
-                          </span>
-                        </button>
-                      ))}
-                      {its.length > 3 && (
-                        <span className="px-1 text-muted-foreground">+{its.length - 3}</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-              {Object.values(KIND).map((k) => (
-                <span key={k.label} className="flex items-center gap-1">
-                  <span className={cn("h-2 w-2 rounded-full", k.dot)} />
-                  {k.label}
-                </span>
-              ))}
-            </div>
-          </Panel>
-        </TabsContent>
-        <TabsContent value="list" className="mt-4 grid gap-4">
-          {overdue.length > 0 && (
-            <Panel title={tr("shared.overdue")} className="border-destructive/30">
-              <ul className="divide-y">
-                {overdue.map((i) => (
-                  <Row key={`${i.source.type}-${i.id}`} i={i} />
-                ))}
-              </ul>
-            </Panel>
-          )}
-          <Panel title={tr("calendar.upcoming")}>
-            <ul className="divide-y">
-              {upcoming.map((i) => (
-                <Row key={`${i.source.type}-${i.id}`} i={i} />
-              ))}
-            </ul>
-            {!upcoming.length && <Empty>{tr("calendar.nothing_planned")}</Empty>}
-          </Panel>
-        </TabsContent>
-      </Tabs>
+      <CalendarViews
+        items={items}
+        selected={selected}
+        onSelect={setSelected}
+        onOpen={openItem}
+        onCreate={(date, time) =>
+          setDlg({ initial: { kind: "termin", event_date: date, start_time: time ?? null } })
+        }
+      />
       <QuickTask
         open={!!taskDlg}
         onOpenChange={(open) => !open && setTaskDlg(null)}

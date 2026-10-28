@@ -6,6 +6,10 @@ Visible areas appear in the left navigation in the account's chosen order. On mo
 
 Bauplan can be installed from a supported browser and used offline after signing in and opening the workspace on that device. Workspace edits are saved locally and synchronized when online; document uploads are queued. Conflicting server edits require a manual choice, and sign-out explicitly warns before discarding pending work. See [offline use](offline.md) for setup and limitations.
 
+## Sign-in
+
+The responsive sign-in page uses the installed app's icon, a desktop interior photograph, and a compact mobile form. Password-manager autofill and optional OIDC sign-in remain available. The decorative photograph is hosted locally, so opening the page does not contact an external image service. Photo: [Spacejoy on Unsplash](https://unsplash.com/photos/RqO6kwm4tZY), used under the [Unsplash License](https://unsplash.com/license).
+
 ## Backups
 
 Admins can export and restore a complete database-and-documents backup from Settings. A backup can also be imported during initial setup. Restoring replaces existing data and invalidates sessions; see [backups and restore](backups.md).
@@ -77,10 +81,41 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Existing appointments can also be deleted from their editor after confirmation, including when opened from the month view. The editor closes only after deletion succeeds.
 - Event types: **Event**, **Deadline**, **Work**.
 - Start date required; **start time, end date, end time optional**. Without an end date, an entry lasts one day.
-- Multi-day entries appear on each day (following days marked "↳").
+- Multi-day entries use continuous horizontal bars across date columns in month/week views.
+  Bars wrap at week boundaries, keep a consistent row within each week, and mark clipped
+  continuations with open, dashed ends. On narrow calendars, the month uses per-day colored dots
+  and overflow counts instead of squeezed event labels; tapping a day opens all its entries.
+  Day view shows the current day number within the range.
+  Timed multi-day entries are shown above the day/week hourly grid rather than repeated as
+  full-height daily blocks; their original dates/times and editors remain unchanged.
 - Optional date/time fields start as an "Add date/time" button and can be cleared with "×".
 - Validation: end not before start.
-- Month and list views; two-way CalDAV synchronization with Apple Calendar using the existing
+- Day, week, month, year and agenda views, with Today/previous/next navigation, localized dates,
+  colored entry types, and a year overview that opens individual days. Agenda is the mobile default;
+  desktop starts in month view. The picker order is Agenda, Day, Week, Month, Year.
+  The month fits without horizontal scrolling. Day/week geometry follows the reference:
+  96 px per hour, two clickable 48 px half-hour slots, a 72 px time gutter, and a separate
+  header above the scrolling hourly grid. Day has an 800 px scroll viewport and week 736 px.
+  Timed cards have a 4 px outer inset, single-line titles, and duration-dependent time labels
+  (hidden at 25 minutes or less); short cards use reduced padding. Timelines initially open
+  at midnight. A current-time line updates every minute, only on the current date.
+  Week columns fit the available width rather than forcing a horizontally scrolling minimum.
+  Below 640 px a warning recommends day view. From 768 px day view adds the reference's
+  288 px sidebar, with a month navigator and currently running appointments.
+  The toolbar keeps all five view icons in one row and labels the active view, with 32 px
+  inactive controls and a 120 px active control (fitted down only on the smallest screens).
+  Layouts respond
+  to the calendar's actual available width, including beside the desktop sidebar. Year tiles
+  use an auto-fitting grid. Compact month badges, stacked timed cards and wrapping agenda cards
+  share source colors, focus states and full accessible labels.
+  Crowded desktop month cells offer a button to open the full day. Day/week views separate all-day ranges
+  from timed entries and place overlapping appointments in separate columns. Hour slots open the
+  existing appointment editor with a prefilled date/time. These are presentation-only changes:
+  no drag-and-drop, resizing, new storage, or alternate save path.
+- Calendar navigation and view styling are inspired by
+  [yassir-jeraidi/full-calendar](https://github.com/yassir-jeraidi/full-calendar) (MIT);
+  Bauplan implements its own presentation adapter using existing components and data.
+- Two-way CalDAV synchronization with Apple Calendar using the existing
   Bauplan email/password. Single appointments are editable; tasks and quote deadlines appear in a
   separate read-only calendar. Recurring series are not supported. The read-only iCal subscription
   remains available: [calendar integration](calendar-feed.md).

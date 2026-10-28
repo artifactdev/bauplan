@@ -1,0 +1,23 @@
+{
+  "day": "Tag",
+  "week": "Woche",
+  "month": "Monat",
+  "year": "Jahr",
+  "agenda": "Agenda",
+  "today": "Heute",
+  "previous": "Vorheriger Zeitraum",
+  "next": "Nächster Zeitraum",
+  "allDay": "Ganztägig",
+  "multiDay": "Mehrtägig",
+  "dayOf": "Tag {{current}} von {{total}}",
+  "entryCount_one": "{{count}} Eintrag",
+  "entryCount_other": "{{count}} Einträge",
+  "weekHint": "Die Wochenansicht ist auf kleinen Geräten nur eingeschränkt lesbar. Verwende einen Desktop oder die Tagesansicht.",
+  "openDay": "Tagesansicht öffnen",
+  "dayOverview": "Tagesübersicht",
+  "happeningNow": "Findet gerade statt",
+  "nothingNow": "Momentan finden keine Termine statt.",
+  "currentTime": "Aktuelle Uhrzeit: {{time}}",
+  "more": "+{{count}} weitere",
+  "createAt": "Neuer Termin am {{date}} um {{time}}"
+}

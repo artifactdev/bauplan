@@ -1,0 +1,23 @@
+{
+  "day": "Day",
+  "week": "Week",
+  "month": "Month",
+  "year": "Year",
+  "agenda": "Agenda",
+  "today": "Today",
+  "previous": "Previous period",
+  "next": "Next period",
+  "allDay": "All day",
+  "multiDay": "Multi-day",
+  "dayOf": "Day {{current}} of {{total}}",
+  "entryCount_one": "{{count}} entry",
+  "entryCount_other": "{{count}} entries",
+  "weekHint": "Weekly view is not recommended on smaller devices. Please switch to a desktop device or use the daily view instead.",
+  "openDay": "Open day view",
+  "dayOverview": "Day overview",
+  "happeningNow": "Happening now",
+  "nothingNow": "No appointments at the moment.",
+  "currentTime": "Current time: {{time}}",
+  "more": "+{{count}} more",
+  "createAt": "New appointment on {{date}} at {{time}}"
+}

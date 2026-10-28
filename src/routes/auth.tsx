@@ -2,13 +2,15 @@ import { tr } from "@/i18n";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Hammer, KeyRound } from "lucide-react";
+import { KeyRound, LoaderCircle } from "lucide-react";
 import { z } from "zod";
 import { getAuthState, loginLocal } from "@/lib/auth.functions";
 import { clearPendingOfflineLogout, hasPendingOfflineLogout } from "@/lib/offline-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -69,77 +71,103 @@ function AuthPage() {
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="hidden flex-col justify-between bg-sidebar p-10 text-sidebar-foreground lg:flex">
-        <div className="flex items-center gap-2 font-display text-lg font-semibold text-sidebar-accent-foreground">
-          <Hammer className="h-5 w-5 text-sidebar-primary" /> {tr("shared.bauplan")}
+    <main className="auth-page">
+      <section className="auth-story" aria-labelledby="auth-story-title">
+        <div className="auth-brand">
+          <img src="/app-icon-192.png" alt="" width={48} height={48} />
+          <span>{tr("shared.bauplan")}</span>
         </div>
-        <div>
-          <h1 className="text-4xl font-semibold leading-tight text-sidebar-accent-foreground">
+        <div className="auth-story-copy">
+          <h1 id="auth-story-title">
             {tr("auth.renovation")}
             <br />
             {tr("auth.everything_view")}
           </h1>
-          <p className="mt-4 max-w-md text-sidebar-foreground/80">
-            {tr(
-              "auth.budget_quotes_invoices_documents",
-            )}
-          </p>
+          <p>{tr("auth.budget_quotes_invoices_documents")}</p>
         </div>
-        <p className="text-xs text-sidebar-foreground/60">
-          {tr("auth.private_homeowners_renovators")}
-        </p>
-      </div>
-      <div className="flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-semibold">{tr("auth.sign")}</h2>
-          {fehler && (
-            <p className="mt-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {fehler}
+        <footer className="auth-story-footer">
+          <p>{tr("auth.private_homeowners_renovators")}</p>
+          <a
+            href="https://unsplash.com/photos/RqO6kwm4tZY"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {tr("auth.photo_credit")}
+          </a>
+        </footer>
+      </section>
+      <section className="auth-form-panel" aria-labelledby="auth-form-title">
+        <div className="auth-form-content">
+          <div className="auth-brand auth-mobile-brand">
+            <img src="/app-icon-192.png" alt="" width={56} height={56} />
+            <span>{tr("shared.bauplan")}</span>
+          </div>
+          <header className="flex flex-col gap-2">
+            <h2 id="auth-form-title" className="text-3xl font-semibold tracking-tight">
+              {tr("auth.sign")}
+            </h2>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {tr("auth.continue_project")}
             </p>
+          </header>
+          {fehler && (
+            <Alert variant="destructive" className="mt-6">
+              <AlertDescription>{fehler}</AlertDescription>
+            </Alert>
           )}
           {oidc.enabled && (
             <>
-              <Button variant="outline" className="mt-6 w-full" onClick={sso}>
-                <KeyRound className="h-4 w-4" /> {oidc.label}
+              <Button variant="outline" className="mt-8 h-12 w-full" onClick={sso} disabled={busy}>
+                <KeyRound data-icon="inline-start" /> {oidc.label}
               </Button>
               <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-                <div className="h-px flex-1 bg-border" />
+                <Separator className="flex-1" />
                 {tr("auth.or")}
-                <div className="h-px flex-1 bg-border" />
+                <Separator className="flex-1" />
               </div>
             </>
           )}
-          <form onSubmit={submit} className={`${oidc.enabled ? "" : "mt-6"} grid gap-4`}>
-            <div className="grid gap-1.5">
+          <form onSubmit={submit} className="auth-form" data-sso={oidc.enabled} aria-busy={busy}>
+            <div className="flex flex-col gap-2">
               <Label htmlFor="email">{tr("shared.email")}</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="h-12"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="pw">{tr("shared.password")}</Label>
               <Input
                 id="pw"
+                name="password"
                 type="password"
+                autoComplete="current-password"
+                className="h-12"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy} className="mt-1 h-12">
+              {busy && (
+                <LoaderCircle data-icon="inline-start" className="motion-safe:animate-spin" />
+              )}
               {tr("auth.sign")}
             </Button>
           </form>
-          <p className="mt-4 text-sm text-muted-foreground">
+          <p className="mt-7 text-sm leading-relaxed text-muted-foreground">
             {tr("auth.no_account_yet_ask")}
           </p>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

@@ -64,7 +64,7 @@ it("keeps the complete title, metadata, range and controls available", () => {
 });
 it.each([title, "Edit"])("opens the task editor through %s", (name) => {
   mount();
-  fireEvent.click(screen.getByRole("button", { name, exact: true }));
+  fireEvent.click(screen.getByRole("button", { name }));
   expect(screen.getByRole("dialog")).toHaveTextContent("task");
 });
 it("preserves completion and confirmed deletion", () => {

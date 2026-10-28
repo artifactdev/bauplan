@@ -96,13 +96,19 @@ function renderCalendar() {
 }
 
 describe("calendar source dialogs", () => {
-  it("shows a multi-day task on every covered day and edits its start date", async () => {
+  it("shows a multi-day task as continuous weekly bars and edits its start date", async () => {
     const month = todayISO().slice(0, 7);
     mocks.start = `${month}-10`;
     mocks.date = `${month}-12`;
     renderCalendar();
-    expect(screen.getAllByRole("button", { name: /Remove panels/ })).toHaveLength(3);
-    fireEvent.click(screen.getAllByRole("button", { name: /Remove panels/ })[1]!);
+    const bars = screen.getAllByRole("button", { name: /Remove panels/ });
+    expect(
+      bars.reduce(
+        (days, bar) => days + Number(bar.parentElement!.style.gridColumn.split("span ")[1]),
+        0,
+      ),
+    ).toBe(3);
+    fireEvent.click(bars[0]!);
     expect(screen.getByLabelText("Start date")).toHaveValue(mocks.start);
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: `${month}-09` } });
     fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
@@ -123,9 +129,9 @@ describe("calendar source dialogs", () => {
     mocks.start = start.toISOString().slice(0, 10);
     mocks.date = end.toISOString().slice(0, 10);
     renderCalendar();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "List" }), { button: 0, ctrlKey: false });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Agenda" }), { button: 0, ctrlKey: false });
     expect(screen.queryByRole("heading", { name: "Overdue" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remove panels" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Remove panels/ })).toBeInTheDocument();
   });
   it("deletes an appointment from its modal after confirmation and closes on success", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -154,7 +160,7 @@ describe("calendar source dialogs", () => {
     it(`opens and updates the actual task in the ${view} view`, async () => {
       renderCalendar();
       if (view === "list")
-        fireEvent.mouseDown(screen.getByRole("tab", { name: "List" }), {
+        fireEvent.mouseDown(screen.getByRole("tab", { name: "Agenda" }), {
           button: 0,
           ctrlKey: false,
         });
@@ -177,7 +183,7 @@ describe("calendar source dialogs", () => {
     it(`opens and updates the linked quote deadline in the ${view} view`, async () => {
       renderCalendar();
       if (view === "list")
-        fireEvent.mouseDown(screen.getByRole("tab", { name: "List" }), {
+        fireEvent.mouseDown(screen.getByRole("tab", { name: "Agenda" }), {
           button: 0,
           ctrlKey: false,
         });
@@ -199,7 +205,7 @@ describe("calendar source dialogs", () => {
     it(`opens the original appointment in the ${view} view even when a task has the same ID`, async () => {
       renderCalendar();
       if (view === "list")
-        fireEvent.mouseDown(screen.getByRole("tab", { name: "List" }), {
+        fireEvent.mouseDown(screen.getByRole("tab", { name: "Agenda" }), {
           button: 0,
           ctrlKey: false,
         });
