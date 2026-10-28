@@ -16,7 +16,10 @@ vi.mock("@/hooks/use-workspace", () => ({
   useMutations: () => ({}),
   useOfflineSync: () => ({ ...state, conflicts: [], syncing: false, sync: vi.fn() }),
 }));
-vi.mock("@/hooks/use-navigation", () => ({ useNavigation: () => ({}) }));
+vi.mock("@/hooks/use-navigation", () => ({
+  useNavigation: () => ({}),
+  useNavItems: () => ({ navigation: {}, items: [] }),
+}));
 vi.mock("@/components/app/AppearanceProvider", () => ({
   AccountAppearance: ({ children }: { children: ReactNode }) => children,
 }));

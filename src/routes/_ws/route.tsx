@@ -1,5 +1,5 @@
 import { tr } from "@/i18n";
-import { createFileRoute, Link, Outlet, redirect, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { version as appVersion } from "../../../package.json";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import {
   Hammer,
   Settings,
-  MoreHorizontal,
   UserRound,
   LogOut,
   Pencil,
@@ -40,9 +39,8 @@ import { getUpdateReady, subscribeUpdateReady } from "@/lib/sw-update";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
 import { SharedImport } from "@/components/app/SharedImport";
-import { navigationItem } from "@/components/app/navigation-items";
-import { DEFAULT_NAVIGATION, visibleNavigation } from "@/lib/navigation";
-import { useNavigation } from "@/hooks/use-navigation";
+import { MobileNav } from "@/components/app/MobileNav";
+import { useNavItems } from "@/hooks/use-navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -164,15 +162,7 @@ function Shell() {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const project = ws.projects[0];
   const [projectOpen, setProjectOpen] = useState(false);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const navigation = useNavigation(auth.user!.id);
-  const items = visibleNavigation(navigation.data ?? DEFAULT_NAVIGATION).map((path) => {
-    const item = navigationItem(path);
-    return { ...item, label: item.label() };
-  });
-  const primaryNav = items.slice(0, 4);
-  const secondaryNav = items.slice(4);
-  const moreActive = secondaryNav.some((n) => n.to === pathname) || pathname === "/einstellungen";
+  const { navigation, items } = useNavItems(auth.user!.id);
 
   useEffect(() => {
     const onInstallPrompt = (event: Event) => {
@@ -407,51 +397,7 @@ function Shell() {
         </main>
       </div>
 
-      <nav
-        aria-label={t("navigation")}
-        className="fixed inset-x-0 bottom-0 z-30 grid gap-1 border-t bg-card/60 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 shadow-card backdrop-blur-xl md:hidden"
-        style={{
-          gridTemplateColumns: `repeat(${primaryNav.length + 1}, minmax(0, 1fr))`,
-        }}
-      >
-        {primaryNav.map((n) => (
-          <Link
-            key={n.to}
-            to={n.to}
-            activeOptions={{ exact: n.to === "/" }}
-            className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-xs text-muted-foreground transition-colors"
-            activeProps={{ className: "bg-primary/10 text-primary font-semibold" }}
-          >
-            <n.icon className="h-5 w-5" /> {n.label}
-          </Link>
-        ))}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-xs text-muted-foreground transition-colors",
-                moreActive && "bg-primary/10 font-semibold text-primary",
-              )}
-            >
-              <MoreHorizontal className="h-5 w-5" />
-              {t("more")}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" sideOffset={12}>
-            {[
-              ...secondaryNav,
-              { to: "/einstellungen", label: tr("shared.settings"), icon: Settings } as const,
-            ].map((n) => (
-              <DropdownMenuItem asChild key={n.to} className="min-h-11">
-                <Link to={n.to}>
-                  <n.icon />
-                  {n.label}
-                </Link>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </nav>
+      <MobileNav items={items} label={t("navigation")} />
       {project && (
         <ProjectDialog project={project} open={projectOpen} onOpenChange={setProjectOpen} />
       )}

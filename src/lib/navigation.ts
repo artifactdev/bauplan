@@ -59,3 +59,22 @@ export function parseNavigation(value: unknown): NavigationPreferences {
 export function visibleNavigation(value: NavigationPreferences) {
   return value.order.filter((path) => !value.hidden.includes(path));
 }
+
+/** Index of the item matching the current path, or -1 (e.g. settings). */
+export function activeNavIndex(items: readonly { to: string }[], pathname: string) {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return items.findIndex((item) =>
+    item.to === "/" ? path === "/" : path === item.to || path.startsWith(`${item.to}/`),
+  );
+}
+
+export const BAR_HIDE_AFTER = 64;
+const BAR_JITTER = 8;
+
+/** Hide the bottom bar when scrolling down past a threshold, show it when scrolling up. */
+export function nextBarVisibility(visible: boolean, lastY: number, y: number) {
+  if (y <= BAR_HIDE_AFTER) return true;
+  if (y - lastY > BAR_JITTER) return false;
+  if (y < lastY) return true;
+  return visible;
+}

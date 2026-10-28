@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getNavigation } from "@/lib/data.functions";
+import { navigationItem } from "@/components/app/navigation-items";
+import { DEFAULT_NAVIGATION, visibleNavigation } from "@/lib/navigation";
 
 export function useNavigation(userId: string) {
   const [online, setOnline] = useState(typeof navigator === "undefined" || navigator.onLine);
@@ -28,4 +30,14 @@ export function useNavigation(userId: string) {
     };
   }, [refetch]);
   return query;
+}
+
+/** Resolved, ordered navigation items shared by the sidebar and the mobile bar. */
+export function useNavItems(userId: string) {
+  const navigation = useNavigation(userId);
+  const items = visibleNavigation(navigation.data ?? DEFAULT_NAVIGATION).map((path) => {
+    const item = navigationItem(path);
+    return { ...item, label: item.label() };
+  });
+  return { navigation, items };
 }
