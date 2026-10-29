@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { DEFAULT_APPEARANCE } from "@/lib/appearance";
 import { DEFAULT_NAVIGATION } from "@/lib/navigation";
@@ -142,14 +142,18 @@ describe("Bauplan backups", () => {
     expect(await repo.getSyncGeneration()).not.toBe(syncGeneration);
     // The uploads directory may be a mount point, so restore must swap its contents in place.
     expect(statSync(uploads).ino).toBe(uploadsInode);
-    expect(readdirSync(uploads).sort()).toEqual([storagePath]);
+    // Restore moves files into the folder of their category.
+    const restoredPath = storagePath.replace("documents/Sonstiges/", "documents/Invoice/");
+    expect(storagePath).toMatch(/^documents\/Sonstiges\//);
+    expect(uploadedFiles(uploads)).toEqual([restoredPath]);
     expect(readdirSync(dir).filter((name) => name.includes("backup"))).toEqual([]);
 
     const workspace = await repo.getAll();
     expect(workspace.projects.map((item) => item.id)).toEqual([project["id"]]);
     expect(workspace.documents).toHaveLength(1);
+    expect(workspace.documents[0]?.storage_path).toBe(restoredPath);
     expect(workspace.offers[0]).toMatchObject({ valid_until: "2026-11-10" });
-    expect(await repo.readFile(storagePath)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(await repo.readFile(restoredPath)).toEqual(new Uint8Array([1, 2, 3]));
     expect(await repo.readFile(extraFile)).toBeNull();
     expect(db.prepare("SELECT * FROM app_sessions").all()).toEqual([]);
     expect(db.prepare("SELECT value FROM app_settings WHERE key = ?").get("oidc")?.["value"]).toBe(
@@ -235,7 +239,7 @@ describe("Bauplan backups", () => {
     await expect(repo.restoreBackup(invalidDatabase, files)).rejects.toThrow();
     expect((await repo.getAll()).projects.map((item) => item.id)).toEqual(["project-1"]);
     expect(await repo.readFile(files[0]!.name)).toEqual(files[0]!.bytes);
-    expect(readdirSync(join(dir, "uploads")).sort()).toEqual(files.map((file) => file.name).sort());
+    expect(uploadedFiles(join(dir, "uploads"))).toEqual(files.map((file) => file.name).sort());
   });
 
   it("imports old invoice records as expenses and supplies missing nullable expense fields", async () => {
@@ -335,3 +339,10 @@ describe("Bauplan backups", () => {
     expect(db.prepare("SELECT email FROM app_users ORDER BY email").all()).toHaveLength(1);
   });
 });
+
+function uploadedFiles(directory: string) {
+  return readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(directory, join(entry.parentPath, entry.name)).split(sep).join("/"))
+    .sort();
+}

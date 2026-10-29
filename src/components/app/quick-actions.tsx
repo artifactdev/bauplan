@@ -1,6 +1,7 @@
 import { tr } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
+import { collectTags } from "@/lib/tags";
 import { useTaskAssignees } from "@/hooks/use-task-assignees";
 import { costItemOptions, tradeOptions } from "@/lib/options";
 import { DOC_CATEGORIES, PHASES } from "@/lib/schema";
@@ -222,7 +223,13 @@ export function QuickUpload({
             type: "select",
             options: ws.tasks.map((t) => ({ value: t.id, label: t.title })),
           },
-          { name: "tags", label: tr("shared.tags_comma_separated"), full: true },
+          {
+            name: "tags",
+            label: tr("documents.tags"),
+            type: "tags",
+            full: true,
+            suggestions: collectTags(ws.documents.map((d) => d.tags)),
+          },
           { name: "description", label: tr("shared.description"), type: "textarea" },
         ]}
         initial={initial ?? { category: "Sonstiges", recognize: true }}

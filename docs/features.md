@@ -69,6 +69,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - **Live scan assistance:** analysis reuses a low-resolution canvas and transfers disposable frames to the worker, with only one detection in flight. Supported browsers schedule analysis against fresh video frames; others use a paced fallback. Only analysis resolution/cadence adapts on slower devices, not the saved scan's resolution. Candidate ranking uses edge support and geometry, and the outline is smoothed and expires when observations become stale.
 - **Automatic capture:** optional and off when opening the scanner. Enable the switch to photograph a fully visible, sufficiently large document after several consistent detections held for at least 1.2 seconds with adequate estimated detail. Movement, blur, weak edges, clipped pages, backgrounding, and old observations reset eligibility. The photo opens the existing crop/review step; nothing is automatically saved. The choice lasts for the current scanner session, including adding another page. Manual capture and image import remain available if detection fails. This is a browser-based heuristic, not Apple's native document scanner; feature support and actual camera performance must be checked on the target device.
 - Categories, tags, description; assign to trade, task, or cost item.
+- Tags are picked with a tag picker: chosen tags appear as removable chips, and the search lists tags already used in the same area (documents or collections) or creates a new one. Tags are not shared between documents and collections.
 - Responsive document rows keep filenames readable, put related records on separate lines, and place actions in a dedicated lower toolbar on smaller screens. Desktop keeps actions beside the document details; touch targets remain at least 44 × 44 CSS pixels.
 - The mobile document actions menu closes when selecting an action, clicking outside, or pressing Escape; cancelling the delete confirmation also leaves the menu closed.
 - After upload: text recognition (self-hosting only) and an "Assign as" dialog (expense, quote, or just store). Recognized invoices are filed as expenses. See [ocr.md](ocr.md).
@@ -129,7 +130,13 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 
 ## Collections
 
-Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, image, notes, tags, room, trade, price, favorite; filterable.
+Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, images, notes, tags, room, trade, price, favorite; filterable.
+
+- The collection is picked from existing collections; **New** adds one inline (collections are plain names on ideas, there is no separate table).
+- An idea can have several images (camera or multi-select). They are stored as collection images (`idea_images`), not as documents, so they never appear in Documents. An older single document image in `ideas.document_id` is shown first.
+- Clicking the image opens a gallery that you can swipe, page with arrow keys or the buttons, and that shows "image x of y".
+- Removing an image in the edit dialog deletes it; a linked legacy document is only unlinked and stays in Documents. Deleting an idea deletes its images.
+- Tags use the same tag picker as documents, suggesting tags already used in collections.
 
 ## Contacts
 

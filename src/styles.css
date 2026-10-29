@@ -246,6 +246,11 @@
   outline-offset: 3px;
 }
 
+/* Command palette search sits flush in its popover; caret and active item show focus. */
+[cmdk-input]:focus-visible {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

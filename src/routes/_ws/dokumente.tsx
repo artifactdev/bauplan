@@ -60,6 +60,7 @@ import { QuickUpload } from "@/components/app/quick-actions";
 import { DocumentScanner } from "@/components/app/DocumentScanner";
 import { resolveFileUrl } from "@/components/app/doc-open";
 import { AssignDialog } from "@/components/app/AssignDialog";
+import { collectTags, splitTags } from "@/lib/tags";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DocumentPreview } from "@/components/app/DocumentPreview";
@@ -486,18 +487,14 @@ function DocsPage() {
                     )}
                     {d.tags && (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {d.tags
-                          .split(",")
-                          .map((t) => t.trim())
-                          .filter(Boolean)
-                          .map((t) => (
-                            <span
-                              key={t}
-                              className="max-w-full rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]"
-                            >
-                              #{t}
-                            </span>
-                          ))}
+                        {splitTags(d.tags).map((t) => (
+                          <span
+                            key={t}
+                            className="max-w-full rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+                          >
+                            #{t}
+                          </span>
+                        ))}
                       </div>
                     )}
                     {d.description && (
@@ -815,7 +812,13 @@ function DocsPage() {
             options: costItemOptions(ws),
           },
           { name: "task_id", label: tr("shared.task"), type: "select", options: taskOptions(ws) },
-          { name: "tags", label: tr("documents.tags"), full: true },
+          {
+            name: "tags",
+            label: tr("documents.tags"),
+            type: "tags",
+            full: true,
+            suggestions: collectTags(ws.documents.map((d) => d.tags)),
+          },
           { name: "description", label: tr("shared.description"), type: "textarea" },
         ]}
         initial={edit ? { ...edit } : undefined}

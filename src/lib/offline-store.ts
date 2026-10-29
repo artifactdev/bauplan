@@ -214,7 +214,11 @@ export async function clearAccountData(userId: string) {
 
 export function applyChange(workspace: Workspace, change: OfflineChange): Workspace {
   const copy = structuredClone(workspace);
-  const rows = copy[change.table] as unknown as Record<string, unknown>[];
+  // Snapshots saved by older versions may lack newer tables.
+  const rows = ((copy as unknown as Record<string, unknown[]>)[change.table] ??= []) as Record<
+    string,
+    unknown
+  >[];
   const index = rows.findIndex((item) => item["id"] === change.rowId);
   if (change.action === "delete") {
     if (index !== -1) rows.splice(index, 1);

@@ -2,6 +2,8 @@ import { createMiddleware, createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { cleanRow, TABLE_NAMES, type TableName } from "./schema";
+import { collectionFolder, documentFolder } from "./storage-paths";
+import type { Repo } from "@/server/repo";
 import { buildSeed } from "./seed";
 import {
   OCR_LANGUAGES,
@@ -474,16 +476,36 @@ export const deleteRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((d: unknown) => z.object({ table: tableSchema, id: z.string() }).parse(d))
   .handler(async ({ context, data }) => {
-    let storagePath: string | null = null;
-    if (data.table === "documents") {
-      const ws = await context.repo.getAll();
-      const doc = ws.documents.find((x) => x.id === data.id);
-      storagePath = doc?.storage_path ?? null;
-    }
+    const owned = await ownedFiles(context.repo, data.table, data.id);
     await context.repo.remove(data.table, data.id);
-    if (storagePath) await context.repo.deleteFile(storagePath);
+    await removeOwnedFiles(context.repo, owned);
     return { ok: true };
   });
+
+type OwnedFiles = { paths: string[]; images: string[] };
+
+/** Files (and idea images) that belong to a row and must go when it is deleted. */
+async function ownedFiles(repo: Repo, table: TableName, id: string): Promise<OwnedFiles> {
+  if (table !== "documents" && table !== "idea_images" && table !== "ideas")
+    return { paths: [], images: [] };
+  const ws = await repo.getAll();
+  if (table === "documents") {
+    const path = ws.documents.find((doc) => doc.id === id)?.storage_path;
+    return { paths: path ? [path] : [], images: [] };
+  }
+  const images = ws.idea_images.filter((image) =>
+    table === "ideas" ? image.idea_id === id : image.id === id,
+  );
+  return {
+    paths: images.flatMap((image) => (image.storage_path ? [image.storage_path] : [])),
+    images: table === "ideas" ? images.map((image) => image.id) : [],
+  };
+}
+
+async function removeOwnedFiles(repo: Repo, owned: OwnedFiles) {
+  for (const id of owned.images) await repo.remove("idea_images", id);
+  for (const path of owned.paths) await repo.deleteFile(path);
+}
 
 export const syncWorkspaceChanges = createServerFn({ method: "POST" })
   .middleware([dataContext])
@@ -522,13 +544,12 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
         "assignee_id" in change.row
       )
         await validateTaskAssignee(change.row["assignee_id"]);
-      const document =
-        change.table === "documents" && change.action === "delete"
-          ? (await context.repo.getAll()).documents.find((item) => item.id === change.rowId)
-          : undefined;
+      const owned =
+        change.action === "delete"
+          ? await ownedFiles(context.repo, change.table, change.rowId)
+          : { paths: [], images: [] };
       const result = await context.repo.applySyncChange(context.user.id, syncChange);
-      if (result.applied && document?.storage_path)
-        await context.repo.deleteFile(document.storage_path);
+      if (result.applied) await removeOwnedFiles(context.repo, owned);
       results.push({ id: change.id, ...result });
     }
     (await import("@/server/push")).wakePush();
@@ -555,10 +576,11 @@ export const uploadDocument = createServerFn({ method: "POST" })
         "Der Datenstand wurde durch eine Wiederherstellung ersetzt. Melde dich ab und verwerfe die veralteten Offline-Änderungen.",
       );
     const requestedId = typeof data.meta["id"] === "string" ? data.meta["id"] : undefined;
+    const ideaId = typeof data.meta["idea_id"] === "string" ? data.meta["idea_id"] : undefined;
+    const table = ideaId ? "idea_images" : "documents";
+    const ws = await context.repo.getAll();
     if (requestedId) {
-      const existing = (await context.repo.getAll()).documents.find(
-        (doc) => doc.id === requestedId,
-      );
+      const existing = ws[table].find((row) => row.id === requestedId);
       if (existing) {
         return {
           id: existing.id,
@@ -569,10 +591,20 @@ export const uploadDocument = createServerFn({ method: "POST" })
     }
     const bytes = new Uint8Array(await data.file.arrayBuffer());
     const mime = data.file.type || "application/octet-stream";
-    const storage_path = await context.repo.putFile(data.file.name, mime, bytes);
-    const documentRow = cleanRow("documents", {
+    let folder: string;
+    if (ideaId) {
+      const idea = ws.ideas.find((row) => row.id === ideaId);
+      if (!idea) throw new Error("collections.idea_not_found");
+      folder = collectionFolder(idea.collection);
+    } else {
+      folder = documentFolder(
+        typeof data.meta["category"] === "string" ? data.meta["category"] : null,
+      );
+    }
+    const storage_path = await context.repo.putFile(data.file.name, mime, bytes, folder);
+    const documentRow = cleanRow(table, {
       name: data.file.name,
-      category: "Sonstiges",
+      ...(ideaId ? {} : { category: "Sonstiges" }),
       ...data.meta,
       storage_path,
       mime_type: mime,
@@ -582,7 +614,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
       typeof data.meta["created_at"] === "string" ? data.meta["created_at"] : undefined;
     let row: Record<string, unknown>;
     try {
-      row = await context.repo.insert("documents", {
+      row = await context.repo.insert(table, {
         ...documentRow,
         ...(requestedId ? { id: requestedId } : {}),
         ...(createdAt ? { created_at: createdAt } : {}),

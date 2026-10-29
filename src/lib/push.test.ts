@@ -13,6 +13,7 @@ const empty = (): Workspace => ({
   events: [],
   expenses: [],
   ideas: [],
+  idea_images: [],
   contacts: [],
   budget_pots: [],
   funding_entries: [],

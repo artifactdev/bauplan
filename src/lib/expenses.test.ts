@@ -73,6 +73,7 @@ const workspace: Workspace = {
   tasks: [],
   events: [],
   ideas: [],
+  idea_images: [],
   budget_pots: [],
   funding_entries: [],
   credit_terms: [],

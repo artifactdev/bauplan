@@ -18,6 +18,14 @@ import { calendarEtag, checkConditions, DavError, type DavConditions } from "./c
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
 import { USER_NAVIGATION_TABLE } from "@/lib/schema";
 import { migrateDatabase } from "./migrations";
+import {
+  convertIdeaDocuments,
+  organizeUploads,
+  removeEmptyParent,
+  resolveUpload,
+  type UploadsEnv,
+} from "./uploads";
+import { DEFAULT_DOCUMENT_FOLDER, documentFolder, isSafeStoragePath } from "@/lib/storage-paths";
 import { validateFundingEntry } from "@/lib/funding";
 import { validateTaskDates } from "@/lib/tasks";
 import {
@@ -56,7 +64,8 @@ export interface Repo {
     actorId?: string,
   ): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
-  putFile(name: string, mime: string, bytes: Uint8Array): Promise<string>;
+  /** Stores a file in a folder relative to the uploads root, e.g. documentFolder(category). */
+  putFile(name: string, mime: string, bytes: Uint8Array, folder?: string): Promise<string>;
   fileUrl(path: string): Promise<string>;
   deleteFile(path: string): Promise<void>;
   readFile(path: string): Promise<Uint8Array | null>;
@@ -128,6 +137,12 @@ function uploadsDir(path: typeof import("node:path")) {
   return process.env["UPLOADS_DIR"] || path.join(dataDir(), "uploads");
 }
 
+async function uploadsEnv(): Promise<UploadsEnv> {
+  const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
+  const path = await nodeImport<typeof import("node:path")>("node:" + "path");
+  return { fs, path, root: uploadsDir(path) };
+}
+
 async function openDb(): Promise<SqliteDb> {
   const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
   const path = await nodeImport<typeof import("node:path")>("node:" + "path");
@@ -142,6 +157,11 @@ async function openDb(): Promise<SqliteDb> {
   } catch (error) {
     db.close();
     throw error;
+  }
+  try {
+    organizeUploads(db, await uploadsEnv());
+  } catch (error) {
+    console.warn("[uploads] Could not organize upload folders", error);
   }
   return db;
 }
@@ -323,19 +343,27 @@ export function sqliteRepo(): Repo {
       const directory = uploadsDir(path);
       const files: BackupFile[] = [];
       let totalBytes = 0;
-      for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
-        if (entry.isDirectory() && entry.name.startsWith(".bauplan-restore-")) continue;
-        if (!entry.isFile())
-          throw new Error("Das Upload-Verzeichnis enthält einen ungültigen Eintrag.");
-        const filePath = path.join(directory, entry.name);
-        const fileStat = await fs.stat(filePath);
-        totalBytes += fileStat.size;
-        if (totalBytes > maxBytes) throw new Error("Die Uploads überschreiten die Backup-Größe.");
-        files.push({
-          name: entry.name,
-          bytes: new Uint8Array(await fs.readFile(filePath)),
-        });
-      }
+      const walk = async (relative: string) => {
+        for (const entry of await fs.readdir(path.join(directory, relative), {
+          withFileTypes: true,
+        })) {
+          if (!relative && entry.isDirectory() && entry.name.startsWith(".bauplan-restore-"))
+            continue;
+          const name = relative ? `${relative}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            await walk(name);
+            continue;
+          }
+          if (!entry.isFile() || !isSafeStoragePath(name))
+            throw new Error("Das Upload-Verzeichnis enthält einen ungültigen Eintrag.");
+          const filePath = path.join(directory, ...name.split("/"));
+          const fileStat = await fs.stat(filePath);
+          totalBytes += fileStat.size;
+          if (totalBytes > maxBytes) throw new Error("Die Uploads überschreiten die Backup-Größe.");
+          files.push({ name, bytes: new Uint8Array(await fs.readFile(filePath)) });
+        }
+      };
+      await walk("");
       return {
         database: {
           tables,
@@ -386,16 +414,11 @@ export function sqliteRepo(): Repo {
         await fs.mkdir(stagedUploads);
         await fs.mkdir(previousUploads);
         for (const file of files) {
-          if (
-            !file.name ||
-            file.name === "." ||
-            file.name === ".." ||
-            file.name !== path.basename(file.name) ||
-            file.name.includes("/") ||
-            file.name.includes("\\")
-          )
+          if (!isSafeStoragePath(file.name) || file.name.startsWith(".bauplan-restore-"))
             throw new Error("Das Backup enthält einen unsicheren Dateipfad.");
-          await fs.writeFile(path.join(stagedUploads, file.name), file.bytes, { flag: "wx" });
+          const target = path.join(stagedUploads, ...file.name.split("/"));
+          await fs.mkdir(path.dirname(target), { recursive: true });
+          await fs.writeFile(target, file.bytes, { flag: "wx" });
         }
 
         d.exec("BEGIN IMMEDIATE");
@@ -455,6 +478,9 @@ export function sqliteRepo(): Repo {
           );
         }
 
+        // Older backups store files flat and link idea images as documents.
+        convertIdeaDocuments(d);
+
         for (const name of await fs.readdir(liveDirectory)) {
           if (name === stageName) continue;
           await fs.rename(path.join(liveDirectory, name), path.join(previousUploads, name));
@@ -477,7 +503,7 @@ export function sqliteRepo(): Repo {
         }
         for (const name of movedNew) {
           try {
-            await fs.rm(path.join(liveDirectory, name), { force: true });
+            await fs.rm(path.join(liveDirectory, name), { recursive: true, force: true });
           } catch (cleanupError) {
             recoveryErrors.push(cleanupError);
           }
@@ -510,6 +536,7 @@ export function sqliteRepo(): Repo {
           { cause: error },
         );
       }
+      organizeUploads(d, await uploadsEnv());
     },
     async insert(table, row, actorId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
@@ -535,8 +562,11 @@ export function sqliteRepo(): Repo {
         throw error;
       }
     },
-    async update(table, id, patch, actorId) {
+    async update(table, id, input, actorId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
+      // File locations are managed by the server and follow category or collection changes.
+      const { storage_path: _storagePath, ...managed } = input;
+      const patch = table === "documents" || table === "idea_images" ? managed : input;
       const d = await db();
       if (table === "tasks") {
         const existing = d.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
@@ -575,6 +605,15 @@ export function sqliteRepo(): Repo {
           d.exec("ROLLBACK TO task_notification; RELEASE task_notification");
         throw error;
       }
+      const scope =
+        table === "documents" && "category" in patch
+          ? { documents: [id] }
+          : table === "idea_images" && "idea_id" in patch
+            ? { ideaImages: [id] }
+            : table === "ideas" && "collection" in patch
+              ? { ideas: [id] }
+              : null;
+      if (scope) organizeUploads(d, await uploadsEnv(), scope);
     },
     async remove(table, id) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
@@ -586,26 +625,30 @@ export function sqliteRepo(): Repo {
         throw new Error("funding.source_in_use");
       d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
     },
-    async putFile(name, _mime, bytes) {
-      const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
-      const path = await nodeImport<typeof import("node:path")>("node:" + "path");
+    async putFile(name, _mime, bytes, folder = documentFolder(DEFAULT_DOCUMENT_FOLDER)) {
       await db();
-      const rel = `${crypto.randomUUID()}-${safeName(name)}`;
-      fs.writeFileSync(path.join(uploadsDir(path), rel), bytes);
+      const env = await uploadsEnv();
+      const rel = `${folder}/${crypto.randomUUID()}-${safeName(name)}`;
+      const full = resolveUpload(env, rel);
+      if (!full) throw new Error("Ungültiger Speicherort.");
+      env.fs.mkdirSync(env.path.dirname(full), { recursive: true });
+      env.fs.writeFileSync(full, bytes);
       return rel;
     },
     async fileUrl(p) {
       return `/api/files/${encodeURIComponent(p)}`;
     },
     async deleteFile(p) {
-      const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
-      const path = await nodeImport<typeof import("node:path")>("node:" + "path");
+      const env = await uploadsEnv();
+      const full = resolveUpload(env, p);
+      if (!full) return;
       try {
-        fs.unlinkSync(path.join(uploadsDir(path), path.basename(p)));
+        env.fs.unlinkSync(full);
       } catch (error) {
         if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT"))
           throw error;
       }
+      removeEmptyParent(env, full);
     },
     readFile: (p) => readSqliteFile(p),
     async readOcrSettings() {
@@ -626,10 +669,11 @@ export function sqliteRepo(): Repo {
 }
 
 export async function readSqliteFile(p: string): Promise<Uint8Array | null> {
-  const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
-  const path = await nodeImport<typeof import("node:path")>("node:" + "path");
-  const full = path.join(uploadsDir(path), path.basename(p));
-  return fs.existsSync(full) ? new Uint8Array(fs.readFileSync(full)) : null;
+  const env = await uploadsEnv();
+  const full = resolveUpload(env, p);
+  return full && env.fs.existsSync(full) && env.fs.statSync(full).isFile()
+    ? new Uint8Array(env.fs.readFileSync(full))
+    : null;
 }
 
 export type PaperlessConfig = {
@@ -993,8 +1037,11 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
           .all(document["size"]);
         for (const candidate of candidates) {
           if (typeof candidate["storage_path"] !== "string") continue;
-          const file = path.join(uploadsDir(path), path.basename(candidate["storage_path"]));
-          if (!fs.existsSync(file)) {
+          const file = resolveUpload(
+            { fs, path, root: uploadsDir(path) },
+            candidate["storage_path"],
+          );
+          if (!file || !fs.existsSync(file)) {
             console.warn("[paperless] Duplicate check found a missing local file", candidate["id"]);
             continue;
           }

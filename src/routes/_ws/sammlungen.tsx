@@ -1,9 +1,12 @@
 import { tr } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ExternalLink, ImagePlus, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
+import { Camera, ExternalLink, ImagePlus, Images, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
-import { resolveFileUrl } from "@/components/app/doc-open";
+import { ImageGallery, type GalleryImage } from "@/components/app/ImageGallery";
+import { useFileUrl } from "@/components/app/doc-open";
+import { ideaImages, type IdeaImageRef } from "@/lib/ideas";
+import { collectTags, splitTags } from "@/lib/tags";
 import { EntityDialog } from "@/components/app/EntityDialog";
 import { Empty, PageHeader } from "@/components/app/ui-bits";
 import { tradeName, tradeOptions } from "@/lib/options";
@@ -26,7 +29,6 @@ export const Route = createFileRoute("/_ws/sammlungen")({
   component: CollectionsPage,
 });
 
-const splitTags = (t: string | null) => (t ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 
 function CollectionsPage() {
   const { ws } = useWorkspace();
@@ -39,14 +41,16 @@ function CollectionsPage() {
   const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
-  const [fileName, setFileName] = useState("");
+  const [pending, setPending] = useState<File[]>([]);
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const [gallery, setGallery] = useState<{ title: string; images: GalleryImage[]; index: number } | null>(null);
 
   const collections = useMemo(() => {
     const m = new Map<string, number>();
     ws.ideas.forEach((i) => m.set(i.collection, (m.get(i.collection) ?? 0) + 1));
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], "de"));
   }, [ws.ideas]);
-  const tags = useMemo(() => [...new Set(ws.ideas.flatMap((i) => splitTags(i.tags)))].sort((a, b) => a.localeCompare(b, "de")), [ws.ideas]);
+  const tags = useMemo(() => collectTags(ws.ideas.map((i) => i.tags)), [ws.ideas]);
 
   const list = ws.ideas
     .filter((i) => !col || i.collection === col)
@@ -56,14 +60,16 @@ function CollectionsPage() {
     .filter((i) => !q || [i.title, i.notes, i.url, i.room, i.tags].join(" ").toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => Number(b.favorite) - Number(a.favorite) || (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 
-  const docPath = (id: string | null) => (id ? ws.documents.find((d) => d.id === id)?.storage_path ?? null : null);
+  const imagesOf = (i: Pick<Idea, "id" | "document_id">) => ideaImages(i, ws.idea_images ?? [], ws.documents);
+  const editImages = dlg?.id ? imagesOf({ id: dlg.id, document_id: (dlg.initial?.["document_id"] as string | null) ?? null }) : [];
+  const toGallery = (refs: IdeaImageRef[]): GalleryImage[] => refs.map((d) => ({ id: d.id, path: d.storage_path, name: d.name }));
 
-  const pickFile = (f: File | undefined) => {
-    if (!f || !fileRef.current) return;
-    const dt = new DataTransfer();
-    dt.items.add(f);
-    fileRef.current.files = dt.files;
-    setFileName(f.name);
+  const addFiles = (files: FileList | null) => {
+    if (files?.length) setPending((p) => [...p, ...Array.from(files)]);
+  };
+  const resetImages = () => {
+    setPending([]);
+    setRemoved(new Set());
   };
 
   return (
@@ -105,7 +111,8 @@ function CollectionsPage() {
             <IdeaCard
               key={i.id}
               idea={i}
-              path={docPath(i.document_id)}
+              images={imagesOf(i)}
+              onOpenImages={(index) => setGallery({ title: i.title, images: toGallery(imagesOf(i)), index })}
               trade={i.trade_id ? tradeName(ws, i.trade_id) : null}
               onFav={() => update.mutate({ table: "ideas", id: i.id, patch: { favorite: !i.favorite } })}
               onEdit={() => setDlg({ id: i.id, initial: { ...i } })}
@@ -120,41 +127,69 @@ function CollectionsPage() {
 
       <EntityDialog
         open={!!dlg}
-        onOpenChange={(o) => { if (!o) { setDlg(null); setFileName(""); } }}
+        onOpenChange={(o) => { if (!o) { setDlg(null); resetImages(); } }}
         title={dlg?.id ? tr("collections.edit_idea") : tr("collections.new_idea")}
         fields={[
           { name: "title", label: tr("shared.title"), required: true, full: true },
-          { name: "collection", label: tr("collections.collection"), required: true, suggestions: collections.map(([c]) => c) },
+          { name: "collection", label: tr("collections.collection"), type: "select", required: true, options: collections.map(([c]) => ({ value: c, label: c })), addLabel: tr("collections.new_collection") },
           { name: "room", label: tr("collections.room") },
           { name: "url", label: tr("collections.link"), full: true },
           { name: "trade_id", label: tr("shared.trade"), type: "select", options: tradeOptions(ws) },
           { name: "price", label: tr("collections.price_optional"), type: "number" },
-          { name: "tags", label: tr("shared.tags_comma_separated"), full: true, suggestions: tags },
+          { name: "tags", label: tr("documents.tags"), type: "tags", full: true, suggestions: tags },
           { name: "favorite", label: tr("collections.favorite"), type: "checkbox", full: true },
           { name: "notes", label: tr("shared.notes"), type: "textarea" },
         ]}
         initial={dlg?.initial}
         extra={
           <div className="grid gap-1.5">
-            <Label>{tr(dlg?.initial?.["document_id"] ? "collections.replace_image" : "collections.image_optional")}</Label>
+            <Label>{tr("collections.images_optional")}</Label>
+            {(editImages.some((d) => !removed.has(d.id)) || pending.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {editImages.filter((d) => !removed.has(d.id)).map((d) => (
+                  <Thumb key={d.id} path={d.storage_path} name={d.name} onRemove={() => setRemoved((r) => new Set(r).add(d.id))} />
+                ))}
+                {pending.map((f, n) => (
+                  <Thumb key={`${f.name}-${n}`} file={f} name={f.name} onRemove={() => setPending((p) => p.filter((_, k) => k !== n))} />
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => camRef.current?.click()}><Camera className="h-4 w-4" /> {tr("shared.take_photo")}</Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}><ImagePlus className="h-4 w-4" /> {tr("collections.choose_image")}</Button>
-              {fileName && <span className="self-center text-xs text-muted-foreground">{fileName}</span>}
+              <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}><ImagePlus className="h-4 w-4" /> {tr("collections.choose_images")}</Button>
             </div>
-            <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")} />
+            <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
           </div>
         }
         onSubmit={async (v) => {
-          const file = fileRef.current?.files?.[0];
           const row = { ...v };
-          if (file) row["document_id"] = (await upload.mutateAsync({ file, meta: { category: "Foto", tags: String(v["collection"] ?? "") } })).id;
+          delete row["id"];
+          delete row["created_at"];
+          delete row["updated_at"];
           if (row["url"] && !/^https?:\/\//i.test(String(row["url"]))) row["url"] = `https://${row["url"]}`;
-          setFileName("");
-          return dlg?.id ? update.mutateAsync({ table: "ideas", id: dlg.id, patch: row }) : create.mutateAsync({ table: "ideas", row });
+          const legacy = dlg?.initial?.["document_id"];
+          if (typeof legacy === "string" && removed.has(legacy)) row["document_id"] = null;
+          let id = dlg?.id;
+          if (id) await update.mutateAsync({ table: "ideas", id, patch: row });
+          else {
+            id = (await create.mutateAsync({ table: "ideas", row })).id;
+            // A failed image upload keeps the dialog open; retrying must update, not duplicate, the idea.
+            const created = id;
+            setDlg((d) => d && { ...d, id: created });
+          }
+          for (const d of editImages)
+            if (removed.has(d.id) && d.source === "image") await remove.mutateAsync({ table: "idea_images", id: d.id });
+          for (const file of pending) {
+            await upload.mutateAsync({ file, meta: { idea_id: id } });
+            setPending((p) => p.filter((f) => f !== file));
+          }
+          resetImages();
         }}
       />
+      {gallery && (
+        <ImageGallery open title={gallery.title} images={gallery.images} startIndex={gallery.index} onOpenChange={(o) => !o && setGallery(null)} />
+      )}
     </>
   );
 }
@@ -171,21 +206,48 @@ function Chip({ active, onClick, children, small }: { active: boolean; onClick: 
   );
 }
 
-function IdeaCard({ idea, path, trade, onFav, onEdit, onDelete, onTag }: {
-  idea: Idea; path: string | null; trade: string | null; onFav: () => void; onEdit: () => void; onDelete: () => void; onTag: (t: string) => void;
-}) {
-  const [src, setSrc] = useState<string | null>(null);
+function Thumb({ path, file, name, onRemove }: { path?: string | null; file?: File; name: string; onRemove: () => void }) {
+  const remote = useFileUrl(file ? null : path);
+  const [local, setLocal] = useState<string | null>(null);
   useEffect(() => {
-    let alive = true;
-    if (path) resolveFileUrl(path).then((u) => alive && setSrc(u));
-    return () => { alive = false; };
-  }, [path]);
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setLocal(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const src = local ?? remote;
+  return (
+    <div className="relative h-20 w-20 overflow-hidden rounded-md border bg-muted">
+      {src && <img src={src} alt={name} className="h-full w-full object-cover" />}
+      <button
+        type="button"
+        aria-label={tr("collections.remove_image", { name })}
+        onClick={onRemove}
+        className="absolute right-1 top-1 rounded-full bg-background/80 p-1 backdrop-blur hover:bg-background"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function IdeaCard({ idea, images, onOpenImages, trade, onFav, onEdit, onDelete, onTag }: {
+  idea: Idea; images: IdeaImageRef[]; onOpenImages: (index: number) => void; trade: string | null; onFav: () => void; onEdit: () => void; onDelete: () => void; onTag: (t: string) => void;
+}) {
+  const src = useFileUrl(images[0]?.storage_path);
   const host = idea.url ? (() => { try { return new URL(idea.url).hostname.replace(/^www\./, ""); } catch { return idea.url; } })() : null;
 
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card shadow-card">
-      {src ? (
-        <a href={src} target="_blank" rel="noreferrer"><img src={src} alt={idea.title} className="aspect-[4/3] w-full object-cover" loading="lazy" /></a>
+      {images.length ? (
+        <button type="button" className="relative block" aria-label={tr("collections.show_images", { count: images.length })} onClick={() => onOpenImages(0)}>
+          {src ? <img src={src} alt={idea.title} className="aspect-[4/3] w-full object-cover" loading="lazy" /> : <div className="aspect-[4/3] w-full animate-pulse bg-muted" />}
+          {images.length > 1 && (
+            <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-0.5 text-xs font-medium backdrop-blur">
+              <Images className="h-3.5 w-3.5" aria-hidden="true" /> {images.length}
+            </span>
+          )}
+        </button>
       ) : (
         <div className="flex aspect-[4/3] items-center justify-center bg-muted text-muted-foreground"><ImagePlus className="h-8 w-8 opacity-40" /></div>
       )}

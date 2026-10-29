@@ -8,6 +8,7 @@ import { validateFundingEntry } from "@/lib/funding";
 import { z } from "zod";
 import { paperlessExportMetadataSchema } from "@/lib/paperless";
 import { normalizePaperlessUrl } from "./paperless-client";
+import { isSafeStoragePath } from "@/lib/storage-paths";
 import type { BackupDatabase, BackupFile, Repo } from "./repo";
 
 export const MAX_BACKUP_BYTES = 128 * 1024 * 1024;
@@ -16,6 +17,8 @@ const MAX_ARCHIVE_ENTRIES = 10_000;
 const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
 const FORMAT = "bauplan-backup";
 const VERSION = 1;
+// Tables added after the first backup format; older archives may omit them.
+const OPTIONAL_TABLES = new Set<TableName>(["funding_entries", "idea_images"]);
 
 type Manifest = {
   format: typeof FORMAT;
@@ -83,7 +86,7 @@ function validateDatabase(value: unknown): BackupDatabase {
   const tables = value["tables"];
   if (
     Object.keys(tables).some((table) => !TABLE_NAMES.includes(table as TableName)) ||
-    TABLE_NAMES.some((table) => table !== "funding_entries" && !(table in tables))
+    TABLE_NAMES.some((table) => !OPTIONAL_TABLES.has(table) && !(table in tables))
   )
     fail("Das Backup enthält nicht alle Bauplan-Datentabellen.");
 
@@ -101,7 +104,7 @@ function validateDatabase(value: unknown): BackupDatabase {
               ? columns.filter((column) => !["caldav_uid", "caldav_data"].includes(column))
               : columns;
     const validatedRows = validateRows(
-      table === "funding_entries" && !(table in tables) ? [] : tables[table],
+      OPTIONAL_TABLES.has(table) && !(table in tables) ? [] : tables[table],
       columns,
       required,
     );
@@ -427,9 +430,7 @@ function validateUserRows(
 }
 
 function safeUploadName(name: string): boolean {
-  return (
-    /^[a-zA-Z0-9._-]{1,255}$/.test(name) && name !== "." && name !== ".." && !name.includes("..")
-  );
+  return isSafeStoragePath(name) && !name.includes("..");
 }
 
 function hash(bytes: Uint8Array): string {
@@ -449,7 +450,7 @@ function fileList(database: BackupDatabase, files: BackupFile[]) {
     uploadedNames.add(file.name);
   }
   const referenced = new Set(
-    database.tables.documents
+    [...database.tables.documents, ...database.tables.idea_images]
       .map((row) => row["storage_path"])
       .filter((name): name is string => typeof name === "string" && name.length > 0),
   );

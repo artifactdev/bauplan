@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScanBar } from "./ScanBar";
+import { TagsInput } from "./TagsInput";
 import type { ScanTarget } from "@/lib/scan-map";
 import { ChevronDown, ChevronUp, Loader2, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -37,11 +38,13 @@ import {
 export type Field = {
   name: string;
   label: string;
-  type?: "text" | "number" | "date" | "time" | "textarea" | "select" | "checkbox";
+  type?: "text" | "number" | "date" | "time" | "textarea" | "select" | "checkbox" | "tags";
   options?: { value: string; label: string }[];
   required?: boolean;
-  /** Free text with suggestions (datalist). */
+  /** Free text with suggestions (datalist); for "tags" fields the existing tags to pick from. */
   suggestions?: string[];
+  /** Select fields only: allows adding a new plain-text option (no table row); placeholder for the input. */
+  addLabel?: string;
   full?: boolean;
 };
 
@@ -165,7 +168,15 @@ export function EntityDialog({
   const addNew = async (field: string) => {
     const cfg = QUICK_ADD[field];
     const name = newName.trim();
-    if (!cfg || !name) return;
+    if (!name) return;
+    if (fields.some((f) => f.name === field && f.addLabel)) {
+      setAdded((a) => ({ ...a, [field]: [...(a[field] ?? []), { value: name, label: name }] }));
+      set(field, name);
+      setAdding(null);
+      setNewName("");
+      return;
+    }
+    if (!cfg) return;
     const row: Record<string, unknown> = { [cfg.col]: name };
     if ((cfg.table === "cost_items" || cfg.table === "contacts") && values["trade_id"])
       row["trade_id"] = values["trade_id"];
@@ -181,6 +192,8 @@ export function EntityDialog({
     : undefined;
   const renderField = (f: Field) => {
     const v = values[f.name];
+    const addPlaceholder =
+      f.type === "select" ? (f.addLabel ?? QUICK_ADD[f.name]?.label) : undefined;
     const id = `f-${f.name}`;
     const span = f.full || f.type === "textarea" ? "sm:col-span-2" : "";
     if (f.type === "checkbox")
@@ -193,7 +206,7 @@ export function EntityDialog({
       <div key={f.name} className={`grid min-w-0 gap-1.5 ${span}`}>
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor={id}>{f.label}</Label>
-          {f.type === "select" && QUICK_ADD[f.name] && adding !== f.name && (
+          {addPlaceholder && adding !== f.name && (
             <button
               type="button"
               className="flex items-center gap-1 text-xs text-primary hover:underline"
@@ -206,11 +219,11 @@ export function EntityDialog({
             </button>
           )}
         </div>
-        {adding === f.name && QUICK_ADD[f.name] && (
+        {adding === f.name && addPlaceholder && (
           <div className="flex gap-2">
             <Input
               autoFocus
-              placeholder={QUICK_ADD[f.name]!.label}
+              placeholder={addPlaceholder}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => {
@@ -237,7 +250,14 @@ export function EntityDialog({
             </Button>
           </div>
         )}
-        {f.type === "textarea" ? (
+        {f.type === "tags" ? (
+          <TagsInput
+            id={id}
+            value={v == null ? "" : String(v)}
+            onChange={(x) => set(f.name, x)}
+            suggestions={f.suggestions ?? []}
+          />
+        ) : f.type === "textarea" ? (
           <Textarea
             id={id}
             value={String(v ?? "")}
@@ -246,7 +266,8 @@ export function EntityDialog({
           />
         ) : f.type === "select" ? (
           <Select
-            value={v ? String(v) : NONE}
+            value={v ? String(v) : f.required ? "" : NONE}
+            {...(f.required ? { required: true, name: f.name } : {})}
             onValueChange={(x) => {
               if (x === "") return;
               set(f.name, x === NONE ? null : x);
@@ -406,7 +427,7 @@ export function EntityDialog({
             )}
             {fields.filter((field) => field !== documentField).map(renderField)}
             {fields
-              .filter((f) => f.suggestions)
+              .filter((f) => f.suggestions && f.type !== "tags")
               .map((f) => (
                 <datalist key={f.name} id={`f-${f.name}-list`}>
                   {f.suggestions!.map((s) => (

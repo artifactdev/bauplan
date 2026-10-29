@@ -26,6 +26,7 @@ const emptyWorkspace: Workspace = {
   tasks: [],
   events: [],
   ideas: [],
+  idea_images: [],
   contacts: [],
   expenses: [],
   budget_pots: [],

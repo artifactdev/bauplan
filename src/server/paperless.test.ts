@@ -347,9 +347,20 @@ describe("Paperless private integration", () => {
 
   it("does not mutate source snapshots through generic online or offline writes", async () => {
     const imported = await importDocument(member.id, 42);
-    await expect(
-      repo.update("documents", imported.documentId, { storage_path: "other.pdf" }),
-    ).rejects.toThrow("paperless.errors.active_transfer");
+    const original = (await repo.getAll()).documents[0]!.storage_path;
+    // storage_path is server-managed: client patches are ignored, category changes only move the file.
+    await repo.update("documents", imported.documentId, {
+      storage_path: "other.pdf",
+      category: "Rechnung",
+    });
+    const moved = original!.replace("documents/Sonstiges/", "documents/Rechnung/");
+    expect((await repo.getAll()).documents[0]!.storage_path).toBe(moved);
+    expect(await repo.readFile(moved)).not.toBeNull();
+    expect(() =>
+      db
+        .prepare("UPDATE documents SET storage_path = 'documents/Rechnung/other.pdf' WHERE id = ?")
+        .run(imported.documentId),
+    ).toThrow("paperless.errors.active_transfer");
     const base = (await repo.getAll()).documents[0]!;
     await expect(
       repo.applySyncChange(member.id, {
@@ -360,7 +371,8 @@ describe("Paperless private integration", () => {
         base,
         row: { ...base, storage_path: "other.pdf" },
       }),
-    ).rejects.toThrow("paperless.errors.active_transfer");
+    ).resolves.toMatchObject({ applied: true });
+    expect((await repo.getAll()).documents[0]!.storage_path).toBe(moved);
     expect((await paperlessRepo.link(base.id))?.remote_id).toBe(42);
     await repo.remove("documents", base.id);
     expect(await paperlessRepo.link(base.id)).toBeUndefined();

@@ -39,6 +39,7 @@ const EMPTY: Workspace = {
   events: [],
   expenses: [],
   ideas: [],
+  idea_images: [],
   contacts: [],
   budget_pots: [],
   funding_entries: [],
@@ -185,7 +186,8 @@ export function useMutations() {
       const account = requireAccount(userId);
       const current = await readCachedWorkspace(qc, key, account.id);
       const id = crypto.randomUUID();
-      const meta = cleanRow("documents", {
+      const table = typeof v.meta["idea_id"] === "string" ? "idea_images" : "documents";
+      const meta = cleanRow(table, {
         ...v.meta,
         name: v.file.name,
         category: v.meta["category"] ?? "Sonstiges",
@@ -193,7 +195,7 @@ export function useMutations() {
         mime_type: v.file.type || "application/octet-stream",
         size: v.file.size,
       });
-      const documentRow = completeRow("documents", {
+      const documentRow = completeRow(table, {
         ...meta,
         id,
         created_at: new Date().toISOString(),
@@ -202,7 +204,7 @@ export function useMutations() {
         id,
         userId: account.id,
         sequence: 0,
-        table: "documents",
+        table,
         action: "create",
         rowId: id,
         base: null,
@@ -314,7 +316,7 @@ export function useOfflineSync(userId: string) {
       const waiting = changes.filter((change) => change.conflict === undefined);
       for (const change of waiting) {
         const uploadedDocument = uploadedDocuments.get(change.rowId);
-        if (change.table === "documents" && uploadedDocument) {
+        if ((change.table === "documents" || change.table === "idea_images") && uploadedDocument) {
           const { conflict: _conflict, ...withoutConflict } = change;
           const rebased = {
             ...withoutConflict,

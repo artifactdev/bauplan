@@ -40,7 +40,19 @@ The single source of truth for workspace tables and columns. Before the producti
 | tasks | Tasks |
 | events | Calendar events (start/end, optional times) |
 | ideas | Collections |
+| idea_images | Images attached to ideas (kept separate from documents) |
 | contacts | Contractor/company contacts |
+
+### File storage
+
+Uploaded files live below `UPLOADS_DIR` (default `DATA_DIR/uploads`) in readable folders, built by `src/lib/storage-paths.ts`:
+
+```
+documents/<Category>/<uuid>-<name>     documents (fallback folder "Sonstiges")
+collections/<Collection>/<uuid>-<name> idea images (fallback folder "Allgemein")
+```
+
+Folder names are transliterated to safe ASCII (`Küche` → `Kueche`). `storage_path` is managed by the server only: client patches cannot change it. When a document's category, an idea's collection or an image's idea changes, `organizeUploads` in `src/server/uploads.ts` updates the row and moves the file (reverting on failure) and removes empty folders. It also runs at startup and after a restore, which moves files from older flat layouts. Migration 9 converts image documents that belong to exactly one idea and are not used anywhere else into `idea_images` rows. The Paperless file guard allows linked documents to change folder, but never their file name.
 
 Authentication and app settings use the local `app_users`, `app_sessions`, and `app_settings` tables.
 

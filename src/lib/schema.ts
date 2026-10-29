@@ -54,6 +54,18 @@ CREATE TABLE IF NOT EXISTS app_paperless_auto_import (
  skipped INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, error TEXT
 );
 `;
+// SQLite basename(): strips everything up to the last "/".
+const sqlBasename = (column: string) =>
+  `replace(${column}, rtrim(${column}, replace(${column}, '/', '')), '')`;
+export const PAPERLESS_FILE_GUARD_DDL = `
+CREATE TRIGGER IF NOT EXISTS paperless_document_file_guard BEFORE UPDATE OF storage_path ON documents
+ WHEN OLD.storage_path IS NOT NEW.storage_path AND (
+ (EXISTS(SELECT 1 FROM app_paperless_links WHERE document_id = OLD.id)
+ AND ${sqlBasename("NEW.storage_path")} IS NOT ${sqlBasename("OLD.storage_path")}) OR
+ EXISTS(SELECT 1 FROM app_paperless_jobs WHERE document_id = OLD.id
+ AND state IN ('queued','transferring','processing','unknown','paused')))
+ BEGIN SELECT RAISE(ABORT, 'paperless.errors.active_transfer'); END;
+`;
 export const PAPERLESS_DDL = `
 CREATE TABLE IF NOT EXISTS app_paperless_config (
  id INTEGER PRIMARY KEY CHECK(id = 1), instance_id TEXT NOT NULL, enabled INTEGER NOT NULL,
@@ -87,13 +99,7 @@ CREATE TRIGGER IF NOT EXISTS paperless_document_cleanup AFTER DELETE ON document
  DELETE FROM app_paperless_jobs WHERE document_id = OLD.id;
  DELETE FROM app_paperless_checks WHERE document_id = OLD.id;
  END;
-CREATE TRIGGER IF NOT EXISTS paperless_document_file_guard BEFORE UPDATE OF storage_path ON documents
- WHEN OLD.storage_path IS NOT NEW.storage_path AND (
- EXISTS(SELECT 1 FROM app_paperless_links WHERE document_id = OLD.id) OR
- EXISTS(SELECT 1 FROM app_paperless_jobs WHERE document_id = OLD.id
- AND state IN ('queued','transferring','processing','unknown','paused')))
- BEGIN SELECT RAISE(ABORT, 'paperless.errors.active_transfer'); END;
-`;
+${PAPERLESS_FILE_GUARD_DDL}`;
 export const PUSH_DDL = `
 CREATE TABLE IF NOT EXISTS app_push_subscriptions (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_hash TEXT NOT NULL,
@@ -204,6 +210,7 @@ export const TABLES = {
     "price",
     "favorite",
   ],
+  idea_images: ["idea_id", "name", "storage_path", "mime_type", "size"],
   contacts: ["name", "company", "trade_id", "phone", "email", "address", "website", "notes"],
   expenses: [
     "title",
@@ -425,6 +432,15 @@ export type Idea = Base & {
   favorite: boolean;
 };
 
+/** Image owned by an idea; stored under collections/ and never listed as a document. */
+export type IdeaImage = Base & {
+  idea_id: string;
+  name: string;
+  storage_path: string | null;
+  mime_type: string | null;
+  size: number | null;
+};
+
 export type Contact = Base & {
   name: string;
   company: string | null;
@@ -447,6 +463,7 @@ export type Workspace = {
   tasks: Task[];
   events: CalEvent[];
   ideas: Idea[];
+  idea_images: IdeaImage[];
   expenses: Expense[];
   budget_pots: BudgetPot[];
   funding_entries: FundingEntry[];

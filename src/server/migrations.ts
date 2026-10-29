@@ -10,9 +10,11 @@ import {
   PAPERLESS_DDL,
   PAPERLESS_AUTO_IMPORT_DDL,
   PAPERLESS_ACCESS_DDL,
+  PAPERLESS_FILE_GUARD_DDL,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
 import { legacyInvoiceExpense } from "@/lib/expenses";
+import { convertIdeaDocuments } from "./uploads";
 
 type Migration = { version: number; name: string; up: (db: SqliteDb) => void };
 
@@ -108,6 +110,20 @@ const MIGRATIONS: readonly Migration[] = [
     name: "paperless-per-user-access",
     up(db) {
       db.exec(PAPERLESS_ACCESS_DDL);
+    },
+  },
+  {
+    version: 9,
+    name: "idea-images",
+    up(db) {
+      // Linked Paperless documents may now move between folders (same file, same bytes).
+      db.exec("DROP TRIGGER IF EXISTS paperless_document_file_guard");
+      db.exec(PAPERLESS_FILE_GUARD_DDL);
+      convertIdeaDocuments(db);
+      const columns = db.prepare("PRAGMA table_info(documents)").all();
+      // Pre-release builds linked idea images through this column.
+      if (columns.some((column) => column["name"] === "idea_id"))
+        db.exec("ALTER TABLE documents DROP COLUMN idea_id");
     },
   },
 ];
