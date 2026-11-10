@@ -61,6 +61,27 @@ function mount() {
   if (!Page) throw new Error("Missing tasks page");
   render(<Page />);
 }
+it("keeps only the title fixed while long task details and actions scroll", () => {
+  mocks.checklist = JSON.stringify(
+    Array.from({ length: 60 }, (_, index) => ({
+      id: `step-${index}`,
+      title: `Subtask ${index + 1}`,
+      done: false,
+    })),
+  );
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog).toHaveClass("max-h-[calc(100dvh-2rem)]", "overflow-hidden", "flex-col");
+  const body = within(dialog).getByRole("group", { name: "Subtasks" }).parentElement!;
+  expect(body).toHaveClass("min-h-0", "overflow-y-auto", "overscroll-contain");
+  expect(within(body).getByRole("checkbox", { name: "Subtask 60" })).toBeInTheDocument();
+  expect(body.contains(within(dialog).getByRole("button", { name: "Edit" }))).toBe(true);
+  expect(within(body).getByRole("button", { name: "Close" })).toBeVisible();
+  expect(body.contains(within(dialog).getByRole("heading", { name: title }))).toBe(false);
+  fireEvent.click(within(body).getByRole("checkbox", { name: "Subtask 60" }));
+  expect(JSON.parse(mocks.update.mock.calls[0]![0].patch.checklist)[59].done).toBe(true);
+});
 it("ticks a subtask directly in task details without completing the parent", () => {
   mocks.checklist = JSON.stringify([{ id: "step", title: "Measure furniture", done: false }]);
   mount();

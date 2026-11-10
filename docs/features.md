@@ -76,6 +76,8 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 
 ## Tasks
 
+- Task details stay within the dynamic viewport height, including on mobile. Only the title stays fixed; notes, subtask lists and the Close/Edit actions scroll together to maximize the available content space.
+
 - **Push notifications:** assigning a task to another approved user sends a notification with its current title to their opted-in devices after the server saves it, including offline sync. Open tasks remind the assignee; open quote/payment deadlines and timed calendar appointments remind all opted-in members, including the corresponding record title. Titles may be visible on the lock screen. Tapping opens the matching area (Tasks, Quotes, Expenses or Calendar) and its record. Device activation and a test button are in personal Settings. See [push setup and reminder rules](operations.md#push-notifications).
 
 - Title, trade, phase, priority, status, optional start and due dates, notes. The due date cannot be before the start.

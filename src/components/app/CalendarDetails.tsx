@@ -94,50 +94,57 @@ export function CalendarDetails({
   }
   return (
     <Dialog open={!!source && !!title} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent aria-describedby={undefined}>
-        <DialogHeader>
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col overflow-hidden"
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle className="pr-6 leading-snug [overflow-wrap:anywhere]">{title}</DialogTitle>
         </DialogHeader>
-        <dl className="grid gap-4 sm:grid-cols-2">
-          {fields.map(({ label, value }) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="mt-1 text-sm [overflow-wrap:anywhere]">{value}</dd>
-            </div>
-          ))}
-          {notes && (
-            <div className="min-w-0 sm:col-span-2">
-              <dt className="text-xs text-muted-foreground">{tr("shared.notes")}</dt>
-              <dd className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">{notes}</dd>
-            </div>
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain p-1">
+          <dl className="grid gap-4 sm:grid-cols-2">
+            {fields.map(({ label, value }) => (
+              <div key={label} className="min-w-0">
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="mt-1 text-sm [overflow-wrap:anywhere]">{value}</dd>
+              </div>
+            ))}
+            {notes && (
+              <div className="min-w-0 sm:col-span-2">
+                <dt className="text-xs text-muted-foreground">{tr("shared.notes")}</dt>
+                <dd className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
+                  {notes}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {task && (
+            <TaskChecklist
+              key={task.id}
+              value={task.checklist}
+              editable={false}
+              addable
+              disabled={update.isPending}
+              onChange={(checklist) =>
+                update.mutate({ table: "tasks", id: task.id, patch: { checklist } })
+              }
+            />
           )}
-        </dl>
-        {task && (
-          <TaskChecklist
-            key={task.id}
-            value={task.checklist}
-            editable={false}
-            addable
-            disabled={update.isPending}
-            onChange={(checklist) =>
-              update.mutate({ table: "tasks", id: task.id, patch: { checklist } })
-            }
-          />
-        )}
-        {source?.type === "task" && assignees.isError && (
-          <p role="alert" className="text-sm text-destructive">
-            {tr("tasks.assignees_load_failed")}
-          </p>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            {tr("shared.close")}
-          </Button>
-          <Button onClick={() => source && onEdit(source)}>
-            <Pencil data-icon="inline-start" />
-            {tr("shared.edit")}
-          </Button>
-        </DialogFooter>
+          {source?.type === "task" && assignees.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              {tr("tasks.assignees_load_failed")}
+            </p>
+          )}
+          <DialogFooter className="shrink-0 gap-2">
+            <Button variant="outline" onClick={onClose}>
+              {tr("shared.close")}
+            </Button>
+            <Button onClick={() => source && onEdit(source)}>
+              <Pencil data-icon="inline-start" />
+              {tr("shared.edit")}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
