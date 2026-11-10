@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { tr } from "@/i18n";
-import { useWorkspace } from "@/hooks/use-workspace";
+import { useMutations, useWorkspace } from "@/hooks/use-workspace";
+import { TaskChecklist } from "./TaskChecklist";
 import { useTaskAssignees } from "@/hooks/use-task-assignees";
 import { fmtDate, eur } from "@/lib/format";
 import { rangeLabel } from "@/lib/events";
@@ -29,6 +30,8 @@ export function CalendarDetails({
   onEdit: (source: CalendarSource) => void;
 }) {
   const { ws } = useWorkspace();
+  const { update } = useMutations();
+  const task = source?.type === "task" ? ws.tasks.find((row) => row.id === source.id) : undefined;
   const assignees = useTaskAssignees();
   const fields: { label: string; value: ReactNode }[] = [];
   let title = "";
@@ -109,6 +112,18 @@ export function CalendarDetails({
             </div>
           )}
         </dl>
+        {task && (
+          <TaskChecklist
+            key={task.id}
+            value={task.checklist}
+            editable={false}
+            addable
+            disabled={update.isPending}
+            onChange={(checklist) =>
+              update.mutate({ table: "tasks", id: task.id, patch: { checklist } })
+            }
+          />
+        )}
         {source?.type === "task" && assignees.isError && (
           <p role="alert" className="text-sm text-destructive">
             {tr("tasks.assignees_load_failed")}

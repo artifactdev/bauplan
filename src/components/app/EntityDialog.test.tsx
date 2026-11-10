@@ -24,9 +24,20 @@ vi.mock("./AssignDialog", () => ({ AssignDialog: () => null }));
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   await i18n.changeLanguage("en");
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const fields: Field[] = [
   { name: "title", label: "Title", required: true },
@@ -35,6 +46,45 @@ const fields: Field[] = [
 ];
 
 describe("entry form drafts", () => {
+  it("places the task checklist last, after notes", () => {
+    render(<QuickTask open editId="task" onOpenChange={vi.fn()} initial={{ title: "Kitchen" }} />);
+    const notes = screen.getByRole("textbox", { name: "Notes" });
+    const checklist = screen.getByRole("group", { name: "Subtasks" });
+    expect(
+      notes.compareDocumentPosition(checklist) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(checklist.closest("form")?.querySelectorAll("fieldset")).toHaveLength(1);
+    expect(
+      checklist.parentElement?.nextElementSibling?.querySelector('button[type="submit"]'),
+    ).not.toBeNull();
+  });
+  it("saves a task checklist and restores its checked state when reopened", async () => {
+    mocks.update.mockResolvedValue(undefined);
+    const checklist = JSON.stringify([{ id: "step", title: "Measure wall", done: false }]);
+    const props = {
+      onOpenChange: vi.fn(),
+      editId: "task",
+      initial: { title: "Kitchen", checklist, priority: "mittel", status: "offen" },
+    };
+    const { rerender } = render(<QuickTask {...props} open />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Measure wall" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "New subtask" }), {
+      target: { value: "Order tiles" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "New subtask" }), { key: "Enter" });
+    expect(mocks.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce());
+    const patch = mocks.update.mock.calls[0]![0].patch;
+    expect(JSON.parse(patch.checklist)).toEqual([
+      { id: "step", title: "Measure wall", done: true },
+      { id: expect.any(String), title: "Order tiles", done: false },
+    ]);
+    rerender(<QuickTask {...props} open={false} />);
+    rerender(<QuickTask {...props} initial={patch} open />);
+    expect(screen.getByRole("checkbox", { name: "Measure wall" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Order tiles" })).not.toBeChecked();
+  });
   it("preserves user inputs across new initial objects after background/refetch", async () => {
     const submit = vi.fn().mockResolvedValue(undefined);
     const props = { open: true, title: "Entry", fields, onOpenChange: vi.fn(), onSubmit: submit };

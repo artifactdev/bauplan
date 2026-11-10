@@ -4,7 +4,7 @@
   "description": "Enable notifications for this device. New task assignments notify only the assignee; self-assignments are excluded.",
   "rules": "Open tasks, quotes and unpaid invoices: 3 days before and on the deadline at 09:00 (Europe/Berlin). Timed appointments: 1 hour before. Quote, payment and appointment reminders go to all users with push enabled.",
   "ios": "On iPhone: open the Home Screen app on iOS 16.4 or later. Permission is per device. Enable again after signing out or session expiry.",
-  "privacy": "Encrypted delivery uses the browser's push service (e.g. Apple). Messages contain no names, amounts or document contents.",
+  "privacy": "Encrypted delivery uses the browser's push service (e.g. Apple). Messages include the record title, which may be visible on the lock screen. Amounts and document contents are not included separately.",
   "unsupported": "Push is unavailable here. Use HTTPS and a supported browser or the installed Home Screen app.",
   "loading": "Loading push settings…",
   "notConfigured": "Push requires an admin account with a valid email address. The contact address is selected automatically.",

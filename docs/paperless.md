@@ -4,6 +4,8 @@ The optional integration connects Bauplan to one self-hosted Paperless-ngx insta
 
 Transfers can be manual in either direction or use an explicitly enabled tag-based import from Paperless, **not continuous two-way synchronization**. Changing metadata, replacing files or deleting a document in either app does not change the other app.
 
+New manual and automatic imports use the Paperless document title as the local display name, not the original filename or document date. An empty title falls back to the original filename, then `paperless-<id>`. The stored original file retains its filename and extension. Existing local documents are not renamed on repeated imports.
+
 ## Configure the instance
 
 1. Configure `PAPERLESS_SETTINGS_KEY` on the Bauplan server before connecting personal accounts. It must contain exactly 64 hexadecimal characters (32 random bytes); generate it with `openssl rand -hex 32` and keep it outside source control. The key encrypts stored personal API tokens; do not casually rotate it or lose it. Docker Compose passes the variable from your deployment environment.

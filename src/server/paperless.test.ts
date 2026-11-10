@@ -52,6 +52,8 @@ let originalMissing = false;
 let correspondentId: number | null = null;
 let autoTag = false;
 let tagNext = false;
+let remoteTitle = "Invoice roof";
+let originalFileName = "invoice.pdf";
 const requests: { url: string; token: string; options: RequestInit }[] = [];
 
 function json(value: unknown, status = 200) {
@@ -63,12 +65,12 @@ function json(value: unknown, status = 200) {
 function detail(id = remoteId) {
   return {
     id,
-    title: "Invoice roof",
+    title: remoteTitle,
     created: "2026-10-15T00:00:00Z",
     tags: autoTag ? [11] : metadataForbidden ? [1] : [],
     correspondent: correspondentId,
     document_type: null,
-    original_file_name: "invoice.pdf",
+    original_file_name: originalFileName,
     content: emptyContent
       ? ""
       : "RECHNUNG\nDachbau GmbH\nRechnungsdatum 15.10.2026\nGesamtbetrag 123,45 EUR",
@@ -153,6 +155,8 @@ beforeEach(async () => {
   correspondentId = null;
   autoTag = false;
   tagNext = false;
+  remoteTitle = "Invoice roof";
+  originalFileName = "invoice.pdf";
   await saveSettings(admin, {
     enabled: true,
     apiUrl: "http://paperless.internal:8000",
@@ -262,6 +266,8 @@ describe("Paperless private integration", () => {
     expect((await repo.getAll()).documents[0]?.category).toBe("Rechnung");
     expect((await repo.getAll()).expenses).toHaveLength(0);
     const document = (await repo.getAll()).documents[0]!;
+    expect(document.name).toBe("Invoice roof");
+    expect(document.storage_path).toMatch(/invoice\.pdf$/);
     expect(await repo.readFile(document.storage_path!)).toEqual(bytes);
     expect(requests.some((call) => call.url.endsWith("/download/?original=true"))).toBe(true);
     expect(JSON.stringify(await repo.getAll())).not.toContain("RECHNUNG");
@@ -270,6 +276,26 @@ describe("Paperless private integration", () => {
       duplicate: true,
       extraction: null,
     });
+  });
+  it("uses the Paperless title instead of a date filename and preserves local renames", async () => {
+    originalFileName = "2026-10-15.pdf";
+    remoteTitle = "Roof / final invoice";
+    const imported = await importDocument(member.id, 42);
+    const document = (await repo.getAll()).documents.find((doc) => doc.id === imported.documentId)!;
+    expect(document.name).toBe("Roof / final invoice");
+    expect(document.storage_path).toMatch(/2026-10-15\.pdf$/);
+    await repo.update("documents", document.id, { name: "My local title" });
+    await importDocument(member.id, 42);
+    expect((await repo.getAll()).documents.find((doc) => doc.id === document.id)?.name).toBe(
+      "My local title",
+    );
+  });
+  it("falls back to the original filename when the Paperless title is empty", async () => {
+    remoteTitle = " ";
+    const imported = await importDocument(member.id, 42);
+    expect(
+      (await repo.getAll()).documents.find((doc) => doc.id === imported.documentId)?.name,
+    ).toBe("invoice.pdf");
   });
 
   it("keeps a successful original import when optional metadata cannot be read, and allows manual assignment without text", async () => {

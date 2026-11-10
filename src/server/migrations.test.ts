@@ -87,6 +87,7 @@ describe("database migrations", () => {
     );
     db.exec("ALTER TABLE tasks DROP COLUMN assignee_id");
     db.exec("ALTER TABLE tasks DROP COLUMN start_date");
+    db.exec("ALTER TABLE tasks DROP COLUMN checklist");
     db.exec(
       "INSERT INTO tasks (id, created_at, title, due_date) VALUES ('task', '2026-10-27', 'Existing', '2026-11-01')",
     );
@@ -102,9 +103,12 @@ describe("database migrations", () => {
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
     expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
-    expect(db.prepare("SELECT start_date, due_date FROM tasks WHERE id = 'task'").get()).toEqual({
+    expect(
+      db.prepare("SELECT start_date, due_date, checklist FROM tasks WHERE id = 'task'").get(),
+    ).toEqual({
       start_date: null,
       due_date: "2026-11-01",
+      checklist: null,
     });
   });
 

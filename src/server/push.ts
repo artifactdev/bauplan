@@ -12,9 +12,20 @@ export async function pushConfiguration() {
   return { ...keys, subject };
 }
 
-function message(language: "de" | "en", kind: PushJob["kind"] | "test", url: string, tag: string) {
+function message(
+  language: "de" | "en",
+  kind: PushJob["kind"] | "test",
+  url: string,
+  tag: string,
+  resourceTitle?: string | null,
+) {
   const text = language === "en" ? en : de;
-  return JSON.stringify({ title: text.title, body: text[kind], url, tag });
+  return JSON.stringify({
+    title: resourceTitle?.trim() || text.title,
+    body: text[kind],
+    url,
+    tag,
+  });
 }
 
 async function send(device: PushDevice, payload: string, ttl = 3600) {
@@ -64,13 +75,20 @@ async function processPush(now: Date) {
     const { job, device, attempts } = delivery;
     try {
       // Check current statuses, ownership and dates immediately before sending, not just at enqueue.
-      if (!validPushJob(job, await sqliteRepo().getAll(), deliveryTime)) {
+      const workspace = await sqliteRepo().getAll();
+      if (!validPushJob(job, workspace, deliveryTime)) {
         await pushRepo.finish(job.id, device.id, true, attempts, deliveryTime);
         continue;
       }
       await send(
         device,
-        message(device.language, job.kind, pushLink(job), `bauplan:${job.id}`),
+        message(
+          device.language,
+          job.kind,
+          pushLink(job),
+          `bauplan:${job.id}`,
+          workspace[job.table].find((item) => item.id === job.resourceId)?.title,
+        ),
         Math.max(0, Math.min(3600, Math.floor((Date.parse(job.expiresAt) - Date.now()) / 1000))),
       );
       await pushRepo.finish(job.id, device.id, true, attempts, new Date());

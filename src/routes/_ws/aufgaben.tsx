@@ -3,12 +3,13 @@ import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { useTaskAssignees } from "@/hooks/use-task-assignees";
 import { isOverdue } from "@/lib/calc";
 import { fmtDate } from "@/lib/format";
 import { tradeName } from "@/lib/options";
-import { taskRange } from "@/lib/tasks";
+import { parseTaskChecklist, taskRange } from "@/lib/tasks";
 import { rangeLabel } from "@/lib/events";
 import { cn } from "@/lib/utils";
 import { PHASES, type Task } from "@/lib/schema";
@@ -25,6 +26,9 @@ import { QuickTask } from "@/components/app/quick-actions";
 import { CalendarDetails, type CalendarSource } from "@/components/app/CalendarDetails";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { TaskChecklist } from "@/components/app/TaskChecklist";
 import {
   Select,
   SelectContent,
@@ -54,6 +58,8 @@ function TasksPage() {
   const assignees = new Map((assigneesQuery.data ?? []).map((user) => [user.id, user.label]));
   const [groupBy, setGroupBy] = useState<"phase" | "trade" | "status">("phase");
   const [filter, setFilter] = useState<"open" | "all" | "overdue">("open");
+  const [showSubtasks, setShowSubtasks] = useState(false);
+  const [addingSubtasks, setAddingSubtasks] = useState<Set<string>>(new Set());
   const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(() =>
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("aktion") === "neu"
@@ -155,6 +161,13 @@ function TasksPage() {
               <SelectItem value="status">{tr("tasks.status")}</SelectItem>
             </SelectContent>
           </Select>
+          <label
+            htmlFor="show-subtasks"
+            className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-sm sm:ml-auto sm:w-auto"
+          >
+            <Switch id="show-subtasks" checked={showSubtasks} onCheckedChange={setShowSubtasks} />
+            {tr("tasks.show_subtasks")}
+          </label>
         </div>
       )}
 
@@ -167,6 +180,8 @@ function TasksPage() {
                 const od = isOverdue(t.due_date, isDone);
                 const range = taskRange(t);
                 const doc = ws.documents.find((d) => d.id === t.document_id);
+                const subtasks = parseTaskChecklist(t.checklist);
+                const openSubtasks = subtasks.filter((item) => !item.done).length;
                 return (
                   <li
                     key={t.id}
@@ -211,6 +226,20 @@ function TasksPage() {
                           </Pill>
                         )}
                         <Pill tone={PRIORITY[t.priority]!.tone}>{PRIORITY[t.priority]!.label}</Pill>
+                        {subtasks.length > 0 && (
+                          <Badge
+                            variant={openSubtasks > 0 ? "secondary" : "outline"}
+                            aria-label={tr("tasks.subtasks_summary", {
+                              open: openSubtasks,
+                              total: subtasks.length,
+                            })}
+                          >
+                            {tr("tasks.subtasks_open", {
+                              open: openSubtasks,
+                              total: subtasks.length,
+                            })}
+                          </Badge>
+                        )}
                         {t.assignee_id && assigneesQuery.isFetched && (
                           <Pill tone="primary">
                             {assignees.get(t.assignee_id) ?? tr("tasks.assignee_unavailable")}
@@ -242,6 +271,17 @@ function TasksPage() {
                         </span>
                       )}
                       <div className="ml-auto flex shrink-0">
+                        {!showSubtasks && !addingSubtasks.has(t.id) && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={tr("task-checklist.add_subtask")}
+                            aria-label={tr("task-checklist.add_subtask")}
+                            onClick={() => setAddingSubtasks((ids) => new Set(ids).add(t.id))}
+                          >
+                            <Plus />
+                          </Button>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
@@ -263,6 +303,39 @@ function TasksPage() {
                         </Button>
                       </div>
                     </div>
+                    {(showSubtasks || addingSubtasks.has(t.id)) && (
+                      <div className="col-start-2 min-w-0 border-l pl-3 sm:pl-4">
+                        <TaskChecklist
+                          value={t.checklist}
+                          editable={false}
+                          addable
+                          autoFocus={addingSubtasks.has(t.id)}
+                          compact
+                          disabled={update.isPending}
+                          onChange={(checklist) => {
+                            const change = {
+                              table: "tasks" as const,
+                              id: t.id,
+                              patch: { checklist },
+                            };
+                            if (parseTaskChecklist(checklist).length <= subtasks.length) {
+                              update.mutate(change);
+                              return;
+                            }
+                            update.mutate(change, {
+                              onSuccess: () => {
+                                setAddingSubtasks((ids) => {
+                                  const next = new Set(ids);
+                                  next.delete(t.id);
+                                  return next;
+                                });
+                                toast.success(tr("task-checklist.created"));
+                              },
+                            });
+                          }}
+                        />
+                      </div>
+                    )}
                   </li>
                 );
               })}

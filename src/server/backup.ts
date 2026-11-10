@@ -5,6 +5,7 @@ import { appearanceSchema } from "@/lib/appearance";
 import { navigationSchema } from "@/lib/navigation";
 import { legacyInvoiceExpense } from "@/lib/expenses";
 import { validateFundingEntry } from "@/lib/funding";
+import { parseTaskChecklist } from "@/lib/tasks";
 import { z } from "zod";
 import { paperlessExportMetadataSchema } from "@/lib/paperless";
 import { normalizePaperlessUrl } from "./paperless-client";
@@ -95,7 +96,7 @@ function validateDatabase(value: unknown): BackupDatabase {
     const columns = ["id", "created_at", ...TABLES[table]];
     const required =
       table === "tasks"
-        ? columns.filter((column) => column !== "assignee_id")
+        ? columns.filter((column) => !["assignee_id", "checklist"].includes(column))
         : table === "offers"
           ? columns.filter((column) => column !== "valid_until")
           : table === "expenses"
@@ -108,9 +109,13 @@ function validateDatabase(value: unknown): BackupDatabase {
       columns,
       required,
     );
-    const rows =
+    const rows: Record<string, unknown>[] =
       table === "tasks"
-        ? validatedRows.map((row) => ({ ...row, assignee_id: row["assignee_id"] ?? null }))
+        ? validatedRows.map((row) => ({
+            ...row,
+            assignee_id: row["assignee_id"] ?? null,
+            checklist: row["checklist"] ?? null,
+          }))
         : table === "offers"
           ? validatedRows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
           : table === "expenses"
@@ -128,6 +133,7 @@ function validateDatabase(value: unknown): BackupDatabase {
                 }))
               : validatedRows;
     for (const row of rows) {
+      if (table === "tasks") parseTaskChecklist(row["checklist"]);
       for (const [column, item] of Object.entries(row)) {
         if (item !== null && NUMERIC_COLS.has(column) && typeof item !== "number")
           fail("Backup-Datensatz enthält ungültige Zahlenwerte.");

@@ -124,7 +124,8 @@ describe("calendar source dialogs", () => {
       ),
     ).toBe(3);
     fireEvent.click(bars[0]!);
-    expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "New subtask" })).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByLabelText("Start date")).toHaveValue(mocks.start);
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: `${month}-09` } });
@@ -185,7 +186,8 @@ describe("calendar source dialogs", () => {
         });
       fireEvent.click(await screen.findByRole("button", { name: /Remove panels/ }));
       expect(screen.getByRole("dialog")).toHaveAccessibleName("Remove panels");
-      expect(screen.getByRole("dialog").querySelector("input, textarea, select")).toBeNull();
+      expect(screen.getByRole("textbox", { name: "New subtask" })).toBeVisible();
+      expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Edit" }));
       expect(screen.getByRole("dialog")).toHaveAccessibleName("Edit task");
       expect(screen.getByLabelText("Title")).toHaveValue("Remove panels");

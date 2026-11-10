@@ -77,6 +77,7 @@ export function taskFields(
       options: ws.documents.map((d) => ({ value: d.id, label: d.name })),
     },
     { name: "notes", label: tr("shared.notes"), type: "textarea" },
+    { name: "checklist", label: tr("task-checklist.title"), type: "checklist", full: true },
   ];
 }
 

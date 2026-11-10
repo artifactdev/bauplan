@@ -80,7 +80,11 @@ describe("Bauplan backups", () => {
     );
     await repo.writeAppearance("admin-1", { ...DEFAULT_APPEARANCE, primaryColor: "#295cc5" });
     await repo.writeNavigation("admin-1", DEFAULT_NAVIGATION);
-    await repo.insert("tasks", { id: "legacy-task", title: "Check roof" });
+    await repo.insert("tasks", {
+      id: "legacy-task",
+      title: "Check roof",
+      checklist: JSON.stringify([{ id: "step", title: "Measure roof", done: true }]),
+    });
     await repo.insert("offers", {
       id: "offer-1",
       contractor: "Roofing",
@@ -153,6 +157,9 @@ describe("Bauplan backups", () => {
     expect(workspace.documents).toHaveLength(1);
     expect(workspace.documents[0]?.storage_path).toBe(restoredPath);
     expect(workspace.offers[0]).toMatchObject({ valid_until: "2026-11-10" });
+    expect(workspace.tasks[0]?.checklist).toBe(
+      JSON.stringify([{ id: "step", title: "Measure roof", done: true }]),
+    );
     expect(await repo.readFile(restoredPath)).toEqual(new Uint8Array([1, 2, 3]));
     expect(await repo.readFile(extraFile)).toBeNull();
     expect(db.prepare("SELECT * FROM app_sessions").all()).toEqual([]);
@@ -171,10 +178,15 @@ describe("Bauplan backups", () => {
       database: { tables: { tasks: Record<string, unknown>[]; offers: Record<string, unknown>[] } };
     };
     delete manifest.database.tables.tasks[0]?.["assignee_id"];
+    delete manifest.database.tables.tasks[0]?.["checklist"];
     delete manifest.database.tables.offers[0]?.["valid_until"];
     entries["backup.json"] = strToU8(JSON.stringify(manifest));
     expect(parseBackup(zipSync(entries)).database.tables.tasks[0]?.["assignee_id"]).toBeNull();
+    expect(parseBackup(zipSync(entries)).database.tables.tasks[0]?.["checklist"]).toBeNull();
     expect(parseBackup(zipSync(entries)).database.tables.offers[0]?.["valid_until"]).toBeNull();
+    manifest.database.tables.tasks[0]!["checklist"] = "invalid";
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(() => parseBackup(zipSync(entries))).toThrow("task-checklist.invalid");
 
     const currentArchive = await createBackup(repo);
     const currentEntries = unzipSync(currentArchive);

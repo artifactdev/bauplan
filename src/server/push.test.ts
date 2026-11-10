@@ -166,7 +166,7 @@ describe("persistent Web Push delivery", () => {
     await runPushCycle();
     expect(sent()).toHaveBeenCalledOnce();
     expect(sent().mock.calls[0]?.[0].endpoint).toBe(subscription("bob").endpoint);
-    expect(sent().mock.calls[0]?.[1]).not.toContain("Sensitive title");
+    expect(JSON.parse(String(sent().mock.calls[0]?.[1])).title).toBe("Sensitive title");
     expect(JSON.parse(String(sent().mock.calls[0]?.[1])).url).toBe("/aufgaben?eintrag=task");
     await repo.update("tasks", "task", { title: "Updated" }, "alice");
     await runPushCycle();
@@ -208,6 +208,92 @@ describe("persistent Web Push delivery", () => {
         .mock.calls.map((call) => call[0].endpoint)
         .sort(),
     ).toEqual([subscription("alice").endpoint, subscription("bob").endpoint]);
+  });
+  it("uses current titles for all reminder types in both device languages", async () => {
+    await pushRepo.subscribe("alice", "alice", subscription("alice"), "de");
+    await repo.insert("tasks", {
+      id: "due-task",
+      title: "Measure kitchen",
+      status: "offen",
+      assignee_id: "bob",
+      due_date: "2026-10-30",
+    });
+    await repo.insert("offers", {
+      id: "quote",
+      title: "Roof quote",
+      status: "received",
+      valid_until: "2026-10-30",
+    });
+    await repo.insert("expenses", {
+      id: "expense",
+      title: "Tiles invoice",
+      status: "offen",
+      due_date: "2026-10-30",
+    });
+    await repo.insert("events", {
+      id: "visit",
+      title: "Old visit title",
+      event_date: "2026-10-27",
+      start_time: "10:00",
+    });
+    await repo.update("events", "visit", { title: "Site visit" });
+    vi.setSystemTime(new Date("2026-10-27T08:00:00Z"));
+    await runPushCycle();
+    const titles = sent().mock.calls.map((call) => JSON.parse(String(call[1])).title);
+    expect(titles.sort()).toEqual(
+      [
+        "Measure kitchen",
+        "Roof quote",
+        "Roof quote",
+        "Site visit",
+        "Site visit",
+        "Tiles invoice",
+        "Tiles invoice",
+      ].sort(),
+    );
+  });
+  it("uses the latest task title for queued assignments", async () => {
+    await repo.insert(
+      "tasks",
+      {
+        id: "renamed",
+        title: "Old title",
+        assignee_id: "bob",
+        status: "offen",
+      },
+      "alice",
+    );
+    await repo.update("tasks", "renamed", { title: "Current title" });
+    await runPushCycle();
+    expect(JSON.parse(String(sent().mock.calls[0]?.[1])).title).toBe("Current title");
+  });
+  it("persists checklists through edits and offline sync without changing task status", async () => {
+    const checklist = JSON.stringify([{ id: "step", title: "Measure wall", done: false }]);
+    await repo.insert("tasks", { id: "checklist", title: "Kitchen", status: "offen", checklist });
+    const base = (await repo.getAll()).tasks.find((task) => task.id === "checklist")!;
+    expect(base.checklist).toBe(checklist);
+    const checked = JSON.stringify([{ id: "step", title: "Measure wall", done: true }]);
+    expect(
+      await repo.applySyncChange("alice", {
+        id: "check-step",
+        table: "tasks",
+        action: "update",
+        rowId: "checklist",
+        base: { ...base },
+        row: { checklist: checked },
+      }),
+    ).toMatchObject({ applied: true });
+    expect((await repo.getAll()).tasks.find((task) => task.id === "checklist")).toMatchObject({
+      checklist: checked,
+      status: "offen",
+    });
+    await expect(repo.update("tasks", "checklist", { checklist: "invalid" })).rejects.toThrow(
+      "task-checklist.invalid",
+    );
+    await repo.update("tasks", "checklist", { checklist: "[]" });
+    expect((await repo.getAll()).tasks.find((task) => task.id === "checklist")?.checklist).toBe(
+      "[]",
+    );
   });
   it("retries transient failures but removes expired subscriptions", async () => {
     await repo.insert("tasks", { id: "task", assignee_id: "bob", status: "offen" }, "alice");

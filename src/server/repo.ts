@@ -27,7 +27,7 @@ import {
 } from "./uploads";
 import { DEFAULT_DOCUMENT_FOLDER, documentFolder, isSafeStoragePath } from "@/lib/storage-paths";
 import { validateFundingEntry } from "@/lib/funding";
-import { validateTaskDates } from "@/lib/tasks";
+import { parseTaskChecklist, validateTaskDates } from "@/lib/tasks";
 import {
   parseNavigation,
   navigationSchema,
@@ -541,7 +541,10 @@ export function sqliteRepo(): Repo {
     async insert(table, row, actorId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
-      if (table === "tasks") validateTaskDates(row);
+      if (table === "tasks") {
+        validateTaskDates(row);
+        if ("checklist" in row) parseTaskChecklist(row["checklist"]);
+      }
       if (table === "funding_entries") validateFundingEntry(row, fundingSources(d));
       const id = (row["id"] as string) || crypto.randomUUID();
       const full = { ...row, id, created_at: row["created_at"] ?? new Date().toISOString() };
@@ -571,6 +574,7 @@ export function sqliteRepo(): Repo {
       if (table === "tasks") {
         const existing = d.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
         validateTaskDates({ ...existing, ...patch });
+        if ("checklist" in patch) parseTaskChecklist(patch["checklist"]);
       }
       if (table === "funding_entries") {
         const existing = d.prepare("SELECT * FROM funding_entries WHERE id = ?").get(id);

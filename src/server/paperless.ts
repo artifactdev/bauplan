@@ -196,10 +196,9 @@ export async function importDocument(
   }
   const file = await client.original(remoteId);
   const repo = sqliteRepo();
-  const name = (remote.original_file_name || remote.title || `paperless-${remoteId}`)
-    .replace(/[/\\\p{Cc}]/gu, "_")
-    .slice(0, 240);
-  const storagePath = await repo.putFile(name, file.mime, file.bytes);
+  const name = remote.title.trim() || remote.original_file_name || `paperless-${remoteId}`;
+  const fileName = (remote.original_file_name || name).replace(/[/\\\p{Cc}]/gu, "_").slice(0, 240);
+  const storagePath = await repo.putFile(fileName, file.mime, file.bytes);
   let retained = false;
   let documentId: string;
   try {

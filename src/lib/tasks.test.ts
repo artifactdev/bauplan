@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { coversDay } from "./events";
-import { taskRange, validateTaskDates } from "./tasks";
+import { parseTaskChecklist, taskRange, validateTaskDates } from "./tasks";
+import { cleanRow } from "./schema";
+
+describe("task checklists", () => {
+  it("supports older tasks with no checklist and normalizes new lists", () => {
+    for (const value of [undefined, null, ""]) expect(parseTaskChecklist(value)).toEqual([]);
+    const checklist = JSON.stringify([{ id: "one", title: "  Measure room  ", done: false }]);
+    expect(cleanRow("tasks", { checklist })).toEqual({
+      checklist: JSON.stringify([{ id: "one", title: "Measure room", done: false }]),
+    });
+  });
+  it("rejects malformed entries and duplicate identities", () => {
+    for (const value of [
+      "invalid",
+      "{}",
+      JSON.stringify([{ id: "one", title: " ", done: false }]),
+      JSON.stringify([{ id: "one", title: "Step", done: "false" }]),
+      JSON.stringify([
+        { id: "one", title: "Step", done: false },
+        { id: "one", title: "Other", done: true },
+      ]),
+    ])
+      expect(() => parseTaskChecklist(value)).toThrow("task-checklist.invalid");
+  });
+});
 
 describe("task dates", () => {
   it("covers every day from start through due date inclusively", () => {

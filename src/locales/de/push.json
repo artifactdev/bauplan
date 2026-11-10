@@ -4,7 +4,7 @@
   "description": "Benachrichtigungen für dieses Gerät aktivieren. Bei einer neuen Zuweisung erhält nur der zuständige Nutzer eine Nachricht; Selbstzuweisungen sind ausgenommen.",
   "rules": "Offene Aufgaben, Angebote und unbezahlte Rechnungen: 3 Tage vorher und am Fristtag um 09:00 Uhr (Europe/Berlin). Termine mit Uhrzeit: 1 Stunde vorher. Angebote und Zahlungen sowie Termine werden an alle Nutzer mit aktiviertem Push gesendet.",
   "ios": "Auf dem iPhone: ab iOS 16.4 als Home-Screen-App öffnen. Erlaubnis gilt pro Gerät. Nach Abmeldung oder Ablauf der Sitzung erneut aktivieren.",
-  "privacy": "Die Zustellung erfolgt verschlüsselt über den Push-Dienst des Browsers (z. B. Apple). Nachrichten enthalten keine Namen, Beträge oder Dokumentinhalte.",
+  "privacy": "Die Zustellung erfolgt verschlüsselt über den Push-Dienst des Browsers (z. B. Apple). Nachrichten enthalten den Titel des Eintrags; dieser kann auf dem Sperrbildschirm sichtbar sein. Beträge und Dokumentinhalte werden nicht zusätzlich übertragen.",
   "unsupported": "Push ist hier nicht verfügbar. Verwende HTTPS und einen unterstützten Browser bzw. die installierte Home-Screen-App.",
   "loading": "Push-Einstellungen werden geladen…",
   "notConfigured": "Push benötigt ein Admin-Konto mit einer gültigen E-Mail-Adresse. Die Kontaktadresse wird automatisch übernommen.",

@@ -1,3 +1,5 @@
+import { parseTaskChecklist } from "./tasks";
+
 // Shared data model; SQLite creates and updates these tables at startup.
 
 // Private account metadata must not be included in TABLES or Workspace.
@@ -185,6 +187,7 @@ export const TABLES = {
     "notes",
     "cost_item_id",
     "document_id",
+    "checklist",
   ],
   events: [
     "title",
@@ -347,6 +350,7 @@ export type Task = Base & {
   notes: string | null;
   cost_item_id: string | null;
   document_id: string | null;
+  checklist?: string | null;
 };
 export type CalEvent = Base & {
   title: string;
@@ -499,6 +503,8 @@ export function cleanRow(table: TableName, row: Record<string, unknown>) {
     if (v === "" || v === undefined) v = null;
     if (v !== null && NUMERIC_COLS.has(col)) v = Number(v) || 0;
     if (BOOL_COLS.has(col)) v = Boolean(v);
+    if (table === "tasks" && col === "checklist")
+      v = v === null ? null : JSON.stringify(parseTaskChecklist(v));
     out[col] = v;
   }
   return out;
