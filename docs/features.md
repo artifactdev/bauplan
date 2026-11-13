@@ -154,9 +154,11 @@ The **Analysis** page (`/analyse`) evaluates the whole project in six sections, 
 - **Expenses:** spending per week/month/quarter stacked by category, trade, payment source or status; distribution by source and status; reimbursement funnel with rate (reimbursed ÷ decided); open expenses by due date; top vendors; the ten largest expenses.
 - **Quotes:** cheapest/accepted/most expensive quote per cost item with the saving, quote status pipeline, quotes expiring within 30 days.
 - **Tasks & schedule:** progress by phase, trade or assignee, a timeline of tasks, appointments and deadlines with a "today" marker, and the list of overdue tasks.
-- **Loan:** actual and forecast balance, interest and commitment fees per month (from the Loan page's calculation).
+- **Loan:** amount drawn, monthly burden now and after the first installment, and per month the forecast split into interest, repayment and commitment fees with the actual costs to date, over a selectable horizon (from the Loan page's calculation; forecasts only include recorded drawdowns).
 
 **Filters** apply to all sections: period (presets or free dates) based on expense, payment or due date, group by week/month/quarter, trade, cost item, category, payment source, status, contact, phase, assignee, and "only costs that count toward the budget". Budget figures (total, expected, plan vs. forecast) always cover the whole project; the date filter applies to expenses, quotes and tasks. The current section and non-default filters are kept in the URL, so a link reproduces the view.
+
+**Ready-made analyses** (budget check, open payments, reimbursements, privately advanced, last 90 days, quarterly report, craftsmen costs, DIY & material, quote comparison, schedule, loan costs) are listed in the view selector; relative periods are always current, and presets without matching data (private source, loan) are hidden. Any of them can be saved as your own view.
 
 **Saved views** store a name, section and filters per account (up to 20, one can be marked as default). They can be updated, renamed and deleted from the page.
 

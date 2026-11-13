@@ -258,6 +258,7 @@ export const TABLES = {
     "repayment_count",
     "first_installment_date",
     "commitment_start",
+    "assumed_full_draw_date",
   ],
   credit_repayments: ["amount", "repayment_date", "notes"],
 } as const;
@@ -399,7 +400,8 @@ export type CreditTerms = Base & {
   commitment_rate: number;
   commitment_free_end: string | null;
   repayment_months: number | null;
-  day_basis: 360 | 365;
+  /** 30 = 30/360 (monthly flat 1/12 of the annual rate), 360 = act/360, 365 = act/365. */
+  day_basis: 30 | 360 | 365;
   effective_rate?: number | null;
   fixed_rate_end?: string | null;
   payout_rate?: number | null;
@@ -409,6 +411,8 @@ export type CreditTerms = Base & {
   repayment_count?: number | null;
   first_installment_date?: string | null;
   commitment_start?: string | null;
+  /** Optional assumption: the not yet drawn rest is drawn on this date (forecast only). */
+  assumed_full_draw_date?: string | null;
 };
 export type CreditRepayment = Base & {
   amount: number;

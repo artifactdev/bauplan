@@ -19,7 +19,8 @@ import { getOfflineAccount } from "@/lib/offline-store";
 import { PageHeader } from "@/components/app/ui-bits";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalysisFiltersBar } from "./AnalysisFiltersBar";
-import { AnalysisViewsBar } from "./AnalysisViewsBar";
+import { AnalysisViewsBar, PRESET_PREFIX } from "./AnalysisViewsBar";
+import { analysisPresets } from "@/lib/analysis-presets";
 import { BudgetSection } from "./BudgetSection";
 import { CreditSection } from "./CreditSection";
 import { ExpensesSection } from "./ExpensesSection";
@@ -85,6 +86,16 @@ export function AnalysisPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws, filters, assignees]);
 
+  const presets = useMemo(() => analysisPresets(ws, todayISO()), [ws]);
+  // A preset stays selected only while the current filters still equal it.
+  const activeId = (() => {
+    const preset = presets.find((item) => `${PRESET_PREFIX}${item.id}` === activeViewId);
+    if (!preset) return activeViewId;
+    return preset.section === section && JSON.stringify(preset.filters) === JSON.stringify(filters)
+      ? activeViewId
+      : null;
+  })();
+
   const sectionLabels: Record<Section, string> = {
     overview: tr("analysis.section_overview"),
     budget: tr("shared.budget"),
@@ -100,14 +111,20 @@ export function AnalysisPage({
       <div className="mb-4">
         <AnalysisViewsBar
           views={views.data}
-          activeId={activeViewId}
+          presets={presets.map((preset) => ({
+            id: preset.id,
+            name: tr(`analysis.preset_${preset.id}`),
+            hint: tr(`analysis.preset_${preset.id}_hint`),
+          }))}
+          activeId={activeId}
           filters={filters}
           section={section}
           canAdd={views.canAdd}
           saving={views.saving}
           onSelect={(id) => {
             setActiveViewId(id);
-            const view = views.data.views.find((item) => item.id === id);
+            const preset = presets.find((item) => `${PRESET_PREFIX}${item.id}` === id);
+            const view = preset ?? views.data.views.find((item) => item.id === id);
             if (view) change({ section: view.section, filters: view.filters });
           }}
           onAdd={(name) => setActiveViewId(views.add(name, section, filters))}

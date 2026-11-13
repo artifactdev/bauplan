@@ -9,12 +9,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 
 const NO_VIEW = "__none";
+export const PRESET_PREFIX = "preset:";
+
+export type PresetOption = { id: string; name: string; hint: string };
 
 function NamePopover({
   trigger,
@@ -72,6 +78,7 @@ function NamePopover({
 /** Pick, save, update, rename, delete and default-mark saved filter views. */
 export function AnalysisViewsBar({
   views,
+  presets,
   activeId,
   filters,
   section,
@@ -84,6 +91,7 @@ export function AnalysisViewsBar({
   onDefault,
 }: {
   views: AnalysisViews;
+  presets: PresetOption[];
   activeId: string | null;
   filters: AnalysisFilters;
   section: Section;
@@ -99,102 +107,128 @@ export function AnalysisViewsBar({
   onDefault: (id: string | null) => void;
 }) {
   const active = views.views.find((view) => view.id === activeId);
+  const activePreset = presets.find((preset) => `${PRESET_PREFIX}${preset.id}` === activeId);
+  const selectValue = active
+    ? active.id
+    : activePreset
+      ? `${PRESET_PREFIX}${activePreset.id}`
+      : NO_VIEW;
   const modified =
     !!active &&
     (active.section !== section || JSON.stringify(active.filters) !== JSON.stringify(filters));
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select
-        value={active?.id ?? NO_VIEW}
-        onValueChange={(value) => onSelect(value === NO_VIEW ? null : value)}
-      >
-        <SelectTrigger className="w-full sm:w-64" aria-label={tr("analysis.views")}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={NO_VIEW}>{tr("analysis.no_view")}</SelectItem>
-          {views.views.map((view) => (
-            <SelectItem key={view.id} value={view.id}>
-              {view.id === views.defaultId ? "★ " : ""}
-              {view.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {active && modified && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={saving}
-          onClick={() => onUpdate(active.id, { section, filters })}
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={selectValue}
+          onValueChange={(value) => onSelect(value === NO_VIEW ? null : value)}
         >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" /> {tr("analysis.update_view")}
-        </Button>
-      )}
-      {active && (
-        <>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={saving}
-            aria-pressed={views.defaultId === active.id}
-            aria-label={tr("analysis.default_view")}
-            title={tr("analysis.default_view")}
-            onClick={() => onDefault(views.defaultId === active.id ? null : active.id)}
-          >
-            <Star
-              className={
-                views.defaultId === active.id ? "h-4 w-4 fill-warning text-warning" : "h-4 w-4"
-              }
-            />
-          </Button>
-          <NamePopover
-            title={tr("analysis.view_name")}
-            initial={active.name}
-            disabled={saving}
-            onSubmit={(name) => onUpdate(active.id, { name })}
-            trigger={
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={tr("analysis.rename_view")}
-                title={tr("analysis.rename_view")}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            }
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={saving}
-            aria-label={tr("analysis.delete_view")}
-            title={tr("analysis.delete_view")}
-            onClick={() =>
-              confirm(tr("analysis.delete_view_confirm", { name: active.name })) &&
-              onRemove(active.id)
-            }
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </>
-      )}
-      <NamePopover
-        title={tr("analysis.view_name")}
-        initial=""
-        disabled={saving || !canAdd}
-        onSubmit={onAdd}
-        trigger={
+          <SelectTrigger className="w-full sm:w-72" aria-label={tr("analysis.views")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_VIEW}>{tr("analysis.no_view")}</SelectItem>
+            {views.views.length > 0 && (
+              <>
+                <SelectSeparator />
+                <SelectGroup>
+                  <SelectLabel>{tr("analysis.my_views")}</SelectLabel>
+                  {views.views.map((view) => (
+                    <SelectItem key={view.id} value={view.id}>
+                      {view.id === views.defaultId ? "★ " : ""}
+                      {view.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </>
+            )}
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel>{tr("analysis.preset_views")}</SelectLabel>
+              {presets.map((preset) => (
+                <SelectItem key={preset.id} value={`${PRESET_PREFIX}${preset.id}`}>
+                  {preset.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {active && modified && (
           <Button
             size="sm"
             variant="outline"
-            disabled={!canAdd}
-            title={canAdd ? undefined : tr("analysis.views_limit")}
+            disabled={saving}
+            onClick={() => onUpdate(active.id, { section, filters })}
           >
-            <BookmarkPlus className="h-4 w-4" aria-hidden="true" /> {tr("analysis.save_view")}
+            <RefreshCw className="h-4 w-4" aria-hidden="true" /> {tr("analysis.update_view")}
           </Button>
-        }
-      />
+        )}
+        {active && (
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={saving}
+              aria-pressed={views.defaultId === active.id}
+              aria-label={tr("analysis.default_view")}
+              title={tr("analysis.default_view")}
+              onClick={() => onDefault(views.defaultId === active.id ? null : active.id)}
+            >
+              <Star
+                className={
+                  views.defaultId === active.id ? "h-4 w-4 fill-warning text-warning" : "h-4 w-4"
+                }
+              />
+            </Button>
+            <NamePopover
+              title={tr("analysis.view_name")}
+              initial={active.name}
+              disabled={saving}
+              onSubmit={(name) => onUpdate(active.id, { name })}
+              trigger={
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label={tr("analysis.rename_view")}
+                  title={tr("analysis.rename_view")}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={saving}
+              aria-label={tr("analysis.delete_view")}
+              title={tr("analysis.delete_view")}
+              onClick={() =>
+                confirm(tr("analysis.delete_view_confirm", { name: active.name })) &&
+                onRemove(active.id)
+              }
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+        <NamePopover
+          title={tr("analysis.view_name")}
+          initial=""
+          disabled={saving || !canAdd}
+          onSubmit={onAdd}
+          trigger={
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canAdd}
+              title={canAdd ? undefined : tr("analysis.views_limit")}
+            >
+              <BookmarkPlus className="h-4 w-4" aria-hidden="true" /> {tr("analysis.save_view")}
+            </Button>
+          }
+        />
+      </div>
+      {activePreset && <p className="text-sm text-muted-foreground">{activePreset.hint}</p>}
     </div>
   );
 }

@@ -5,6 +5,8 @@ import {
   activeFilterCount,
   analysisViewsSchema,
   buildLedger,
+  creditCostOutlook,
+  creditRows,
   burnDown,
   dataQuality,
   dueBuckets,
@@ -289,5 +291,52 @@ describe("saved views", () => {
     expect(
       analysisViewsSchema.safeParse({ views: [{ ...view, name: "  " }], defaultId: null }).success,
     ).toBe(false);
+  });
+});
+
+describe("credit analysis", () => {
+  const summary = {
+    months: ["2026-10", "2026-11", "2026-12", "2027-01", "2027-02"].map((month, index) => ({
+      month,
+      actualDraws: 0,
+      plannedDraws: 0,
+      actualBalance: 100 + index,
+      plannedBalance: 200 + index,
+      actualInterest: 1,
+      actualCommitment: 2,
+      plannedInterest: 10,
+      plannedCommitment: 5,
+      plannedPayment: 10,
+      plannedRepayment: 0,
+      actualCumulative: 0,
+      plannedCumulative: 0,
+    })),
+    actualInterest: 5,
+    actualCommitment: 10,
+    plannedInterest: 50,
+    plannedCommitment: 25,
+    actualBalance: 100,
+    plannedBalance: 200,
+    balanceAtRepaymentStart: 200,
+    annuity: null,
+  };
+
+  it("leaves actual values empty after the current month instead of showing zero", () => {
+    const rows = creditRows(summary, "2026-11-13", null);
+    expect(rows.map((row) => row.actualBalance)).toEqual([100, 101, null, null, null]);
+    expect(rows.map((row) => row.actualCosts)).toEqual([3, 3, null, null, null]);
+    expect(rows[2]?.plannedCosts).toBe(15);
+  });
+
+  it("limits the horizon to the months after the current one", () => {
+    expect(creditRows(summary, "2026-11-13", 1).map((row) => row.month)).toEqual([
+      "2026-10",
+      "2026-11",
+      "2026-12",
+    ]);
+  });
+
+  it("sums the next twelve months and the whole term", () => {
+    expect(creditCostOutlook(summary, "2026-11-13")).toEqual({ next12: 60, term: 75 });
   });
 });

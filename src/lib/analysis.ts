@@ -5,6 +5,7 @@ import {
   bankFundedPayments,
   isBankPot,
   isOverdue,
+  type CreditSummary,
 } from "./calc";
 import { todayISO } from "./format";
 import {
@@ -623,4 +624,59 @@ export function creditAnalysis(
   if (!terms) return null;
   const payments = bankFundedPayments(ws.invoices, ws.expenses, terms.budget_pot_id);
   return calculateCreditCosts(terms, payments, ws.credit_repayments, today);
+}
+
+export type CreditRow = {
+  month: string;
+  /** Actual values exist only up to the current month; later months are null, not 0. */
+  actualBalance: number | null;
+  plannedBalance: number;
+  actualCosts: number | null;
+  plannedInterest: number;
+  plannedCommitment: number;
+  plannedCosts: number;
+};
+
+const addMonthKey = (month: string, months: number) => {
+  const date = new Date(
+    Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + months, 1),
+  );
+  return date.toISOString().slice(0, 7);
+};
+
+/**
+ * Monthly credit rows for charts. `horizon` limits the view to that many months after the
+ * current month (null = whole term); a long annuity otherwise shows hundreds of months.
+ */
+export function creditRows(
+  summary: CreditSummary,
+  today: string,
+  horizon: number | null,
+): CreditRow[] {
+  const current = today.slice(0, 7);
+  const last = horizon === null ? null : addMonthKey(current, horizon);
+  return summary.months
+    .filter((row) => last === null || row.month <= last)
+    .map((row) => {
+      const past = row.month <= current;
+      return {
+        month: row.month,
+        actualBalance: past ? row.actualBalance : null,
+        plannedBalance: row.plannedBalance,
+        actualCosts: past ? row.actualInterest + row.actualCommitment : null,
+        plannedInterest: row.plannedInterest,
+        plannedCommitment: row.plannedCommitment,
+        plannedCosts: row.plannedInterest + row.plannedCommitment,
+      };
+    });
+}
+
+/** Forecast costs for the next 12 months (starting with the current one) and over the whole term. */
+export function creditCostOutlook(summary: CreditSummary, today: string) {
+  const current = today.slice(0, 7);
+  const end = addMonthKey(current, 11);
+  const next12 = summary.months
+    .filter((row) => row.month >= current && row.month <= end)
+    .reduce((sum, row) => sum + row.plannedInterest + row.plannedCommitment, 0);
+  return { next12, term: summary.plannedInterest + summary.plannedCommitment };
 }

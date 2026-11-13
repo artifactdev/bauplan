@@ -202,10 +202,13 @@ function Shell() {
         {t("skip")}
       </a>
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground md:flex">
-        <div className="mb-7 flex items-center gap-3 px-3 font-display text-lg font-semibold text-sidebar-accent-foreground">
+        <Link
+          to="/"
+          className="mb-7 flex items-center gap-3 rounded-lg px-3 font-display text-lg font-semibold text-sidebar-accent-foreground"
+        >
           <img src="/app-icon.svg" alt="" className="h-9 w-9 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
           {tr("shared.bauplan")}
-        </div>
+        </Link>
         <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
         <nav aria-label={t("navigation")} className="grid gap-1">
           {[
@@ -250,10 +253,10 @@ function Shell() {
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-sidebar/60 px-4 backdrop-blur-xl md:bg-sidebar md:px-8 md:backdrop-blur-none">
           <div className="min-w-0">
-            <span className="flex items-center gap-2 font-semibold md:hidden">
+            <Link to="/" className="flex items-center gap-2 font-semibold md:hidden">
               <img src="/app-icon.svg" alt="" className="h-6 w-6 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
               {tr("shared.bauplan")}
-            </span>
+            </Link>
             <span className="hidden truncate text-sm text-muted-foreground md:block">
               {project?.name ?? t("workspace")}
             </span>
