@@ -365,7 +365,7 @@ export type CalEvent = Base & {
   caldav_data?: string | null;
 };
 
-export type ExpenseStatus = "offen" | "bezahlt" | "eingereicht" | "erstattet";
+export type ExpenseStatus = "offen" | "bezahlt" | "eingereicht" | "erstattet" | "abgelehnt";
 export type Expense = Base & {
   title: string;
   vendor: string | null;

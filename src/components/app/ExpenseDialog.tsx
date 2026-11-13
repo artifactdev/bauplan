@@ -9,7 +9,7 @@ import {
   tradeOptions,
 } from "@/lib/options";
 import { EXPENSE_CATEGORIES } from "@/lib/schema";
-import { expenseLinkDefaults, normalizeExpense } from "@/lib/expenses";
+import { expenseLinkDefaults, normalizeExpense, reimbursementSource } from "@/lib/expenses";
 import { EntityDialog } from "./EntityDialog";
 
 export function ExpenseDialog({
@@ -76,6 +76,7 @@ export function ExpenseDialog({
             { value: "bezahlt", label: tr("shared.paid") },
             { value: "eingereicht", label: tr("shared.submitted") },
             { value: "erstattet", label: tr("shared.reimbursed") },
+            { value: "abgelehnt", label: tr("shared.rejected") },
           ],
         },
         {
@@ -105,15 +106,16 @@ export function ExpenseDialog({
         { name: "notes", label: tr("shared.notes"), type: "textarea" },
       ]}
       initial={initial}
-      onSubmit={(values) =>
-        editId
-          ? update.mutateAsync({
-              table: "expenses",
-              id: editId,
-              patch: normalizeExpense(values, ws),
-            })
-          : create.mutateAsync({ table: "expenses", row: normalizeExpense(values, ws) })
-      }
+      onSubmit={(values) => {
+        const bankSource = reimbursementSource(values, initial, ws);
+        const row = normalizeExpense(
+          bankSource ? { ...values, budget_pot_id: bankSource } : values,
+          ws,
+        );
+        return editId
+          ? update.mutateAsync({ table: "expenses", id: editId, patch: row })
+          : create.mutateAsync({ table: "expenses", row });
+      }}
     />
   );
 }

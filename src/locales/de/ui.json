@@ -768,5 +768,15 @@
   "budget.expected_from_budget": "Aus dem Budget voraussichtlich",
   "index.expected_split_hint": "{{budget}} aus Budget · {{remaining}} verbleibend",
   "index.overdue_since": "überfällig seit {{date}}",
+  "expenses.moved_to_source": "Von {{previous}} nach {{source}} verschoben, da erstattet.",
+  "expenses.split_action": "Aufteilen",
+  "expenses.split_title": "Ausgabe aufteilen",
+  "expenses.split_hint": "„{{title}}“ ({{amount}}) wird in zwei Ausgaben aufgeteilt, z. B. wenn nur ein Teil des Einkaufs erstattet wird. Die Gesamtsumme bleibt gleich.",
+  "expenses.split_part_amount": "Teilbetrag (z. B. erstatteter Anteil)",
+  "expenses.split_part_status": "Status des Teilbetrags",
+  "expenses.split_part_preview": "Teilbetrag: {{amount}} · {{status}} · {{source}}",
+  "expenses.split_remainder_preview": "Rest: {{amount}} · {{status}} · {{source}}",
+  "expenses.split_invalid": "Gib einen Betrag über 0 und unter {{amount}} ein.",
+  "expenses.split_done": "Ausgabe aufgeteilt.",
   "index.expected_over_hint": "{{budget}} aus Budget · {{over}} über Budget"
 }

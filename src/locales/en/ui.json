@@ -768,5 +768,15 @@
   "budget.expected_from_budget": "Expected from budget",
   "index.expected_split_hint": "{{budget}} from budget · {{remaining}} remaining",
   "index.overdue_since": "overdue since {{date}}",
+  "expenses.moved_to_source": "Moved from {{previous}} to {{source}} because it was reimbursed.",
+  "expenses.split_action": "Split",
+  "expenses.split_title": "Split expense",
+  "expenses.split_hint": "“{{title}}” ({{amount}}) becomes two expenses, for example when only part of a purchase is reimbursed. The total stays the same.",
+  "expenses.split_part_amount": "Partial amount (e.g. the reimbursed share)",
+  "expenses.split_part_status": "Status of the partial amount",
+  "expenses.split_part_preview": "Partial amount: {{amount}} · {{status}} · {{source}}",
+  "expenses.split_remainder_preview": "Remainder: {{amount}} · {{status}} · {{source}}",
+  "expenses.split_invalid": "Enter an amount greater than 0 and below {{amount}}.",
+  "expenses.split_done": "Expense split.",
   "index.expected_over_hint": "{{budget}} from budget · {{over}} over budget"
 }

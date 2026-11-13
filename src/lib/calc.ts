@@ -73,7 +73,7 @@ export function countsTowardBudget(potId: string | null | undefined, pots: Budge
   return !p || isBankPot(p) || p.deducts_from_budget;
 }
 
-function isBankPot(pot: BudgetPot | undefined) {
+export function isBankPot(pot: BudgetPot | undefined) {
   return pot?.name.trim().toLocaleLowerCase() === "bank";
 }
 

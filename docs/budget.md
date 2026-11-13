@@ -32,8 +32,8 @@ Additional funds do not change the bank loan principal or create bank drawdowns.
 1. **No double counting:** per cost item use accepted quotes unless incurred expenses exceed them; without an accepted quote, use the higher of the planned amount and incurred expenses. A quote and its expenses are never added together. Multiple partial invoices are separate expenses, optionally linked to the same quote.
 2. Only **accepted** quotes count. **Requested**, received, and rejected quotes have no effect.
 3. Bank expenses always contribute to the project budget, even without a cost-item assignment. Other expenses need an existing cost item to contribute. The default **Anschaffung** and **Rückbau** items also appear in project expense totals when paid from another source, but do not reduce the budget unless paid from **Bank**. Their private payments are subtracted from the expected budget amount, so an accepted quote for the full cost is not charged to the bank budget again. Trades group cost items; they are not separate budget units.
-4. Eligible **expenses** count as incurred costs. Status "open" = not yet paid; "paid", "submitted", and "reimbursed" = paid.
-5. **Reimbursed expenses** remain counted as spent and are not credited back to the budget (they are shown separately).
+4. Eligible **expenses** count as incurred costs. Status "open" = not yet paid; "paid", "submitted", "reimbursed", and "rejected" = paid.
+5. **Reimbursed expenses** remain counted as spent and are not credited back to the budget (they are shown separately). An expense is usually paid from another source first (for example privately) and then submitted to the bank: it stays on that source while **submitted** or **rejected**, and only moves to the **Bank** source when it becomes **reimbursed** (unless you pick a source explicitly in the same edit).
 
 ## Payment sources
 
