@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Hammer } from "lucide-react";
 import { getAuthState, runSetup } from "@/lib/auth.functions";
 import { importSetupBackup } from "@/lib/data.functions";
+import { MAX_BACKUP_BYTES } from "@/lib/limits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,8 +44,8 @@ function SetupPage() {
       toast.error(tr("shared.choose_valid_bauplan_backup"));
       return;
     }
-    if (backupFile.size > 128 * 1024 * 1024) {
-      toast.error(tr("shared.backup_exceeds_128_mb"));
+    if (backupFile.size > MAX_BACKUP_BYTES) {
+      toast.error(tr("shared.backup_exceeds_512_mb"));
       return;
     }
     setBackupBusy(true);

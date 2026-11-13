@@ -38,7 +38,7 @@ The app has no OCR-related environment variables. Legacy `OCR_URL`, API-key, or 
 ### Backup
 The Compose setup stores the database and OCR models in `./daten` and uploaded files separately in `./dokumente`. Back up all three paths. For older installations, copy `daten/uploads/` into `dokumente/` before switching to the separate mount.
 
-Admins can also create a portable application backup in Settings and import it during setup or from Settings. It contains the database and uploaded documents, but not OCR language models; the archive includes sensitive user credentials and application settings. The in-app ZIP limit is 128 MB. See [backups and restore](backups.md) for expanded-size limits and restore behavior.
+Admins can also create a portable application backup in Settings and import it during setup or from Settings. It contains the database and optionally uploaded documents, but not OCR language models; the archive includes sensitive user credentials and application settings. The in-app ZIP limit is 512 MiB. See [backups and restore](backups.md) for memory requirements, expanded-size limits and restore behavior.
 
 ### Updates and database migrations
 
@@ -58,7 +58,7 @@ Synchronize offline work before updating. Writes from obsolete invoice forms or 
 
 ### Reverse proxy
 Put HTTPS in front of the app (cookies are `secure` under `https`). For OIDC, enter the public address in Settings.
-Allow a 100 MiB upload plus multipart overhead (for example `client_max_body_size 110m;` in nginx) and OCR processing durations up to 180 seconds in the proxy.
+Allow a 512 MiB backup upload plus multipart overhead (for example `client_max_body_size 520m;` in nginx) and OCR processing durations up to 180 seconds in the proxy. The regular individual file upload limit remains 100 MiB.
  OCR language models are downloaded only after an explicit admin action; once downloaded, OCR processing is offline. Optional OIDC uses the identity provider configured by an administrator; disable it to keep sign-in fully local. Docker needs network access while downloading base images and build dependencies.
 
 ## Development

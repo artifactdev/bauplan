@@ -50,11 +50,15 @@ export interface Repo {
   deleteAnalysisViews(userId: string): Promise<void>;
   getAll(): Promise<Workspace>;
   getSyncGeneration(): Promise<string>;
-  exportBackup(maxBytes?: number): Promise<{ database: BackupDatabase; files: BackupFile[] }>;
+  exportBackup(
+    maxBytes?: number,
+    includeUploads?: boolean,
+  ): Promise<{ database: BackupDatabase; files: BackupFile[] }>;
   restoreBackup(
     database: BackupDatabase,
     files: BackupFile[],
     requireNoUsers?: boolean,
+    preserveUploads?: boolean,
   ): Promise<void>;
   insert(
     table: TableName,
@@ -360,7 +364,7 @@ export function sqliteRepo(): Repo {
         ] ?? "",
       );
     },
-    async exportBackup(maxBytes = Number.POSITIVE_INFINITY) {
+    async exportBackup(maxBytes = Number.POSITIVE_INFINITY, includeUploads = true) {
       const d = await db();
       const path = await nodeImport<typeof import("node:path")>("node:" + "path");
       const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
@@ -390,7 +394,7 @@ export function sqliteRepo(): Repo {
           files.push({ name, bytes: new Uint8Array(await fs.readFile(filePath)) });
         }
       };
-      await walk("");
+      if (includeUploads) await walk("");
       return {
         database: {
           tables,
@@ -424,7 +428,7 @@ export function sqliteRepo(): Repo {
         files,
       };
     },
-    async restoreBackup(database, files, requireNoUsers = false) {
+    async restoreBackup(database, files, requireNoUsers = false, preserveUploads = false) {
       const d = await db();
       const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
       const path = await nodeImport<typeof import("node:path")>("node:" + "path");
@@ -513,14 +517,16 @@ export function sqliteRepo(): Repo {
         // Older backups store files flat and link idea images as documents.
         convertIdeaDocuments(d);
 
-        for (const name of await fs.readdir(liveDirectory)) {
-          if (name === stageName) continue;
-          await fs.rename(path.join(liveDirectory, name), path.join(previousUploads, name));
-          movedOld.push(name);
-        }
-        for (const name of await fs.readdir(stagedUploads)) {
-          await fs.rename(path.join(stagedUploads, name), path.join(liveDirectory, name));
-          movedNew.push(name);
+        if (!preserveUploads) {
+          for (const name of await fs.readdir(liveDirectory)) {
+            if (name === stageName) continue;
+            await fs.rename(path.join(liveDirectory, name), path.join(previousUploads, name));
+            movedOld.push(name);
+          }
+          for (const name of await fs.readdir(stagedUploads)) {
+            await fs.rename(path.join(stagedUploads, name), path.join(liveDirectory, name));
+            movedNew.push(name);
+          }
         }
         d.exec("COMMIT");
         transactionOpen = false;
@@ -568,7 +574,7 @@ export function sqliteRepo(): Repo {
           { cause: error },
         );
       }
-      organizeUploads(d, await uploadsEnv());
+      if (!preserveUploads) organizeUploads(d, await uploadsEnv());
     },
     async insert(table, row, actorId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");

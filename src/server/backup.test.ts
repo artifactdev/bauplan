@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  truncateSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -8,6 +17,7 @@ import { DEFAULT_APPEARANCE } from "@/lib/appearance";
 import { DEFAULT_NAVIGATION } from "@/lib/navigation";
 import { DEFAULT_FILTERS } from "@/lib/analysis";
 import { TABLES } from "@/lib/schema";
+import { MAX_BACKUP_BYTES } from "@/lib/limits";
 import type { Repo, SqliteDb } from "./repo";
 import { createBackup, parseBackup, restoreBackup } from "./backup";
 
@@ -176,6 +186,71 @@ describe("Bauplan backups", () => {
     expect(db.prepare("SELECT * FROM app_user_navigation").all()).toHaveLength(1);
     expect(db.prepare("SELECT * FROM app_user_analysis_views").all()).toHaveLength(1);
     expect(db.prepare("SELECT * FROM app_sync_operations").all()).toHaveLength(1);
+  });
+
+  it("restores database-only backups without replacing existing uploads", async () => {
+    const uploads = join(dir, "uploads");
+    const before = uploadedFiles(uploads);
+    const archive = await createBackup(repo, false);
+    const parsed = parseBackup(archive);
+    expect(parsed.includesUploads).toBe(false);
+    expect(parsed.files).toEqual([]);
+    expect(parsed.database.tables.documents[0]?.["storage_path"]).toBe(before[0]);
+
+    await repo.update("projects", "project-1", { name: "Changed" });
+    const additional = await repo.putFile("keep.txt", "text/plain", new Uint8Array([7]));
+    await restoreBackup(repo, archive);
+    expect((await repo.getAll()).projects[0]?.name).toBe("Saved project");
+    expect(uploadedFiles(uploads)).toEqual([...before, additional].sort());
+    expect(await repo.readFile(additional)).toEqual(new Uint8Array([7]));
+    await repo.deleteFile(additional);
+
+    const entries = unzipSync(archive);
+    entries["uploads/extra.txt"] = new Uint8Array([1]);
+    expect(() => parseBackup(zipSync(entries))).toThrow();
+    delete entries["uploads/extra.txt"];
+    const manifest = JSON.parse(strFromU8(entries["backup.json"]!)) as Record<string, unknown>;
+    delete manifest["includesUploads"];
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(() => parseBackup(zipSync(entries))).toThrow("Die Backup-Metadaten sind ungültig.");
+
+    const referencedFile = join(uploads, before[0]!);
+    const savedFile = join(dir, "temporarily-missing-upload");
+    renameSync(referencedFile, savedFile);
+    try {
+      await expect(restoreBackup(repo, archive)).resolves.toBeGreaterThan(0);
+      expect(await repo.readFile(before[0]!)).toBeNull();
+    } finally {
+      renameSync(savedFile, referencedFile);
+    }
+  });
+
+  it("exports and restores a full backup larger than the previous 128 MiB limit", async () => {
+    const largeFile = join(dir, "uploads", "large-backup-test.bin");
+    closeSync(openSync(largeFile, "w"));
+    try {
+      truncateSync(largeFile, 145 * 1024 * 1024);
+      const archive = await createBackup(repo);
+      expect(archive.byteLength).toBeGreaterThan(128 * 1024 * 1024);
+      await expect(restoreBackup(repo, archive)).resolves.toBeGreaterThan(0);
+      expect(statSync(largeFile).size).toBe(145 * 1024 * 1024);
+    } finally {
+      rmSync(largeFile, { force: true });
+    }
+  });
+
+  it("rejects uploads exceeding the expanded backup limit before reading them", async () => {
+    const largeFile = join(dir, "uploads", "too-large-backup-test.bin");
+    closeSync(openSync(largeFile, "w"));
+    try {
+      truncateSync(largeFile, MAX_BACKUP_BYTES + 1);
+      await expect(createBackup(repo)).rejects.toThrow(
+        "Die Uploads überschreiten die Backup-Größe.",
+      );
+      expect(parseBackup(await createBackup(repo, false)).includesUploads).toBe(false);
+    } finally {
+      rmSync(largeFile, { force: true });
+    }
   });
 
   it("rejects corrupted or unsafe archives before changing the database", async () => {

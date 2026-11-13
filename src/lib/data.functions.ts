@@ -15,7 +15,7 @@ import {
 import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
 import { analysisViewsSchema } from "./analysis";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
+import { MAX_BACKUP_BYTES, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 import { pushSubscriptionSchema } from "./push";
 import {
   paperlessSettingsSchema,
@@ -395,8 +395,8 @@ function backupFileFromForm(data: unknown, requireConfirmation: boolean) {
   if (!(data instanceof FormData)) throw new Error("FormData erwartet");
   const file = data.get("file");
   if (!(file instanceof File)) throw new Error("Keine Backup-Datei ausgewählt.");
-  if (file.size > 128 * 1024 * 1024)
-    throw new Error("Die Backup-Datei darf höchstens 128 MB groß sein.");
+  if (file.size > MAX_BACKUP_BYTES)
+    throw new Error("Die Backup-Datei darf höchstens 512 MB groß sein.");
   if (requireConfirmation && data.get("confirm") !== "replace")
     throw new Error("Die Bestätigung zum Ersetzen der vorhandenen Daten fehlt.");
   return file;

@@ -15,6 +15,7 @@ import {
   createManagedUser, deleteManagedUser, getOidcAdmin, listUsers, saveOidcAdmin, setUserPassword, setUserRole, type ManagedUser,
 } from "@/lib/auth.functions";
 import { importBackup } from "@/lib/data.functions";
+import { MAX_BACKUP_BYTES } from "@/lib/limits";
 import { signOut } from "./route";
 import { LanguageSelect } from "@/components/app/LanguageSelect";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -124,16 +125,39 @@ function SettingsPage() {
 
 function BackupPanel() {
   const [file, setFile] = useState<File | null>(null);
+  const [includeUploads, setIncludeUploads] = useState(true);
   const download = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/backup/export");
-      if (!response.ok) throw new Error(await response.text());
+      let response: Response;
+      try {
+        response = await fetch(`/api/backup/export?mode=${includeUploads ? "full" : "database"}`);
+      } catch (error) {
+        console.error("[backup] Export request failed", error);
+        throw new Error("settings.backup_export_failed");
+      }
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403)
+          throw new Error("settings.backup_export_unauthorized");
+        if (response.headers.get("content-type")?.includes("application/json")) {
+          let body: unknown;
+          try {
+            body = await response.json();
+          } catch (error) {
+            console.error("[backup] Invalid export error response", error);
+          }
+          if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
+            throw new Error(body.error);
+          }
+        }
+        throw new Error("settings.backup_export_failed");
+      }
       return response.blob();
     },
     onSuccess: (blob) => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
+      link.download = `bauplan-backup-${new Date().toISOString().slice(0, 10)}.zip`;
       link.hidden = true;
       document.body.append(link);
       link.click();
@@ -162,8 +186,8 @@ function BackupPanel() {
       toast.error(tr("shared.choose_valid_bauplan_backup"));
       return;
     }
-    if (file.size > 128 * 1024 * 1024) {
-      toast.error(tr("shared.backup_exceeds_128_mb"));
+    if (file.size > MAX_BACKUP_BYTES) {
+      toast.error(tr("shared.backup_exceeds_512_mb"));
       return;
     }
     if (!window.confirm(tr("settings.really_replace_all_existing"))) return;
@@ -182,6 +206,10 @@ function BackupPanel() {
               "settings.download_full_backup_database",
             )}
           </p>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch checked={includeUploads} onCheckedChange={setIncludeUploads} disabled={download.isPending} />
+            {tr("settings.backup_include_uploads")}
+          </label>
           <Button onClick={() => download.mutate()} disabled={download.isPending}>
             <Download className="h-4 w-4" />
             {download.isPending ? tr("settings.creating_backup") : tr("settings.export_backup")}

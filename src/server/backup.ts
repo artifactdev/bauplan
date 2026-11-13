@@ -11,10 +11,10 @@ import { z } from "zod";
 import { paperlessExportMetadataSchema } from "@/lib/paperless";
 import { normalizePaperlessUrl } from "./paperless-client";
 import { isSafeStoragePath } from "@/lib/storage-paths";
+import { MAX_BACKUP_BYTES } from "@/lib/limits";
 import type { BackupDatabase, BackupFile, Repo } from "./repo";
 
-export const MAX_BACKUP_BYTES = 128 * 1024 * 1024;
-const MAX_EXPANDED_BYTES = 256 * 1024 * 1024;
+const MAX_EXPANDED_BYTES = MAX_BACKUP_BYTES;
 const MAX_ARCHIVE_ENTRIES = 10_000;
 const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
 const FORMAT = "bauplan-backup";
@@ -24,7 +24,8 @@ const OPTIONAL_TABLES = new Set<TableName>(["funding_entries", "idea_images"]);
 
 type Manifest = {
   format: typeof FORMAT;
-  version: typeof VERSION;
+  version: 1 | 2;
+  includesUploads?: false;
   createdAt: string;
   database: BackupDatabase;
   files: { name: string; size: number; sha256: string }[];
@@ -464,7 +465,7 @@ function hash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function fileList(database: BackupDatabase, files: BackupFile[]) {
+function fileList(database: BackupDatabase, files: BackupFile[], includesUploads = true) {
   if (files.length + 1 > MAX_ARCHIVE_ENTRIES) fail("Das Backup enthält zu viele Dateien.");
   const uploadedNames = new Set<string>();
   let totalBytes = 0;
@@ -481,8 +482,9 @@ function fileList(database: BackupDatabase, files: BackupFile[]) {
       .map((row) => row["storage_path"])
       .filter((name): name is string => typeof name === "string" && name.length > 0),
   );
-  for (const name of referenced)
-    if (!uploadedNames.has(name)) fail("Im Backup fehlt eine referenzierte Dokumentdatei.");
+  if (includesUploads)
+    for (const name of referenced)
+      if (!uploadedNames.has(name)) fail("Im Backup fehlt eine referenzierte Dokumentdatei.");
   return files.map((file) => ({
     name: file.name,
     size: file.bytes.byteLength,
@@ -490,16 +492,17 @@ function fileList(database: BackupDatabase, files: BackupFile[]) {
   }));
 }
 
-export async function createBackup(repo: Repo): Promise<Uint8Array> {
-  const { database, files } = await repo.exportBackup(MAX_EXPANDED_BYTES);
+export async function createBackup(repo: Repo, includeUploads = true): Promise<Uint8Array> {
+  const { database, files } = await repo.exportBackup(MAX_EXPANDED_BYTES, includeUploads);
   validateDatabase(database);
   const entries: Record<string, Uint8Array> = {};
   const manifest: Manifest = {
     format: FORMAT,
-    version: VERSION,
+    version: includeUploads ? VERSION : 2,
+    ...(includeUploads ? {} : { includesUploads: false as const }),
     createdAt: new Date().toISOString(),
     database,
-    files: fileList(database, files),
+    files: fileList(database, files, includeUploads),
   };
   const manifestBytes = strToU8(JSON.stringify(manifest));
   if (manifestBytes.byteLength > MAX_MANIFEST_BYTES) fail("Die Backup-Datenbank ist zu groß.");
@@ -511,12 +514,13 @@ export async function createBackup(repo: Repo): Promise<Uint8Array> {
   for (const file of files) entries[`uploads/${file.name}`] = file.bytes;
   const archive = zipSync(entries, { level: 0 });
   if (archive.byteLength > MAX_BACKUP_BYTES)
-    fail("Das Backup ist größer als die erlaubten 128 MB.");
+    fail("Das Backup ist größer als die erlaubten 512 MB.");
   return archive;
 }
 
 function validateArchiveFiles(entries: Unzipped): {
-  manifest: Manifest;
+  database: BackupDatabase;
+  includesUploads: boolean;
   files: BackupFile[];
 } {
   const metadata = entries["backup.json"];
@@ -530,8 +534,14 @@ function validateArchiveFiles(entries: Unzipped): {
   }
   if (!isRecord(parsed)) fail("Die Backup-Metadaten sind ungültig.");
   if (parsed["format"] !== FORMAT) fail("Die Datei ist kein Bauplan-Backup.");
-  if (parsed["version"] !== VERSION)
+  if (parsed["version"] !== VERSION && parsed["version"] !== 2)
     fail("Diese Backup-Version wird von dieser Bauplan-Version nicht unterstützt.");
+  const includesUploads = parsed["version"] === VERSION;
+  if (
+    (includesUploads && "includesUploads" in parsed) ||
+    (!includesUploads && parsed["includesUploads"] !== false)
+  )
+    fail("Die Backup-Metadaten sind ungültig.");
   if (typeof parsed["createdAt"] !== "string" || !Array.isArray(parsed["files"]))
     fail("Die Backup-Metadaten sind unvollständig.");
   const database = validateDatabase(parsed["database"]);
@@ -545,6 +555,7 @@ function validateArchiveFiles(entries: Unzipped): {
     files.set(fileName, bytes);
   }
   if (parsed["files"].length !== files.size) fail("Die Dateiliste im Backup stimmt nicht überein.");
+  if (!includesUploads && files.size !== 0) fail("Die Backup-Metadaten sind ungültig.");
   const manifestFiles = new Set<string>();
   const validFiles = parsed["files"].map((entry) => {
     if (
@@ -565,9 +576,10 @@ function validateArchiveFiles(entries: Unzipped): {
     return { name: entry["name"], bytes };
   });
   if (manifestFiles.size !== files.size) fail("Das Backup enthält nicht aufgeführte Dateien.");
-  fileList(database, validFiles);
+  fileList(database, validFiles, includesUploads);
   return {
-    manifest: { ...parsed, database } as unknown as Manifest,
+    database,
+    includesUploads,
     files: validFiles,
   };
 }
@@ -575,9 +587,10 @@ function validateArchiveFiles(entries: Unzipped): {
 export function parseBackup(bytes: Uint8Array): {
   database: BackupDatabase;
   files: BackupFile[];
+  includesUploads: boolean;
 } {
   if (!bytes.byteLength || bytes.byteLength > MAX_BACKUP_BYTES)
-    fail("Die Backup-Datei ist leer oder überschreitet 128 MB.");
+    fail("Die Backup-Datei ist leer oder überschreitet 512 MB.");
   let fileCount = 0;
   let expandedBytes = 0;
   const entryNames = new Set<string>();
@@ -608,8 +621,7 @@ export function parseBackup(bytes: Uint8Array): {
     if (error instanceof Error && error.message.startsWith("Das Backup")) throw error;
     throw new Error("Die Backup-Datei ist beschädigt oder kein gültiges ZIP-Archiv.");
   }
-  const { manifest, files } = validateArchiveFiles(entries);
-  return { database: manifest.database, files };
+  return validateArchiveFiles(entries);
 }
 
 export async function restoreBackup(
@@ -618,7 +630,7 @@ export async function restoreBackup(
   requireNoUsers = false,
 ): Promise<number> {
   const backup = parseBackup(bytes);
-  await repo.restoreBackup(backup.database, backup.files, requireNoUsers);
+  await repo.restoreBackup(backup.database, backup.files, requireNoUsers, !backup.includesUploads);
   return backup.database.users.length;
 }
 
