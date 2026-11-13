@@ -11,6 +11,7 @@ import {
   PAPERLESS_AUTO_IMPORT_DDL,
   PAPERLESS_ACCESS_DDL,
   PAPERLESS_FILE_GUARD_DDL,
+  DEFAULT_COST_ITEM_TITLES,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
 import { legacyInvoiceExpense } from "@/lib/expenses";
@@ -124,6 +125,21 @@ const MIGRATIONS: readonly Migration[] = [
       // Pre-release builds linked idea images through this column.
       if (columns.some((column) => column["name"] === "idea_id"))
         db.exec("ALTER TABLE documents DROP COLUMN idea_id");
+    },
+  },
+  {
+    version: 10,
+    name: "default-acquisition-and-demolition-cost-items",
+    up(db) {
+      for (const title of DEFAULT_COST_ITEM_TITLES) {
+        const existing = db
+          .prepare("SELECT id FROM cost_items WHERE lower(trim(title)) = lower(?) LIMIT 1")
+          .get(title);
+        if (existing) continue;
+        db.prepare(
+          "INSERT INTO cost_items (id, created_at, trade_id, title, description, planned) VALUES (?, ?, NULL, ?, NULL, 0)",
+        ).run(crypto.randomUUID(), new Date().toISOString(), title);
+      }
     },
   },
 ];

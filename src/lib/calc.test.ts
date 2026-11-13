@@ -20,6 +20,10 @@ describe("budget calculation", () => {
     expect(expectedCost(5000, 0, 0)).toBe(5000);
   });
 
+  it("keeps a planned amount when invoices are only partial and no offer exists", () => {
+    expect(expectedCost(5000, 0, 1200)).toBe(5000);
+  });
+
   it("does not add accepted offer and invoice for the same item", () => {
     const s = summarize({
       ...base,
@@ -213,6 +217,38 @@ describe("budget calculation", () => {
     expect(s.invoiced).toBe(0);
     expect(s.paid).toBe(0);
   });
+
+  it("counts Bank expenses even without a cost item or a budget-enabled source", () => {
+    const s = summarize({
+      ...base,
+      cost_items: [],
+      offers: [],
+      invoices: [],
+      expenses: [
+        {
+          id: "bank-expense",
+          title: "Haus + Grundstück",
+          vendor: null,
+          amount: 220000,
+          expense_date: null,
+          category: "Sonstiges",
+          trade_id: null,
+          cost_item_id: null,
+          document_id: null,
+          status: "bezahlt",
+          notes: null,
+          budget_pot_id: "bank",
+        },
+      ],
+      budget_pots: [{ id: "bank", name: "Bank", deducts_from_budget: false, notes: null }],
+    });
+
+    expect(s.expected).toBe(220000);
+    expect(s.budgetExpected).toBe(220000);
+    expect(s.invoiced).toBe(220000);
+    expect(s.paid).toBe(220000);
+    expect(s.remaining).toBe(-210000);
+  });
 });
 
 describe("expenses", () => {
@@ -252,6 +288,77 @@ describe("expenses", () => {
     expect(s.remaining).toBe(9950);
     expect(s.reimbursed).toBe(50);
   });
+
+  it("includes private Anschaffung and Rückbau expenses in dashboard costs but not budget spending", () => {
+    const s = summarize({
+      ...base,
+      cost_items: [
+        { id: "acquisition", trade_id: null, title: "Anschaffung", description: null, planned: 0 },
+        { id: "demolition", trade_id: null, title: "Rückbau", description: null, planned: 0 },
+      ],
+      offers: [],
+      invoices: [],
+      expenses: [
+        { ...exp(200, "bezahlt"), cost_item_id: "acquisition", budget_pot_id: "priv" },
+        { ...exp(100, "offen"), cost_item_id: "demolition", budget_pot_id: "priv" },
+      ],
+      budget_pots: [{ id: "priv", name: "Privat", deducts_from_budget: false, notes: null }],
+    });
+
+    expect(s.expected).toBe(300);
+    expect(s.budgetExpected).toBe(0);
+    expect(s.remaining).toBe(10000);
+    expect(s.expensesTotal).toBe(300);
+    expect(s.paid).toBe(200);
+  });
+
+  it("subtracts the private acquisition amount from the budget forecast without double-counting its offer", () => {
+    const s = summarize({
+      ...base,
+      projects: [
+        {
+          id: "p",
+          name: "x",
+          address: null,
+          total_budget: 361000,
+          start_date: null,
+          end_date: null,
+        },
+      ],
+      cost_items: [
+        { id: "acquisition", trade_id: null, title: "Anschaffung", description: null, planned: 0 },
+      ],
+      offers: [
+        {
+          id: "purchase-offer",
+          trade_id: null,
+          cost_item_id: "acquisition",
+          document_id: null,
+          contact_id: null,
+          requested_date: null,
+          contractor: "Verkäufer",
+          title: "Hauskauf",
+          amount: 220000,
+          offer_date: null,
+          status: "accepted",
+          notes: null,
+        },
+      ],
+      invoices: [],
+      expenses: [
+        { ...exp(201000, "bezahlt"), cost_item_id: "acquisition", budget_pot_id: "bank" },
+        { ...exp(19000, "bezahlt"), cost_item_id: "acquisition", budget_pot_id: "priv" },
+      ],
+      budget_pots: [
+        { id: "bank", name: "Bank", deducts_from_budget: false, notes: null },
+        { id: "priv", name: "Privat", deducts_from_budget: false, notes: null },
+      ],
+    });
+
+    expect(s.expected).toBe(220000);
+    expect(s.budgetExpected).toBe(201000);
+    expect(s.remaining).toBe(160000);
+  });
 });
 
 describe("overdue", () => {
@@ -270,7 +377,7 @@ describe("payment sources", () => {
     ],
   };
   const pots = [
-    { id: "bank", name: "Bank", deducts_from_budget: true, notes: null },
+    { id: "bank", name: "Bank", deducts_from_budget: false, notes: null },
     { id: "priv", name: "Privat", deducts_from_budget: false, notes: null },
   ];
   const exp = (amount: number, budget_pot_id: string | null) => ({

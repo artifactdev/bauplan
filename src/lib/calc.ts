@@ -7,6 +7,7 @@ import type {
   Invoice,
   Workspace,
 } from "./schema";
+import { DEFAULT_COST_ITEM_TITLES } from "./schema";
 import { todayISO } from "./format";
 
 export type ItemSummary = {
@@ -18,6 +19,7 @@ export type ItemSummary = {
   invoiced: number; // all invoices
   paid: number; // paid invoices
   expected: number; // best estimate of final cost, no double counting
+  budgetExpected: number; // expected amount deducted from the total budget
 };
 
 /**
@@ -27,8 +29,8 @@ export type ItemSummary = {
  * never added together.
  */
 export function expectedCost(planned: number, committed: number, invoiced: number) {
-  if (invoiced > 0 || committed > 0) return Math.max(committed, invoiced);
-  return planned;
+  if (committed > 0) return Math.max(committed, invoiced);
+  return Math.max(planned, invoiced);
 }
 
 /** Expenses (receipts, general bills) always count as spent money. Only status "offen" is unpaid. */
@@ -63,11 +65,22 @@ export function summarizePots(
   });
 }
 
-/** True when an item counts against the total budget: no source, or a source flagged deducts_from_budget. */
+/** Bank always counts; other sources count when unassigned or marked for budget deduction. */
 export function countsTowardBudget(potId: string | null | undefined, pots: BudgetPot[]) {
   if (!potId) return true;
   const p = pots.find((x) => x.id === potId);
-  return !p || p.deducts_from_budget;
+  return !p || isBankPot(p) || p.deducts_from_budget;
+}
+
+function isBankPot(pot: BudgetPot | undefined) {
+  return pot?.name.trim().toLocaleLowerCase() === "bank";
+}
+
+function isSpecialCostItem(title: string) {
+  const normalized = title.trim().toLocaleLowerCase();
+  return DEFAULT_COST_ITEM_TITLES.some(
+    (defaultTitle) => defaultTitle.toLocaleLowerCase() === normalized,
+  );
 }
 
 export function summarize(
@@ -77,23 +90,30 @@ export function summarize(
     funding_entries?: FundingEntry[];
   },
 ) {
-  // Only transactions assigned to a cost item and a budget-counting source
-  // participate in the project budget.
+  // Bank transactions always count; other sources need a cost item and follow
+  // the source setting, except acquisition/demolition expenses shown separately.
   const potList = wsIn.budget_pots ?? [];
   const costItemIds = new Set(wsIn.cost_items.map((item) => item.id));
-  const invoices = wsIn.invoices.filter(
-    (invoice) =>
-      invoice.cost_item_id &&
-      costItemIds.has(invoice.cost_item_id) &&
-      countsTowardBudget(invoice.budget_pot_id, potList),
-  );
   const allExpenses = wsIn.expenses ?? [];
-  const expenses = allExpenses.filter(
-    (expense) =>
-      expense.cost_item_id &&
-      costItemIds.has(expense.cost_item_id) &&
-      countsTowardBudget(expense.budget_pot_id, potList),
-  );
+  const costItemsById = new Map(wsIn.cost_items.map((item) => [item.id, item]));
+  const invoices = wsIn.invoices.filter((invoice) => {
+    const costItem = invoice.cost_item_id ? costItemsById.get(invoice.cost_item_id) : undefined;
+    const bank = isBankPot(potList.find((pot) => pot.id === invoice.budget_pot_id));
+    return (
+      bank ||
+      (!!costItem &&
+        (countsTowardBudget(invoice.budget_pot_id, potList) || isSpecialCostItem(costItem.title)))
+    );
+  });
+  const expenses = allExpenses.filter((expense) => {
+    const costItem = expense.cost_item_id ? costItemsById.get(expense.cost_item_id) : undefined;
+    const bank = isBankPot(potList.find((pot) => pot.id === expense.budget_pot_id));
+    return (
+      bank ||
+      (!!costItem &&
+        (countsTowardBudget(expense.budget_pot_id, potList) || isSpecialCostItem(costItem.title)))
+    );
+  });
   const funding = wsIn.funding_entries ?? [];
   const pots = summarizePots(potList, allExpenses, wsIn.invoices, funding);
   const items: ItemSummary[] = wsIn.cost_items.map((c) => {
@@ -102,13 +122,25 @@ export function summarize(
       .reduce((s, o) => s + Number(o.amount), 0);
     const inv = invoices.filter((i) => i.cost_item_id === c.id);
     const ex = expenses.filter((e) => e.cost_item_id === c.id);
-    const invoiced =
-      inv.reduce((s, i) => s + Number(i.amount), 0) + ex.reduce((s, e) => s + Number(e.amount), 0);
-    const paid =
-      inv.filter((i) => i.paid).reduce((s, i) => s + Number(i.amount), 0) +
-      ex.filter(expPaid).reduce((s, e) => s + Number(e.amount), 0);
+    const budgetInv = inv.filter((i) => {
+      const bank = isBankPot(potList.find((pot) => pot.id === i.budget_pot_id));
+      return bank || (!isSpecialCostItem(c.title) && countsTowardBudget(i.budget_pot_id, potList));
+    });
+    const budgetEx = ex.filter((e) => {
+      const bank = isBankPot(potList.find((pot) => pot.id === e.budget_pot_id));
+      return bank || (!isSpecialCostItem(c.title) && countsTowardBudget(e.budget_pot_id, potList));
+    });
+    const amount = (rows: { amount: number }[]) =>
+      rows.reduce((sum, row) => sum + Number(row.amount), 0);
+    const invoiced = amount(inv) + amount(ex);
+    const paid = amount(inv.filter((i) => i.paid)) + amount(ex.filter(expPaid));
     const enteredPlan = Number(c.planned);
     const planned = enteredPlan > 0 ? enteredPlan : committed;
+    const budgetInvoiced = amount(budgetInv) + amount(budgetEx);
+    const expected = expectedCost(planned, committed, invoiced);
+    const nonBankInvoiced =
+      amount(inv.filter((i) => !isBankPot(potList.find((pot) => pot.id === i.budget_pot_id)))) +
+      amount(ex.filter((e) => !isBankPot(potList.find((pot) => pot.id === e.budget_pot_id))));
     return {
       id: c.id,
       title: c.title,
@@ -117,19 +149,43 @@ export function summarize(
       committed,
       invoiced,
       paid,
-      expected: expectedCost(planned, committed, invoiced),
+      expected,
+      budgetExpected: isSpecialCostItem(c.title)
+        ? Math.max(0, expected - nonBankInvoiced)
+        : expectedCost(planned, committed, budgetInvoiced),
     };
   });
   const sum = (k: keyof ItemSummary) => items.reduce((s, i) => s + (i[k] as number), 0);
+  const unassignedInvoices = invoices.filter(
+    (invoice) => !invoice.cost_item_id || !costItemIds.has(invoice.cost_item_id),
+  );
+  const unassignedExpenses = expenses.filter(
+    (expense) => !expense.cost_item_id || !costItemIds.has(expense.cost_item_id),
+  );
+  const unassignedAmount = (rows: { amount: number }[]) =>
+    rows.reduce((total, row) => total + Number(row.amount), 0);
+  const unassignedInvoiced =
+    unassignedAmount(unassignedInvoices) + unassignedAmount(unassignedExpenses);
+  const unassignedPaid =
+    unassignedAmount(unassignedInvoices.filter((invoice) => invoice.paid)) +
+    unassignedAmount(unassignedExpenses.filter(expPaid));
 
   const bankBudget = Number(wsIn.projects[0]?.total_budget ?? 0);
   const additionalFunding = funding.reduce((sum, entry) => sum + Number(entry.amount), 0);
   const budget = bankBudget + additionalFunding;
   const planned = sum("planned");
   const committed = sum("committed");
-  const invoiced = sum("invoiced");
-  const paid = sum("paid");
-  const expected = sum("expected");
+  const invoiced = sum("invoiced") + unassignedInvoiced;
+  const paid = sum("paid") + unassignedPaid;
+  const expected = sum("expected") + unassignedInvoiced;
+  const budgetExpected =
+    sum("budgetExpected") +
+    unassignedAmount(
+      unassignedInvoices.filter((invoice) => countsTowardBudget(invoice.budget_pot_id, potList)),
+    ) +
+    unassignedAmount(
+      unassignedExpenses.filter((expense) => countsTowardBudget(expense.budget_pot_id, potList)),
+    );
   const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const reimbursed = expenses
     .filter((e) => e.status === "erstattet")
@@ -146,7 +202,8 @@ export function summarize(
     paid,
     open: invoiced - paid,
     expected,
-    remaining: budget - expected,
+    budgetExpected,
+    remaining: budget - budgetExpected,
     expensesTotal,
     reimbursed,
     pots,

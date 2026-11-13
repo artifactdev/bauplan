@@ -422,6 +422,7 @@ export const EXPENSE_CATEGORIES = [
   "Verpflegung",
   "Sonstiges",
 ];
+export const DEFAULT_COST_ITEM_TITLES = ["Anschaffung", "Rückbau"] as const;
 
 export type Idea = Base & {
   collection: string;

@@ -4,14 +4,14 @@ Implemented in `src/lib/calc.ts`, covered by `src/lib/calc.test.ts`.
 
 ## Terms
 
-| Term          | Meaning                                     |
-| ------------- | ------------------------------------------- |
-| **Planned**   | Planned amount for the cost item            |
-| **Committed** | Sum of **accepted** quotes                  |
-| **Invoiced**  | Sum of expenses, including invoice expenses |
-| **Expected**  | Best estimate of final costs                |
-| **Paid**      | Expenses with status ≠ open                 |
-| **Remaining** | Total budget − Expected                     |
+| Term          | Meaning                                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Planned**   | Planned amount for the cost item                                                                                                      |
+| **Committed** | Sum of **accepted** quotes                                                                                                            |
+| **Invoiced**  | Sum of expenses, including invoice expenses                                                                                           |
+| **Expected**  | Best estimate of final costs: accepted quotes unless expenses exceed them; without an accepted quote, the higher of plan and expenses |
+| **Paid**      | Expenses with status ≠ open                                                                                                           |
+| **Remaining** | Total budget − Expected                                                                                                               |
 
 ## Financing
 
@@ -27,15 +27,15 @@ Additional funds do not change the bank loan principal or create bank drawdowns.
 
 ## Rules
 
-1. **No double counting:** per cost item use the larger of accepted quotes and incurred expenses when either is present; otherwise use the planned amount. A quote and its expenses are never added together. Multiple partial invoices are separate expenses, optionally linked to the same quote.
+1. **No double counting:** per cost item use accepted quotes unless incurred expenses exceed them; without an accepted quote, use the higher of the planned amount and incurred expenses. A quote and its expenses are never added together. Multiple partial invoices are separate expenses, optionally linked to the same quote.
 2. Only **accepted** quotes count. **Requested**, received, and rejected quotes have no effect.
-3. Only records assigned to an existing cost item contribute to the project budget. Trades group cost items; they are not separate budget units.
+3. Bank expenses always contribute to the project budget, even without a cost-item assignment. Other expenses need an existing cost item to contribute. The default **Anschaffung** and **Rückbau** items also appear in project expense totals when paid from another source, but do not reduce the budget unless paid from **Bank**. Their private payments are subtracted from the expected budget amount, so an accepted quote for the full cost is not charged to the bank budget again. Trades group cost items; they are not separate budget units.
 4. Eligible **expenses** count as incurred costs. Status "open" = not yet paid; "paid", "submitted", and "reimbursed" = paid.
 5. **Reimbursed expenses** remain counted as spent and are not credited back to the budget (they are shown separately).
 
 ## Payment sources
 
-Expenses have a "Paid from" field (e.g. **Bank**, **Private**). Sources are managed in **Settings → Payment sources**, each with a switch "Deduct from total budget". Only items from deducting sources (or with no source), linked to a valid cost item, count against the total budget; others (e.g. tools paid privately) still appear in the expenses overview with per-source totals.
+Expenses have a "Paid from" field (e.g. **Bank**, **Private**). Sources are managed in **Settings → Payment sources**, each with a switch "Deduct from total budget". The **Bank** source always deducts from the budget, regardless of that switch. Other sources follow the switch for regular cost items; expenses under **Anschaffung** or **Rückbau** remain visible in dashboard expense totals but do not reduce the budget when paid from a non-bank source.
 
 ## Credit interest calculator
 

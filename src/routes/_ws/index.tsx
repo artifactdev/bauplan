@@ -32,6 +32,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { QuickTask, QuickCost, QuickUpload } from "@/components/app/quick-actions";
 import { CreditSummaryCard } from "@/components/app/CreditCalculator";
+import { DEFAULT_COST_ITEM_TITLES } from "@/lib/schema";
 
 export const Route = createFileRoute("/_ws/")({
   head: () => ({
@@ -77,16 +78,22 @@ function Dashboard() {
   ]
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 6);
-  const overBudget = s.budget > 0 && s.expected > s.budget;
+  const overBudget = s.budget > 0 && s.budgetExpected > s.budget;
+  const defaultCostItemTitles = new Set(
+    DEFAULT_COST_ITEM_TITLES.map((title) => title.toLocaleLowerCase()),
+  );
   const topCostItems = [...s.items].sort((a, b) => b.expected - a.expected).slice(0, 5);
   const budgetTone =
-    s.budget > 0 && s.expected > s.budget
+    s.budget > 0 && s.budgetExpected > s.budget
       ? "danger"
-      : s.budget > 0 && s.expected > s.budget * 0.9
+      : s.budget > 0 && s.budgetExpected > s.budget * 0.9
         ? "warning"
         : "primary";
 
-  const isEmpty = !ws.cost_items.length && !ws.tasks.length;
+  const hasUserCostItems = ws.cost_items.some(
+    (item) => !defaultCostItemTitles.has(item.title.trim().toLocaleLowerCase()),
+  );
+  const isEmpty = !hasUserCostItems && !ws.tasks.length;
 
   return (
     <>
@@ -151,12 +158,12 @@ function Dashboard() {
           hint={
             s.budget <= 0
               ? tr("index.budget_not_set")
-              : `${Math.round((s.expected / s.budget) * 100)} % · ${s.remaining >= 0 ? `${eur(s.remaining)} ${tr("budget.remaining").toLowerCase()}` : `${eur(-s.remaining)} ${tr("index.over_budget")}`}`
+              : `${Math.round((s.budgetExpected / s.budget) * 100)} % · ${s.remaining >= 0 ? `${eur(s.remaining)} ${tr("budget.remaining").toLowerCase()}` : `${eur(-s.remaining)} ${tr("index.over_budget")}`}`
           }
           tone={
             s.budget > 0 && s.remaining < 0
               ? "danger"
-              : s.budget > 0 && s.expected > s.budget * 0.9
+              : s.budget > 0 && s.budgetExpected > s.budget * 0.9
                 ? "warning"
                 : "primary"
           }
@@ -199,7 +206,7 @@ function Dashboard() {
           <div className="mb-4">
             <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm">
               <span>
-                {tr("budget.expected")} {eur(s.expected)}
+                {tr("budget.expected")} {eur(s.budgetExpected)}
               </span>
               {s.budget > 0 && (
                 <span className="text-muted-foreground">
@@ -208,7 +215,7 @@ function Dashboard() {
               )}
             </div>
             {s.budget > 0 ? (
-              <Bar value={s.expected} max={s.budget} tone={budgetTone} color="expected" />
+              <Bar value={s.budgetExpected} max={s.budget} tone={budgetTone} color="expected" />
             ) : (
               <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 {tr("index.budget_not_set")}
@@ -283,7 +290,9 @@ function Dashboard() {
                   <li key="budget-overrun" className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                     <span>
-                      {tr("index.budget_overrun", { amount: eur(s.expected - s.budget) })}
+                      {tr("index.budget_overrun", {
+                        amount: eur(s.budgetExpected - s.budget),
+                      })}
                     </span>
                   </li>
                 )}

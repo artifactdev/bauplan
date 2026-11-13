@@ -42,7 +42,11 @@ describe("database migrations", () => {
           .map((column) => column["name"]),
       ).toEqual(columns);
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("SELECT title FROM cost_items ORDER BY title").all()).toEqual([
+      { title: "Anschaffung" },
+      { title: "Rückbau" },
+    ]);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'app_%'").all()).toHaveLength(
       17,
     );
@@ -93,6 +97,9 @@ describe("database migrations", () => {
     );
     migrateDatabase(db);
     migrateDatabase(db);
+    expect(
+      db.prepare("SELECT title FROM cost_items WHERE title IN ('Anschaffung', 'Rückbau')").all(),
+    ).toHaveLength(2);
     expect(db.prepare("SELECT valid_until FROM offers").all()).toEqual([
       { valid_until: "2026-11-10" },
     ]);
@@ -102,7 +109,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
     expect(
       db.prepare("SELECT start_date, due_date, checklist FROM tasks WHERE id = 'task'").get(),
     ).toEqual({
@@ -110,6 +117,24 @@ describe("database migrations", () => {
       due_date: "2026-11-01",
       checklist: null,
     });
+  });
+
+  it("does not duplicate an existing default cost item when upgrading", () => {
+    const db = database();
+    migrateDatabase(db);
+    db.prepare("DELETE FROM cost_items WHERE title = 'Anschaffung'").run();
+    db.prepare("INSERT INTO cost_items (id, created_at, title, planned) VALUES (?, ?, ?, 0)").run(
+      "existing-acquisition",
+      "2026-01-01",
+      " Anschaffung ",
+    );
+    db.exec("PRAGMA user_version = 9");
+
+    migrateDatabase(db);
+
+    expect(
+      db.prepare("SELECT id FROM cost_items WHERE lower(trim(title)) = 'anschaffung'").all(),
+    ).toEqual([{ id: "existing-acquisition" }]);
   });
 
   it("applies ordered data migrations once", () => {
@@ -137,7 +162,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_access; PRAGMA user_version=7;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_access").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
   });
 
   it("upgrades v6 with an empty private auto-import table without enabling imports", () => {
@@ -146,7 +171,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_auto_import; PRAGMA user_version=6;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_auto_import").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
   });
 
   it("upgrades v5 Paperless links and preserves their source URL when settings are saved", async () => {
@@ -184,7 +209,7 @@ describe("database migrations", () => {
       "https://new.example.test",
     );
     expect(await repository.credential("user", "instance")).toBe("encrypted-token");
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
   });
 
   it("upgrades an empty v5 links table so initial Paperless settings can be saved", async () => {
@@ -247,7 +272,7 @@ describe("database migrations", () => {
     migrateDatabase(db);
     expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
     expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(9);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

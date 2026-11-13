@@ -128,7 +128,7 @@ function BudgetPage() {
     { planned: 0, committed: 0, invoiced: 0, paid: 0, expected: 0 },
   );
   const budgetShare =
-    summary.budget > 0 ? Math.round((summary.expected / summary.budget) * 100) : null;
+    summary.budget > 0 ? Math.round((summary.budgetExpected / summary.budget) * 100) : null;
   const filtersActive = filterTrade !== ALL || filterStage !== ALL;
   const changeSort = (key: SortKey) =>
     setSort((current) => ({
@@ -192,7 +192,7 @@ function BudgetPage() {
               <>
                 <div className="mt-3">
                   <Bar
-                    value={summary.expected}
+                    value={summary.budgetExpected}
                     max={summary.budget}
                     tone={summary.remaining < 0 ? "danger" : "primary"}
                     color="expected"
@@ -201,7 +201,7 @@ function BudgetPage() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   {tr("budget.expected")}:{" "}
                   <span className="font-medium tabular text-foreground">
-                    {eur(summary.expected)}
+                    {eur(summary.budgetExpected)}
                   </span>
                   <span className="mx-1.5">·</span>
                   <span>
@@ -227,7 +227,7 @@ function BudgetPage() {
             <dt className="text-muted-foreground">{tr("shared.paid")}</dt>
             <dd className="text-right">{eur(summary.paid)}</dd>
             <dt className="font-medium">{tr("budget.expected")}</dt>
-            <dd className="text-right font-medium">{eur(summary.expected)}</dd>
+            <dd className="text-right font-medium">{eur(summary.budgetExpected)}</dd>
             <dt className="font-medium">{tr("budget.remaining")}</dt>
             <dd
               className={`text-right font-medium ${summary.remaining < 0 ? "text-destructive" : "text-success"}`}
