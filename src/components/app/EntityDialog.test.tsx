@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { EntityDialog, type Field } from "./EntityDialog";
 import { QuickTask } from "./quick-actions";
+import { toast } from "sonner";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), remove: vi.fn() }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
     ws: { trades: [], cost_items: [], documents: [], tasks: [], contacts: [] },
@@ -13,7 +15,7 @@ vi.mock("@/hooks/use-workspace", () => ({
   useMutations: () => ({
     create: { mutateAsync: mocks.create },
     update: { mutateAsync: mocks.update },
-    remove: {},
+    remove: { mutateAsync: mocks.remove },
   }),
 }));
 vi.mock("@/hooks/use-task-assignees", () => ({
@@ -37,6 +39,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const fields: Field[] = [
@@ -44,6 +47,78 @@ const fields: Field[] = [
   { name: "notes", label: "Notes", type: "textarea" },
   { name: "due_date", label: "Due", type: "date" },
 ];
+
+describe("task editor deletion", () => {
+  it("offers deletion only for an existing task and leaves a canceled draft intact", () => {
+    const onOpenChange = vi.fn();
+    const { rerender } = render(<QuickTask open onOpenChange={onOpenChange} />);
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    rerender(<QuickTask open={false} onOpenChange={onOpenChange} />);
+    rerender(
+      <QuickTask open editId="task" initial={{ title: "Kitchen" }} onOpenChange={onOpenChange} />,
+    );
+    const deletion = screen.getByRole("button", { name: "Delete" });
+    expect(
+      Array.from(deletion.parentElement!.querySelectorAll("button")).map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["Cancel", "Delete", "Speichern"]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "Unsaved kitchen" },
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved kitchen");
+  });
+
+  it("waits for confirmed deletion, blocks competing actions, and never saves the draft", async () => {
+    let finish!: () => void;
+    mocks.remove.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onOpenChange = vi.fn();
+    render(
+      <QuickTask open editId="task" initial={{ title: "Kitchen" }} onOpenChange={onOpenChange} />,
+    );
+    const deletion = screen.getByRole("button", { name: "Delete" });
+    fireEvent.click(deletion);
+    expect(mocks.remove).toHaveBeenCalledWith({ table: "tasks", id: "task" });
+    expect(deletion).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Speichern" })).toBeDisabled();
+    fireEvent.click(deletion);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    expect(mocks.update).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("keeps the editor and draft open with an explicit error when deletion fails", async () => {
+    mocks.remove.mockRejectedValue(new Error("Delete failed"));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onOpenChange = vi.fn();
+    render(
+      <QuickTask open editId="task" initial={{ title: "Kitchen" }} onOpenChange={onOpenChange} />,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "Unsaved kitchen" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Delete failed"));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved kitchen");
+    expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+});
 
 describe("entry form drafts", () => {
   it("places the task checklist last, after notes", () => {

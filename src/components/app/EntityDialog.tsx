@@ -19,6 +19,7 @@ import type { ScanTarget } from "@/lib/scan-map";
 import { ChevronDown, ChevronUp, Loader2, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useMutations } from "@/hooks/use-workspace";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -80,6 +81,7 @@ export function EntityDialog({
   preserveOnScan,
   initialFile,
   onSaved,
+  deleteAction,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -100,9 +102,16 @@ export function EntityDialog({
   preserveOnScan?: string[];
   initialFile?: File | undefined;
   onSaved?: (() => void) | undefined;
+  deleteAction?:
+    | {
+        confirmation: string;
+        onDelete: () => Promise<unknown>;
+      }
+    | undefined;
 }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [added, setAdded] = useState<Record<string, { value: string; label: string }[]>>({});
   const [adding, setAdding] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -359,7 +368,14 @@ export function EntityDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : cancel())}>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (deleteAction && busyRef.current) return;
+          if (o) onOpenChange(true);
+          else cancel();
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -369,6 +385,8 @@ export function EntityDialog({
             className="grid grid-cols-1 gap-4 sm:grid-cols-2"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (busyRef.current) return;
+              busyRef.current = true;
               setBusy(true);
               try {
                 await onSubmit(values);
@@ -378,6 +396,7 @@ export function EntityDialog({
               } catch (err) {
                 toast.error(tr(err instanceof Error ? err.message : String(err)));
               } finally {
+                busyRef.current = false;
                 setBusy(false);
               }
             }}
@@ -449,9 +468,37 @@ export function EntityDialog({
               ))}
             {extra && <div className="sm:col-span-2">{extra}</div>}
             <DialogFooter className="sm:col-span-2">
-              <Button type="button" variant="ghost" onClick={cancel}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!!deleteAction && busy}
+                onClick={cancel}
+              >
                 {tr("entity_dialog.cancel")}
               </Button>
+              {deleteAction && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={busy || uploading}
+                  onClick={async () => {
+                    if (busyRef.current || !confirm(deleteAction.confirmation)) return;
+                    busyRef.current = true;
+                    setBusy(true);
+                    try {
+                      await deleteAction.onDelete();
+                      onOpenChange(false);
+                    } catch (err) {
+                      toast.error(tr(err instanceof Error ? err.message : String(err)));
+                    } finally {
+                      busyRef.current = false;
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {tr("shared.delete")}
+                </Button>
+              )}
               <Button
                 type="submit"
                 disabled={busy || uploading || (!!initialFile && !uploads.length)}
@@ -485,19 +532,19 @@ export function EntityDialog({
               {tr("entity_dialog.continue_editing")}
             </AlertDialogCancel>
             <Button
-              variant="outline"
-              disabled={discarding || uploading}
-              onClick={() => void discard(false)}
-            >
-              {tr("entity_dialog.keep_document")}
-            </Button>
-            <Button
               variant="destructive"
               disabled={discarding || uploading}
               onClick={() => void discard(true)}
             >
               {(discarding || uploading) && <Loader2 className="h-4 w-4 animate-spin" />}
               {tr("entity_dialog.delete_document", { count: Math.max(uploads.length, 1) })}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={discarding || uploading}
+              onClick={() => void discard(false)}
+            >
+              {tr("entity_dialog.keep_document")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

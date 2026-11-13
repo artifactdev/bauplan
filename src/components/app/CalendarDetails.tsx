@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { tr } from "@/i18n";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -7,6 +7,8 @@ import { useTaskAssignees } from "@/hooks/use-task-assignees";
 import { fmtDate, eur } from "@/lib/format";
 import { rangeLabel } from "@/lib/events";
 import { tradeName } from "@/lib/options";
+import { isOverdue } from "@/lib/calc";
+import { cn } from "@/lib/utils";
 import type { CalendarItem } from "@/lib/calendar-view";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +32,9 @@ export function CalendarDetails({
   onEdit: (source: CalendarSource) => void;
 }) {
   const { ws } = useWorkspace();
-  const { update } = useMutations();
+  const { update, remove } = useMutations();
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const task = source?.type === "task" ? ws.tasks.find((row) => row.id === source.id) : undefined;
   const assignees = useTaskAssignees();
   const fields: { label: string; value: ReactNode }[] = [];
@@ -63,7 +67,16 @@ export function CalendarDetails({
       add("shared.status", TASK_STATUS[task.status]!.label);
       add("quick_actions.priority", PRIORITY[task.priority]!.label);
       if (task.start_date) add("calendar.start_date", fmtDate(task.start_date));
-      if (task.due_date) add("quick_actions.due", fmtDate(task.due_date));
+      if (task.due_date) {
+        const overdue = isOverdue(task.due_date, task.status === "erledigt");
+        add(
+          "quick_actions.due",
+          <span className={cn(overdue && "font-medium text-destructive")}>
+            {overdue && tr("tasks.overdue")}
+            {fmtDate(task.due_date)}
+          </span>,
+        );
+      }
       if (task.phase) add("tasks.phase", tr(task.phase));
       if (task.trade_id) add("shared.trade", tradeName(ws, task.trade_id));
       if (task.assignee_id) {
@@ -93,7 +106,10 @@ export function CalendarDetails({
     }
   }
   return (
-    <Dialog open={!!source && !!title} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={!!source && !!title}
+      onOpenChange={(open) => !open && !deletingRef.current && onClose()}
+    >
       <DialogContent
         aria-describedby={undefined}
         className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col overflow-hidden"
@@ -124,7 +140,7 @@ export function CalendarDetails({
               value={task.checklist}
               editable={false}
               addable
-              disabled={update.isPending}
+              disabled={update.isPending || deleting}
               onChange={(checklist) =>
                 update.mutate({ table: "tasks", id: task.id, patch: { checklist } })
               }
@@ -135,11 +151,42 @@ export function CalendarDetails({
               {tr("tasks.assignees_load_failed")}
             </p>
           )}
-          <DialogFooter className="shrink-0 gap-2">
-            <Button variant="outline" onClick={onClose}>
+          <DialogFooter className="shrink-0">
+            <Button
+              variant="outline"
+              disabled={deleting}
+              onClick={() => !deletingRef.current && onClose()}
+            >
               {tr("shared.close")}
             </Button>
-            <Button onClick={() => source && onEdit(source)}>
+            {task && (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleting || update.isPending}
+                onClick={() => {
+                  if (deletingRef.current || !confirm(tr("tasks.delete_task"))) return;
+                  deletingRef.current = true;
+                  setDeleting(true);
+                  remove.mutate(
+                    { table: "tasks", id: task.id },
+                    {
+                      onSuccess: onClose,
+                      onSettled: () => {
+                        deletingRef.current = false;
+                        setDeleting(false);
+                      },
+                    },
+                  );
+                }}
+              >
+                {tr("shared.delete")}
+              </Button>
+            )}
+            <Button
+              disabled={deleting}
+              onClick={() => source && !deletingRef.current && onEdit(source)}
+            >
               <Pencil data-icon="inline-start" />
               {tr("shared.edit")}
             </Button>

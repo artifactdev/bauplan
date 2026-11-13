@@ -83,7 +83,7 @@ export function taskFields(
 
 export function QuickTask({ open, onOpenChange, initial, editId }: P) {
   const { ws } = useWorkspace();
-  const { create, update } = useMutations();
+  const { create, update, remove } = useMutations();
   const assignees = useTaskAssignees(open);
   return (
     <EntityDialog
@@ -93,6 +93,14 @@ export function QuickTask({ open, onOpenChange, initial, editId }: P) {
       scan={editId ? undefined : "task"}
       fields={taskFields(ws, assignees.data)}
       initial={initial ?? { priority: "mittel", status: "offen" }}
+      deleteAction={
+        editId
+          ? {
+              confirmation: tr("tasks.delete_task"),
+              onDelete: () => remove.mutateAsync({ table: "tasks", id: editId }),
+            }
+          : undefined
+      }
       extra={
         assignees.isError ? (
           <p role="alert" className="text-sm text-destructive">

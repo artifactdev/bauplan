@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { Route } from "./aufgaben";
 import { toast } from "sonner";
+import type { Task } from "@/lib/schema";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 
@@ -10,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   checklist: null as string | null,
+  secondTask: false,
+  priority: "mittel" as Task["priority"],
+  status: "offen" as Task["status"],
+  dueDate: "2026-10-31" as string | null,
 }));
 const title = "Photograph furniture and building materials before listing them for sale";
 vi.mock("@/hooks/use-workspace", () => ({
@@ -19,17 +24,37 @@ vi.mock("@/hooks/use-workspace", () => ({
         {
           id: "task",
           title: "Photograph furniture and building materials before listing them for sale",
-          status: "offen",
-          priority: "mittel",
+          status: mocks.status,
+          priority: mocks.priority,
           phase: "Planung",
           start_date: "2026-10-28",
-          due_date: "2026-10-31",
+          due_date: mocks.dueDate,
           assignee_id: "alice",
           document_id: "doc",
           notes: "Include dimensions.",
           checklist: mocks.checklist,
         },
-      ],
+      ].concat(
+        mocks.secondTask
+          ? [
+              {
+                id: "second-task",
+                title: "Paint walls",
+                status: "offen",
+                priority: "mittel",
+                phase: "Planung",
+                start_date: "2026-10-28",
+                due_date: "2026-10-31",
+                assignee_id: "alice",
+                document_id: "doc",
+                notes: "",
+                checklist: JSON.stringify([
+                  { id: "second-step", title: "Choose paint", done: false },
+                ]),
+              },
+            ]
+          : [],
+      ),
       trades: [],
       documents: [{ id: "doc", name: "Furniture-inventory.pdf" }],
     },
@@ -49,12 +74,20 @@ vi.mock("@/components/app/quick-actions", () => ({
 }));
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.remove.mockReset();
   mocks.checklist = null;
+  mocks.secondTask = false;
+  mocks.priority = "mittel";
+  mocks.status = "offen";
+  mocks.dueDate = "2026-10-31";
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-13T12:00:00"));
   await i18n.changeLanguage("en");
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 function mount() {
   const Page = Route.options.component;
@@ -127,14 +160,21 @@ it("shows zero open subtasks when all are complete", () => {
   mount();
   expect(screen.getByLabelText("0 of 1 subtasks open")).toHaveTextContent("0/1 open");
 });
-it("keeps the complete title, metadata, range and controls available", () => {
+it("omits row status, priority labels and dates while retaining overdue and detail indicators", () => {
   mount();
   const row = within(screen.getByRole("listitem"));
   expect(row.getByRole("button", { name: title })).toBeVisible();
   expect(row.getByText("Alice")).toBeVisible();
-  expect(row.getByText("Furniture-inventory.pdf")).toBeVisible();
-  expect(row.getByText("Include dimensions.")).toBeVisible();
-  expect(row.getByText(/28.*31/)).toBeVisible();
+  expect(row.queryByText("Furniture-inventory.pdf")).not.toBeInTheDocument();
+  expect(row.queryByText("Include dimensions.")).not.toBeInTheDocument();
+  expect(row.getByRole("img", { name: "Has notes" })).toBeVisible();
+  expect(row.getByRole("img", { name: "Has linked document" })).toBeVisible();
+  expect(row.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  expect(row.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  expect(row.queryByText("Open")).not.toBeInTheDocument();
+  expect(row.queryByText("Medium")).not.toBeInTheDocument();
+  expect(row.queryByText(/2026/)).not.toBeInTheDocument();
+  expect(row.getByText("Overdue")).toBeVisible();
   expect(screen.getByRole("combobox", { name: "Group tasks" })).toBeVisible();
 });
 it("opens task details with direct subtask creation before the editor", () => {
@@ -142,16 +182,117 @@ it("opens task details with direct subtask creation before the editor", () => {
   fireEvent.click(screen.getByRole("button", { name: title }));
   const detail = within(screen.getByRole("dialog"));
   expect(detail.getByText("Include dimensions.")).toBeVisible();
+  expect(detail.getByText("Furniture-inventory.pdf")).toBeVisible();
   expect(detail.getByText("Alice")).toBeVisible();
+  expect(detail.getByText("Open")).toBeVisible();
+  expect(detail.getByText("Medium")).toBeVisible();
+  expect(detail.getByText("28/10/2026")).toBeVisible();
+  expect(detail.getByText("Overdue · 31/10/2026")).toBeVisible();
   expect(detail.getByRole("textbox", { name: "New subtask" })).toBeVisible();
   expect(detail.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument();
   fireEvent.click(detail.getByRole("button", { name: "Edit" }));
   expect(screen.getByRole("dialog", { name: "Task editor" })).toHaveTextContent("task");
 });
-it("opens the task editor directly through Edit", () => {
+
+it.each([
+  ["hoch", "High priority", "text-task-priority-high"],
+  ["mittel", "", null],
+  ["niedrig", "", null],
+] as const)(
+  "shows only an accessible priority icon after the title for %s",
+  (priority, description, color) => {
+    mocks.priority = priority;
+    mount();
+    const button = screen.getByRole("button", { name: title });
+    expect(button).toHaveAccessibleDescription(description);
+    const icon = button.querySelector("svg");
+    if (color) {
+      expect(icon).toHaveClass(color);
+      expect(button.firstChild).toHaveTextContent(title);
+    } else {
+      expect(icon).toBeNull();
+    }
+  },
+);
+
+it("cancels deletion in task details without changing or closing the task", () => {
   mount();
-  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-  expect(screen.getByRole("dialog")).toHaveTextContent("task");
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  vi.spyOn(window, "confirm").mockReturnValue(false);
+  const detail = within(screen.getByRole("dialog"));
+  expect(
+    Array.from(detail.getByRole("button", { name: "Delete" }).parentElement!.children).map(
+      (button) => button.textContent,
+    ),
+  ).toEqual(["Close", "Delete", "Edit"]);
+  fireEvent.click(detail.getByRole("button", { name: "Delete" }));
+  expect(window.confirm).toHaveBeenCalledWith("Delete task?");
+  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toHaveAccessibleName(title);
+});
+
+it("waits for confirmed deletion in details and blocks competing actions", () => {
+  mocks.checklist = JSON.stringify([{ id: "step", title: "Measure furniture", done: false }]);
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const detail = within(screen.getByRole("dialog"));
+  const deletion = detail.getByRole("button", { name: "Delete" });
+  fireEvent.click(deletion);
+  expect(mocks.remove).toHaveBeenCalledWith(
+    { table: "tasks", id: "task" },
+    { onSuccess: expect.any(Function), onSettled: expect.any(Function) },
+  );
+  expect(deletion).toBeDisabled();
+  expect(detail.getAllByRole("button", { name: "Close" })[0]).toBeDisabled();
+  expect(detail.getByRole("button", { name: "Edit" })).toBeDisabled();
+  expect(detail.getByRole("checkbox", { name: "Measure furniture" })).toBeDisabled();
+  fireEvent.click(deletion);
+  fireEvent.click(detail.getAllByRole("button", { name: "Close" })[1]!);
+  expect(screen.getByRole("dialog")).toHaveAccessibleName(title);
+  expect(mocks.remove).toHaveBeenCalledOnce();
+  expect(mocks.update).not.toHaveBeenCalled();
+  act(() => {
+    mocks.remove.mock.calls[0]![1].onSuccess();
+    mocks.remove.mock.calls[0]![1].onSettled();
+  });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("keeps details open for retry when deletion fails", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: title }));
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const detail = within(screen.getByRole("dialog"));
+  fireEvent.click(detail.getByRole("button", { name: "Delete" }));
+  act(() => mocks.remove.mock.calls[0]![1].onSettled(undefined, new Error("Delete failed")));
+  expect(screen.getByRole("dialog")).toHaveAccessibleName(title);
+  expect(detail.getByRole("button", { name: "Delete" })).toBeEnabled();
+  fireEvent.click(detail.getByRole("button", { name: "Delete" }));
+  expect(mocks.remove).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["offen", "2026-12-31", "Open"],
+  ["in_arbeit", null, "In progress"],
+  ["erledigt", "2026-10-31", "Done"],
+] as const)("does not mark %s tasks overdue with due date %s", (status, dueDate, statusLabel) => {
+  mocks.status = status;
+  mocks.dueDate = dueDate;
+  mount();
+  if (status === "erledigt") {
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Status" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("option", { name: "All" }));
+  }
+  const row = within(screen.getByRole("listitem"));
+  expect(row.queryByText("Overdue")).not.toBeInTheDocument();
+  expect(row.queryByText(statusLabel)).not.toBeInTheDocument();
+  expect(row.queryByText(/2026/)).not.toBeInTheDocument();
+  fireEvent.click(row.getByRole("button", { name: title }));
+  const detail = within(screen.getByRole("dialog"));
+  expect(detail.queryByText(/Overdue/)).not.toBeInTheDocument();
+  expect(detail.getByText(statusLabel)).toBeVisible();
 });
 it("closes details without changing the task and reopens them", () => {
   mount();
@@ -179,7 +320,7 @@ it("opens new tasks directly in the editor", () => {
   fireEvent.click(screen.getByRole("button", { name: "Task" }));
   expect(screen.getByRole("dialog")).toHaveAccessibleName("Task editor");
 });
-it("preserves completion and confirmed deletion", () => {
+it("preserves direct completion without row deletion", () => {
   mount();
   fireEvent.click(screen.getByRole("checkbox", { name: `Done: ${title}` }));
   expect(mocks.update).toHaveBeenCalledWith({
@@ -187,12 +328,7 @@ it("preserves completion and confirmed deletion", () => {
     id: "task",
     patch: { status: "erledigt" },
   });
-  vi.spyOn(window, "confirm").mockReturnValue(false);
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-  expect(mocks.remove).not.toHaveBeenCalled();
-  vi.spyOn(window, "confirm").mockReturnValue(true);
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-  expect(mocks.remove).toHaveBeenCalledWith({ table: "tasks", id: "task" });
+  expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
 });
 
 it("adds the first subtask directly from a collapsed task row without opening an editor", () => {
@@ -255,10 +391,75 @@ it("keeps subtasks visible after successful creation when the global toggle is o
   fireEvent.change(screen.getByRole("textbox", { name: "New subtask" }), {
     target: { value: "Measure furniture" },
   });
+
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
   act(() => mocks.update.mock.calls[0]![1].onSuccess());
   expect(screen.getByRole("textbox", { name: "New subtask" })).toBeVisible();
   expect(toast.success).toHaveBeenCalledWith("Subtask created successfully.");
   fireEvent.click(screen.getByRole("switch", { name: "Show subtasks" }));
   expect(screen.queryByRole("textbox", { name: "New subtask" })).not.toBeInTheDocument();
+});
+
+it("expands each task independently and resets individual choices through the global switch", () => {
+  mocks.secondTask = true;
+  mocks.checklist = JSON.stringify([{ id: "step", title: "Measure furniture", done: false }]);
+  mount();
+  const count = within(screen.getAllByRole("listitem")[0]!).getByRole("button", {
+    name: "1 of 1 subtasks open",
+  });
+  expect(count).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(count);
+  expect(count).toHaveAttribute("aria-expanded", "true");
+  expect(document.getElementById(count.getAttribute("aria-controls")!)).toBeVisible();
+  expect(screen.getByRole("checkbox", { name: "Measure furniture" })).toBeVisible();
+  expect(screen.queryByRole("checkbox", { name: "Choose paint" })).not.toBeInTheDocument();
+  const toggle = screen.getByRole("switch", { name: "Show subtasks" });
+  fireEvent.click(toggle);
+  expect(screen.getByRole("checkbox", { name: "Choose paint" })).toBeVisible();
+  fireEvent.click(count);
+  expect(screen.queryByRole("checkbox", { name: "Measure furniture" })).not.toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "Choose paint" })).toBeVisible();
+  fireEvent.click(toggle);
+  expect(screen.queryByRole("checkbox", { name: "Choose paint" })).not.toBeInTheDocument();
+  fireEvent.click(toggle);
+  expect(screen.getByRole("checkbox", { name: "Measure furniture" })).toBeVisible();
+});
+
+it("retains an unsaved draft across collapse and clears it only after successful creation", () => {
+  mocks.checklist = JSON.stringify([{ id: "step", title: "Measure furniture", done: false }]);
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Add subtask" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "New subtask" }), {
+    target: { value: "Take photos" },
+  });
+  const count = screen.getByRole("button", { name: "1 of 1 subtasks open" });
+  fireEvent.click(count);
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  fireEvent.click(count);
+  const input = screen.getByRole("textbox", { name: "New subtask" });
+  expect(input).toHaveValue("Take photos");
+  fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  expect(input).toHaveValue("Take photos");
+  expect(toast.success).not.toHaveBeenCalled();
+  act(() => mocks.update.mock.calls[0]![1].onSuccess());
+  expect(input).toHaveValue("");
+  expect(count).toHaveAttribute("aria-expanded", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Add subtask" }));
+  expect(input).toHaveFocus();
+});
+
+it("keeps temporary creation and its draft available until a save succeeds", () => {
+  mount();
+  const add = screen.getByRole("button", { name: "Add subtask" });
+  fireEvent.click(add);
+  fireEvent.change(screen.getByRole("textbox", { name: "New subtask" }), {
+    target: { value: "Measure furniture" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  expect(screen.getByRole("textbox", { name: "New subtask" })).toHaveValue("Measure furniture");
+  expect(toast.success).not.toHaveBeenCalled();
+  act(() => mocks.update.mock.calls[0]![1].onSuccess());
+  expect(add).toHaveFocus();
+  fireEvent.click(add);
+  expect(screen.getByRole("textbox", { name: "New subtask" })).toHaveValue("");
 });

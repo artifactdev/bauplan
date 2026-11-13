@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { tr } from "@/i18n";
 import { parseTaskChecklist } from "@/lib/tasks";
@@ -15,6 +15,9 @@ export function TaskChecklist({
   addable = editable,
   autoFocus = false,
   compact = false,
+  draft: controlledDraft,
+  onDraftChange,
+  inputRef,
 }: {
   value: string | null | undefined;
   onChange: (value: string) => void;
@@ -23,14 +26,19 @@ export function TaskChecklist({
   addable?: boolean;
   autoFocus?: boolean;
   compact?: boolean;
+  draft?: string;
+  onDraftChange?: (draft: string) => void;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
-  const [draft, setDraft] = useState("");
+  const [localDraft, setLocalDraft] = useState("");
+  const draft = controlledDraft ?? localDraft;
   const items = parseTaskChecklist(value);
   const add = () => {
     const title = draft.trim();
     if (!title) return;
     onChange(JSON.stringify([...items, { id: crypto.randomUUID(), title, done: false }]));
-    setDraft("");
+    // Controlled callers retain the draft until their save succeeds.
+    if (!onDraftChange) setLocalDraft("");
   };
   return (
     <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-2">
@@ -88,12 +96,13 @@ export function TaskChecklist({
       {addable && (
         <div className="flex w-full max-w-xl items-center gap-2">
           <Input
+            ref={inputRef}
             className="h-11 min-w-0 flex-1"
             autoFocus={autoFocus}
             aria-label={tr("task-checklist.new")}
             placeholder={tr("task-checklist.new")}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => (onDraftChange ?? setLocalDraft)(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.nativeEvent.isComposing) {
                 event.preventDefault();
