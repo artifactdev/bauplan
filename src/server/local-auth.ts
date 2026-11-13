@@ -106,6 +106,7 @@ export async function deleteUser(id: string) {
   await paperlessRepo.disconnect(id, true);
   await sqliteRepo().deleteAppearance(id);
   await sqliteRepo().deleteNavigation(id);
+  await sqliteRepo().deleteAnalysisViews(id);
   await sqliteRepo().deleteSyncOperations(id);
   db.prepare("DELETE FROM app_sessions WHERE user_id = ?").run(id);
   db.prepare("DELETE FROM app_users WHERE id = ?").run(id);

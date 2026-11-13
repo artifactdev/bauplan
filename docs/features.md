@@ -145,6 +145,23 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 - Removing an image in the edit dialog deletes it; a linked legacy document is only unlinked and stays in Documents. Deleting an idea deletes its images.
 - Tags use the same tag picker as documents, suggesting tags already used in collections.
 
+## Analysis
+
+The **Analysis** page (`/analyse`) evaluates the whole project in six sections, switchable with the tabs: **Overview**, **Budget**, **Expenses**, **Quotes**, **Tasks & schedule** and **Loan** (only when loan terms exist). Like every other page it can be hidden and reordered in Settings → Navigation; new installations and existing navigation preferences get it appended at the end.
+
+- **Overview:** key figures (budget, expected cost from budget, paid, open, reimbursement rate, task progress), the budget split, automatically generated highlights (budget overrun, items above plan, overdue payments, rejected or pending reimbursements, expiring quotes, overdue tasks) and a data-quality check (expenses without cost item, receipt or payment source; cost items without plan; quotes without trade) that links to the affected page.
+- **Budget:** plan → committed → invoiced → paid → expected against the total budget, expected cost by trade, plan vs. forecast per cost item with deviation, and cumulative spending over time against the budget.
+- **Expenses:** spending per week/month/quarter stacked by category, trade, payment source or status; distribution by source and status; reimbursement funnel with rate (reimbursed ÷ decided); open expenses by due date; top vendors; the ten largest expenses.
+- **Quotes:** cheapest/accepted/most expensive quote per cost item with the saving, quote status pipeline, quotes expiring within 30 days.
+- **Tasks & schedule:** progress by phase, trade or assignee, a timeline of tasks, appointments and deadlines with a "today" marker, and the list of overdue tasks.
+- **Loan:** actual and forecast balance, interest and commitment fees per month (from the Loan page's calculation).
+
+**Filters** apply to all sections: period (presets or free dates) based on expense, payment or due date, group by week/month/quarter, trade, cost item, category, payment source, status, contact, phase, assignee, and "only costs that count toward the budget". Budget figures (total, expected, plan vs. forecast) always cover the whole project; the date filter applies to expenses, quotes and tasks. The current section and non-default filters are kept in the URL, so a link reproduces the view.
+
+**Saved views** store a name, section and filters per account (up to 20, one can be marked as default). They can be updated, renamed and deleted from the page.
+
+Every chart has an equivalent **table** (toggle) and can be exported as **CSV** (semicolon-separated, UTF-8 with BOM, decimal comma in German) with the current filters applied.
+
 ## Contacts
 
 - Person, company, trade, phone, email, website, address, notes; search and trade filter.

@@ -32,7 +32,7 @@ export function Panel({
   title?: string;
   action?: ReactNode;
   children: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <section

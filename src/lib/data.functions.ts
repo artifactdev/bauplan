@@ -14,6 +14,7 @@ import {
 } from "./ocr";
 import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
+import { analysisViewsSchema } from "./analysis";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 import { pushSubscriptionSchema } from "./push";
 import {
@@ -256,6 +257,18 @@ export const saveNavigation = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => navigationSchema.parse(data))
   .handler(async ({ context, data }) => {
     await context.repo.writeNavigation(context.user.id, data);
+    return data;
+  });
+
+export const getAnalysisViews = createServerFn()
+  .middleware([dataContext])
+  .handler(({ context }) => context.repo.readAnalysisViews(context.user.id));
+
+export const saveAnalysisViews = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => analysisViewsSchema.parse(data))
+  .handler(async ({ context, data }) => {
+    await context.repo.writeAnalysisViews(context.user.id, data);
     return data;
   });
 

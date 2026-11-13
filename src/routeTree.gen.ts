@@ -13,6 +13,7 @@ import { Route as WsRouteRouteImport } from './routes/_ws/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as WsIndexRouteImport } from './routes/_ws/index'
+import { Route as WsAnalyseRouteImport } from './routes/_ws/analyse'
 import { Route as WsAngeboteRouteImport } from './routes/_ws/angebote'
 import { Route as WsAufgabenRouteImport } from './routes/_ws/aufgaben'
 import { Route as WsAusgabenRouteImport } from './routes/_ws/ausgaben'
@@ -46,6 +47,11 @@ const SetupRoute = SetupRouteImport.update({
 const WsIndexRoute = WsIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => WsRouteRoute,
+} as any)
+const WsAnalyseRoute = WsAnalyseRouteImport.update({
+  id: '/analyse',
+  path: '/analyse',
   getParentRoute: () => WsRouteRoute,
 } as any)
 const WsAngeboteRoute = WsAngeboteRouteImport.update({
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/': typeof WsIndexRoute
   '/auth': typeof AuthRoute
   '/setup': typeof SetupRoute
+  '/analyse': typeof WsAnalyseRoute
   '/angebote': typeof WsAngeboteRoute
   '/aufgaben': typeof WsAufgabenRoute
   '/ausgaben': typeof WsAusgabenRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/setup': typeof SetupRoute
+  '/analyse': typeof WsAnalyseRoute
   '/angebote': typeof WsAngeboteRoute
   '/aufgaben': typeof WsAufgabenRoute
   '/ausgaben': typeof WsAusgabenRoute
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/_ws': typeof WsRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/setup': typeof SetupRoute
+  '/_ws/analyse': typeof WsAnalyseRoute
   '/_ws/angebote': typeof WsAngeboteRoute
   '/_ws/aufgaben': typeof WsAufgabenRoute
   '/_ws/ausgaben': typeof WsAusgabenRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/setup'
+    | '/analyse'
     | '/angebote'
     | '/aufgaben'
     | '/ausgaben'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/setup'
+    | '/analyse'
     | '/angebote'
     | '/aufgaben'
     | '/ausgaben'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/_ws'
     | '/auth'
     | '/setup'
+    | '/_ws/analyse'
     | '/_ws/angebote'
     | '/_ws/aufgaben'
     | '/_ws/ausgaben'
@@ -289,6 +301,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof WsIndexRouteImport
+      parentRoute: typeof WsRouteRoute
+    }
+    '/_ws/analyse': {
+      id: '/_ws/analyse'
+      path: '/analyse'
+      fullPath: '/analyse'
+      preLoaderRoute: typeof WsAnalyseRouteImport
       parentRoute: typeof WsRouteRoute
     }
     '/_ws/angebote': {
@@ -400,6 +419,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface WsRouteRouteChildren {
+  WsAnalyseRoute: typeof WsAnalyseRoute
   WsAngeboteRoute: typeof WsAngeboteRoute
   WsAufgabenRoute: typeof WsAufgabenRoute
   WsAusgabenRoute: typeof WsAusgabenRoute
@@ -414,6 +434,7 @@ interface WsRouteRouteChildren {
 }
 
 const WsRouteRouteChildren: WsRouteRouteChildren = {
+  WsAnalyseRoute: WsAnalyseRoute,
   WsAngeboteRoute: WsAngeboteRoute,
   WsAufgabenRoute: WsAufgabenRoute,
   WsAusgabenRoute: WsAusgabenRoute,

@@ -95,7 +95,7 @@ it("reorders with the keyboard drag handle and saves the same order while preser
   fireEvent.keyDown(handle, { key: " ", code: "Space" });
   await waitFor(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
   fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown" });
-  await waitFor(() => expect(screen.getByText("Position 2 of 10.")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Position 2 of 11.")).toBeInTheDocument());
   fireEvent.keyDown(handle, { key: " ", code: "Space" });
   await waitFor(() => expect(screen.getAllByRole("checkbox")[0]).toHaveAccessibleName("Budget"));
   expect(saveNavigation).not.toHaveBeenCalled();
@@ -116,7 +116,7 @@ it("cancels dragging without changing the order or creating an unsaved draft", a
   fireEvent.keyDown(handle, { key: " ", code: "Space" });
   await waitFor(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
   fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown" });
-  await screen.findByText("Position 2 of 10.");
+  await screen.findByText("Position 2 of 11.");
   fireEvent.keyDown(handle, { key: "Escape", code: "Escape" });
   await waitFor(() => expect(handle).not.toHaveAttribute("aria-pressed", "true"));
   expect(screen.getAllByRole("checkbox")[0]).toHaveAccessibleName("Overview");

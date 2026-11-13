@@ -6,6 +6,7 @@ import { join, relative, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { DEFAULT_APPEARANCE } from "@/lib/appearance";
 import { DEFAULT_NAVIGATION } from "@/lib/navigation";
+import { DEFAULT_FILTERS } from "@/lib/analysis";
 import { TABLES } from "@/lib/schema";
 import type { Repo, SqliteDb } from "./repo";
 import { createBackup, parseBackup, restoreBackup } from "./backup";
@@ -80,6 +81,10 @@ describe("Bauplan backups", () => {
     );
     await repo.writeAppearance("admin-1", { ...DEFAULT_APPEARANCE, primaryColor: "#295cc5" });
     await repo.writeNavigation("admin-1", DEFAULT_NAVIGATION);
+    await repo.writeAnalysisViews("admin-1", {
+      views: [{ id: "v1", name: "Q4", section: "budget", filters: DEFAULT_FILTERS }],
+      defaultId: null,
+    });
     await repo.insert("tasks", {
       id: "legacy-task",
       title: "Check roof",
@@ -126,6 +131,7 @@ describe("Bauplan backups", () => {
     expect(parsed.database.users[0]?.["password_hash"]).toBe("pbkdf2-hash");
     expect(parsed.database.appearances).toHaveLength(1);
     expect(parsed.database.navigation).toHaveLength(1);
+    expect(parsed.database.analysisViews).toHaveLength(1);
     expect(parsed.database.syncOperations).toHaveLength(1);
     expect(
       parsed.database.settings.some((setting) => setting["key"] === "workspace_generation"),
@@ -168,6 +174,7 @@ describe("Bauplan backups", () => {
     );
     expect(db.prepare("SELECT * FROM app_user_appearance").all()).toHaveLength(1);
     expect(db.prepare("SELECT * FROM app_user_navigation").all()).toHaveLength(1);
+    expect(db.prepare("SELECT * FROM app_user_analysis_views").all()).toHaveLength(1);
     expect(db.prepare("SELECT * FROM app_sync_operations").all()).toHaveLength(1);
   });
 
