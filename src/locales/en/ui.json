@@ -756,5 +756,17 @@
   "tags.none_found": "No tags found.",
   "tags.remove": "Remove tag {{tag}}",
   "tags.search_or_create": "Search or create …",
-  "tags.selected": "Selected"
+  "tags.selected": "Selected",
+  "budget.to_pay": "Still to pay",
+  "budget.paid_from_budget": "Paid from budget",
+  "budget.free": "Available",
+  "budget.over": "Over budget",
+  "budget.stages": "Cost stages",
+  "budget.forecast": "Forecast",
+  "budget.expected_total": "Expected total costs",
+  "budget.outside_budget": "Paid outside the budget",
+  "budget.expected_from_budget": "Expected from budget",
+  "index.expected_split_hint": "{{budget}} from budget · {{remaining}} remaining",
+  "index.overdue_since": "overdue since {{date}}",
+  "index.expected_over_hint": "{{budget}} from budget · {{over}} over budget"
 }

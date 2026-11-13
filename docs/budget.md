@@ -11,7 +11,9 @@ Implemented in `src/lib/calc.ts`, covered by `src/lib/calc.test.ts`.
 | **Invoiced**  | Sum of expenses, including invoice expenses                                                                                           |
 | **Expected**  | Best estimate of final costs: accepted quotes unless expenses exceed them; without an accepted quote, the higher of plan and expenses |
 | **Paid**      | Expenses with status ≠ open                                                                                                           |
-| **Remaining** | Total budget − Expected                                                                                                               |
+| **Remaining** | Total budget − Expected (from budget)                                                                                                 |
+
+The Budget page and dashboard show budget usage as one bar split into **Paid from budget**, **Still to pay** and **Available** (or **Over budget**), which always adds up to the total budget. **Expected total costs** can be higher than **Expected from budget** when part of a cost (for example private payments for **Anschaffung**) is paid outside the budget; the Budget page lists this difference explicitly.
 
 ## Financing
 

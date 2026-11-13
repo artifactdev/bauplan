@@ -756,5 +756,17 @@
   "tags.none_found": "Keine Schlagwörter gefunden.",
   "tags.remove": "Schlagwort {{tag}} entfernen",
   "tags.search_or_create": "Suchen oder neu anlegen …",
-  "tags.selected": "Ausgewählt"
+  "tags.selected": "Ausgewählt",
+  "budget.to_pay": "Noch zu zahlen",
+  "budget.paid_from_budget": "Aus Budget bezahlt",
+  "budget.free": "Verfügbar",
+  "budget.over": "Über Budget",
+  "budget.stages": "Kostenstufen",
+  "budget.forecast": "Prognose",
+  "budget.expected_total": "Voraussichtliche Gesamtkosten",
+  "budget.outside_budget": "Außerhalb des Budgets bezahlt",
+  "budget.expected_from_budget": "Aus dem Budget voraussichtlich",
+  "index.expected_split_hint": "{{budget}} aus Budget · {{remaining}} verbleibend",
+  "index.overdue_since": "überfällig seit {{date}}",
+  "index.expected_over_hint": "{{budget}} aus Budget · {{over}} über Budget"
 }

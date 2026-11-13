@@ -20,6 +20,7 @@ export type ItemSummary = {
   paid: number; // paid invoices
   expected: number; // best estimate of final cost, no double counting
   budgetExpected: number; // expected amount deducted from the total budget
+  budgetPaid: number; // part of budgetExpected that is already paid
 };
 
 /**
@@ -138,9 +139,14 @@ export function summarize(
     const planned = enteredPlan > 0 ? enteredPlan : committed;
     const budgetInvoiced = amount(budgetInv) + amount(budgetEx);
     const expected = expectedCost(planned, committed, invoiced);
+    const budgetPaidAmount =
+      amount(budgetInv.filter((i) => i.paid)) + amount(budgetEx.filter(expPaid));
     const nonBankInvoiced =
       amount(inv.filter((i) => !isBankPot(potList.find((pot) => pot.id === i.budget_pot_id)))) +
       amount(ex.filter((e) => !isBankPot(potList.find((pot) => pot.id === e.budget_pot_id))));
+    const budgetExpected = isSpecialCostItem(c.title)
+      ? Math.max(0, expected - nonBankInvoiced)
+      : expectedCost(planned, committed, budgetInvoiced);
     return {
       id: c.id,
       title: c.title,
@@ -150,9 +156,8 @@ export function summarize(
       invoiced,
       paid,
       expected,
-      budgetExpected: isSpecialCostItem(c.title)
-        ? Math.max(0, expected - nonBankInvoiced)
-        : expectedCost(planned, committed, budgetInvoiced),
+      budgetExpected,
+      budgetPaid: Math.min(budgetPaidAmount, budgetExpected),
     };
   });
   const sum = (k: keyof ItemSummary) => items.reduce((s, i) => s + (i[k] as number), 0);
@@ -186,6 +191,18 @@ export function summarize(
     unassignedAmount(
       unassignedExpenses.filter((expense) => countsTowardBudget(expense.budget_pot_id, potList)),
     );
+  const budgetPaid =
+    sum("budgetPaid") +
+    unassignedAmount(
+      unassignedInvoices.filter(
+        (invoice) => invoice.paid && countsTowardBudget(invoice.budget_pot_id, potList),
+      ),
+    ) +
+    unassignedAmount(
+      unassignedExpenses.filter(
+        (expense) => expPaid(expense) && countsTowardBudget(expense.budget_pot_id, potList),
+      ),
+    );
   const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const reimbursed = expenses
     .filter((e) => e.status === "erstattet")
@@ -203,6 +220,7 @@ export function summarize(
     open: invoiced - paid,
     expected,
     budgetExpected,
+    budgetPaid: Math.min(budgetPaid, budgetExpected),
     remaining: budget - budgetExpected,
     expensesTotal,
     reimbursed,

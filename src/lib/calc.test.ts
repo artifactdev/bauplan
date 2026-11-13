@@ -357,7 +357,21 @@ describe("expenses", () => {
 
     expect(s.expected).toBe(220000);
     expect(s.budgetExpected).toBe(201000);
+    expect(s.budgetPaid).toBe(201000);
     expect(s.remaining).toBe(160000);
+  });
+
+  it("splits the budget forecast into paid and still-to-pay without exceeding it", () => {
+    const s = summarize({
+      ...base,
+      cost_items: [{ id: "c", trade_id: null, title: "Baumarkt", description: null, planned: 0 }],
+      offers: [],
+      invoices: [],
+      expenses: [exp(120, "bezahlt"), exp(80, "offen")],
+    });
+    expect(s.budgetExpected).toBe(200);
+    expect(s.budgetPaid).toBe(120);
+    expect(s.items[0]?.budgetPaid).toBe(120);
   });
 });
 

@@ -148,6 +148,9 @@ function ExpensesPage() {
   const sumBy = (st: ExpenseStatus) =>
     ws.expenses.filter((e) => e.status === st).reduce((a, e) => a + Number(e.amount), 0);
   const total = ws.expenses.reduce((a, e) => a + Number(e.amount), 0);
+  const overdueTotal = ws.expenses
+    .filter((e) => expenseIsOverdue(e, today))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
   const listTotal = list.reduce((a, e) => a + Number(e.amount), 0);
 
   const openDoc = async (docId: string | null) => {
@@ -175,13 +178,14 @@ function ExpensesPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Stat label={tr("shared.total")} value={eur(total, true)} tone="neutral" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <Stat label={tr("shared.total")} value={eur(total, true)} amount={total} tone="neutral" />
         {(["offen", "bezahlt", "eingereicht"] as const).map((st) => (
           <Stat
             key={st}
             label={EXPENSE_STATUS[st].label}
             value={eur(sumBy(st), true)}
+            amount={sumBy(st)}
             tone={EXPENSE_STATUS[st].tone}
             active={status === st}
             onClick={() => setStatus(status === st ? "all" : st)}
@@ -189,12 +193,8 @@ function ExpensesPage() {
         ))}
         <Stat
           label={tr("shared.overdue")}
-          value={eur(
-            ws.expenses
-              .filter((e) => expenseIsOverdue(e, today))
-              .reduce((sum, e) => sum + Number(e.amount), 0),
-            true,
-          )}
+          value={eur(overdueTotal, true)}
+          amount={overdueTotal}
           tone="danger"
           active={status === "overdue"}
           onClick={() => setStatus(status === "overdue" ? "all" : "overdue")}
@@ -202,6 +202,7 @@ function ExpensesPage() {
         <Stat
           label={EXPENSE_STATUS.erstattet.label}
           value={eur(sumBy("erstattet"), true)}
+          amount={sumBy("erstattet")}
           tone={EXPENSE_STATUS.erstattet.tone}
           active={status === "erstattet"}
           onClick={() => setStatus(status === "erstattet" ? "all" : "erstattet")}
@@ -354,9 +355,9 @@ function ExpensesPage() {
               <TableRow>
                 <TableHead>{tr("shared.date")}</TableHead>
                 <TableHead>{tr("shared.description")}</TableHead>
-                <TableHead>{tr("shared.shop_company")}</TableHead>
-                <TableHead>{tr("shared.category")}</TableHead>
-                <TableHead>{tr("shared.trade")}</TableHead>
+                <TableHead>
+                  {tr("shared.category")} / {tr("shared.trade")}
+                </TableHead>
                 <TableHead>{tr("shared.paid_2")}</TableHead>
                 <TableHead>{tr("shared.payable")}</TableHead>
                 <TableHead className="text-right">{tr("shared.amount")}</TableHead>
@@ -373,6 +374,17 @@ function ExpensesPage() {
                     <div className="truncate font-medium" title={e.title}>
                       {e.title}
                     </div>
+                    {vendor(e) && (
+                      <div className="truncate text-xs text-muted-foreground">
+                        {e.contact_id ? (
+                          <Link to="/kontakte" className="hover:underline">
+                            {vendor(e)}
+                          </Link>
+                        ) : (
+                          vendor(e)
+                        )}
+                      </div>
+                    )}
                     {linkedOffer(e) && (
                       <Link
                         to="/angebote"
@@ -383,20 +395,9 @@ function ExpensesPage() {
                       </Link>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-56 truncate">
-                    {e.contact_id && vendor(e) ? (
-                      <Link to="/kontakte" className="hover:underline">
-                        {vendor(e)}
-                      </Link>
-                    ) : (
-                      (vendor(e) ?? "–")
-                    )}
-                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {e.category ? tr(e.category) : "–"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {tradeName(ws, e.trade_id)}
+                    <div>{e.category ? tr(e.category) : "–"}</div>
+                    {e.trade_id && <div className="text-xs">{tradeName(ws, e.trade_id)}</div>}
                   </TableCell>
                   <TableCell>{potName(ws, e.budget_pot_id) ?? "–"}</TableCell>
                   <TableCell
@@ -434,7 +435,7 @@ function ExpensesPage() {
                         <FileText className="h-4 w-4" /> {tr("expenses.open")}
                       </Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
                         {tr("expenses.no_receipt")}
                       </span>
                     )}
@@ -466,7 +467,7 @@ function ExpensesPage() {
             {list.length > 0 && (
               <TableFooter className="tabular">
                 <TableRow>
-                  <TableCell colSpan={7}>{tr("expenses.sum")}</TableCell>
+                  <TableCell colSpan={5}>{tr("expenses.sum")}</TableCell>
                   <TableCell className="text-right">{eur(listTotal, true)}</TableCell>
                   <TableCell colSpan={3} />
                 </TableRow>
@@ -594,15 +595,28 @@ function ExpensesPage() {
 function Stat({
   label,
   value,
+  amount,
   tone,
   active,
   onClick,
 }: {
   label: string;
   value: string;
+  amount: number;
   tone: "neutral" | "warning" | "success" | "info" | "primary" | "danger";
   active?: boolean;
   onClick?: () => void;
 }) {
-  return <MetricCard label={label} value={value} tone={tone} active={active} onClick={onClick} />;
+  const empty = amount === 0;
+  return (
+    <MetricCard
+      compact
+      muted={empty}
+      label={label}
+      value={value}
+      tone={empty ? "neutral" : tone}
+      active={active}
+      onClick={onClick}
+    />
+  );
 }
