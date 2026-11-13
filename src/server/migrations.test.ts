@@ -42,13 +42,13 @@ describe("database migrations", () => {
           .map((column) => column["name"]),
       ).toEqual(columns);
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
     expect(db.prepare("SELECT title FROM cost_items ORDER BY title").all()).toEqual([
       { title: "Anschaffung" },
       { title: "Rückbau" },
     ]);
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'app_%'").all()).toHaveLength(
-      17,
+      18,
     );
   });
 
@@ -109,7 +109,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
     expect(
       db.prepare("SELECT start_date, due_date, checklist FROM tasks WHERE id = 'task'").get(),
     ).toEqual({
@@ -162,7 +162,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_access; PRAGMA user_version=7;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_access").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
   });
 
   it("upgrades v6 with an empty private auto-import table without enabling imports", () => {
@@ -171,7 +171,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_auto_import; PRAGMA user_version=6;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_auto_import").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
   });
 
   it("upgrades v5 Paperless links and preserves their source URL when settings are saved", async () => {
@@ -209,7 +209,7 @@ describe("database migrations", () => {
       "https://new.example.test",
     );
     expect(await repository.credential("user", "instance")).toBe("encrypted-token");
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
   });
 
   it("upgrades an empty v5 links table so initial Paperless settings can be saved", async () => {
@@ -272,7 +272,7 @@ describe("database migrations", () => {
     migrateDatabase(db);
     expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
     expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(10);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

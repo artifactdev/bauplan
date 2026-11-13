@@ -62,6 +62,8 @@ Private appearance preferences live in `app_user_appearance`, keyed by authentic
 
 Private navigation preferences live in `app_user_navigation`, also outside Workspace, with DDL in `src/lib/schema.ts`. Approved-user server functions use only the authenticated account ID; the repository validates the complete ordered page list and hidden subset before storing JSON. Account deletion removes these preferences. User-scoped React Query data refreshes on sign-in, reload, and window focus. Settings edits remain local drafts until explicitly saved; failures retain the draft and leave the confirmed navigation unchanged. Desktop and mobile derive visible links from the same ordered list, with the first four on the mobile bar and the rest under More. Settings cannot be hidden. This is presentation customization, not access control.
 
+Saved analysis views live in `app_user_analysis_views` (one JSON document per account, DDL in `src/lib/schema.ts`, migration 11), also outside Workspace. The repository validates them with `analysisViewsSchema` (unique ids, at most 20, valid default) before storing and falls back to an empty list if stored data is corrupt. They are part of backups (optional key `analysisViews`, so older backups still restore) and are removed with the account. The analysis itself runs client-side on the loaded Workspace and needs no extra data endpoint.
+
 The root appearance provider applies semantic CSS tokens using `data-theme` and `.dark` on the document element, including dialogs and notifications. A small pre-paint script applies the validated `bauplan.appearance` browser cache to prevent a light-mode flash. This cache intentionally survives sign-out for login/setup; an approved account's preferences load before workspace content and override it. User-scoped React Query state refreshes on window focus and visibility changes, with in-flight saves protected against stale refreshes. Other devices do not receive live pushes: last successful write wins. System mode tracks the local OS without writing the resolved light/dark value back to the account.
 
 Appearance controls stay enabled during persistence to preserve native radio keyboard focus. The provider serializes writes and coalesces intermediate choices, previews the newest selection immediately, and rolls back to the latest confirmed value on failure. Chart tokens are independent of theme accents to prevent duplicate series colors; the budget chart also uses patterns and labeled legends. Semantic status foreground/background tokens are opaque pairs rather than opacity-derived badge fills. Decorative borders and interactive boundaries have separate contrast roles. `theme-accessibility.test.ts` checks text (4.5:1), interactive/focus cues and chart/background contrast (3:1), and distinct chart tokens across all eight palette/mode combinations. These checks are regression guards, not a full WCAG certification.
@@ -74,7 +76,7 @@ The optional Paperless connector uses personal encrypted API tokens outside the 
 
 ## Routing
 - `/setup` – initial setup, `/auth` – sign-in.
-- `_ws` – layout without its own path (client-side); checks sign-in/setup and renders navigation. Pages: `/`, `/budget`, `/angebote`, `/ausgaben`, `/dokumente`, `/aufgaben`, `/kalender`, `/sammlungen`, `/kontakte`, `/einstellungen`.
+- `_ws` – layout without its own path (client-side); checks sign-in/setup and renders navigation. Pages: `/`, `/budget`, `/angebote`, `/ausgaben`, `/dokumente`, `/aufgaben`, `/kalender`, `/sammlungen`, `/kontakte`, `/kredit`, `/analyse`, `/einstellungen`. `/analyse` keeps its section and non-default filters in the URL search params and lazy-loads the chart code.
 - Server routes: `/api/files/*` (SQLite files), `/api/oidc/*` (self-hosted OIDC), `/api/public/calendar/*` (iCal).
 - `src/server.ts` dispatches `/api/caldav/*` and `/.well-known/caldav` before TanStack's handler,
   because CalDAV needs nonstandard HTTP methods (`PROPFIND`, `REPORT`). The protocol handler
@@ -87,6 +89,8 @@ The optional Paperless connector uses personal encrypted API tokens outside the 
 | File | Purpose |
 | --- | --- |
 | `src/lib/calc.ts` | Budget calculations |
+| `src/lib/analysis.ts` | Analysis page: filter schema, expense/invoice ledger, aggregations (series, funnel, due buckets, plan vs. forecast, offers, tasks, timeline, data quality) and the saved-view schema; builds on `calc.ts` |
+| `src/lib/analysis-export.ts` | Excel-friendly CSV export |
 | `src/lib/events.ts` | Multi-day events, validation, labels |
 | `src/lib/ics.ts` | iCal generation |
 | `src/lib/ocr-parse.ts` / `scan-map.ts` | Rule-based recognition / form mapping |

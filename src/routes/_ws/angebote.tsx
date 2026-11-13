@@ -197,9 +197,9 @@ function OffersPage() {
             </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Input
-            className="w-56"
+            className="col-span-2 sm:w-56"
             placeholder={tr("shared.search")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -403,14 +403,9 @@ function OffersPage() {
                   {g.offers.map((o) => (
                     <article
                       key={o.id}
-                      className={`flex h-full min-h-72 min-w-0 flex-col rounded-lg border p-4 ${o.status === "accepted" ? "border-success/50 bg-success/5" : o.status === "rejected" ? "opacity-60" : ""}`}
+                      className={`flex h-full min-h-48 min-w-0 flex-col rounded-lg border p-4 ${o.status === "accepted" ? "border-success/50 bg-success/5" : o.status === "rejected" ? "opacity-60" : ""}`}
                     >
-                      <div className="flex min-w-0 flex-col items-start gap-2">
-                        <div className="self-end">
-                          <Pill tone={OFFER_STATUS[o.status]?.tone}>
-                            {OFFER_STATUS[o.status]?.label}
-                          </Pill>
-                        </div>
+                      <div className="flex min-w-0 items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="break-words font-medium">
                             {(() => {
@@ -424,6 +419,11 @@ function OffersPage() {
                               ? `angefragt ${fmtDate(o.requested_date)}${daysSince(o.requested_date) !== null ? ` (${daysSince(o.requested_date) === 0 ? "heute" : `vor ${daysSince(o.requested_date)} Tagen`})` : ""}`
                               : fmtDate(o.offer_date)}
                           </div>
+                        </div>
+                        <div className="shrink-0">
+                          <Pill tone={OFFER_STATUS[o.status]?.tone}>
+                            {OFFER_STATUS[o.status]?.label}
+                          </Pill>
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -584,7 +584,7 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-44">
+      <SelectTrigger className="w-full sm:w-44">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

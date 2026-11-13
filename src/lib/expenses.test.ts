@@ -5,6 +5,8 @@ import {
   expenseLinkDefaults,
   legacyInvoiceExpense,
   normalizeExpense,
+  reimbursementSource,
+  splitExpense,
 } from "./expenses";
 import type { Expense, Offer, Workspace } from "./schema";
 
@@ -166,7 +168,89 @@ describe("unified expenses", () => {
     expect(expenseIsOverdue({ status: "offen", due_date: "2026-01-15" }, "2026-01-16")).toBe(true);
     expect(expenseIsOverdue({ status: "offen", due_date: "2026-01-16" }, "2026-01-16")).toBe(false);
     expect(expenseIsOverdue({ status: "offen", due_date: null }, "2026-01-16")).toBe(false);
-    for (const status of ["bezahlt", "eingereicht", "erstattet"] as const)
+    for (const status of ["bezahlt", "eingereicht", "erstattet", "abgelehnt"] as const)
       expect(expenseIsOverdue({ status, due_date: "2026-01-15" }, "2026-01-16")).toBe(false);
+  });
+
+  const pots = {
+    budget_pots: [
+      { id: "bank", name: "Bank", deducts_from_budget: false, notes: null },
+      { id: "jerry", name: "Jerry", deducts_from_budget: false, notes: null },
+    ],
+  };
+
+  it("moves an expense to the bank source only when it becomes reimbursed", () => {
+    const paidByJerry = { status: "eingereicht", budget_pot_id: "jerry" };
+    expect(
+      reimbursementSource({ status: "erstattet", budget_pot_id: "jerry" }, paidByJerry, pots),
+    ).toBe("bank");
+    for (const status of ["eingereicht", "abgelehnt", "bezahlt"])
+      expect(reimbursementSource({ status, budget_pot_id: "jerry" }, paidByJerry, pots)).toBeNull();
+    // an explicitly chosen source, an already reimbursed expense or no bank source keep the source
+    expect(
+      reimbursementSource({ status: "erstattet", budget_pot_id: "bank" }, paidByJerry, pots),
+    ).toBeNull();
+    expect(
+      reimbursementSource(
+        { status: "erstattet", budget_pot_id: "jerry" },
+        { status: "erstattet", budget_pot_id: "jerry" },
+        pots,
+      ),
+    ).toBeNull();
+    expect(
+      reimbursementSource({ status: "erstattet", budget_pot_id: "jerry" }, paidByJerry, {
+        budget_pots: [pots.budget_pots[1]!],
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps submitted and rejected expenses off the bank until they are reimbursed", () => {
+    const withStatus = (status: Expense["status"], potId: string): Expense => ({
+      ...expense,
+      status,
+      budget_pot_id: potId,
+    });
+    expect(bankFundedPayments([], [withStatus("abgelehnt", "jerry")], "bank")).toEqual([]);
+    expect(bankFundedPayments([], [withStatus("eingereicht", "jerry")], "bank")).toEqual([]);
+    expect(bankFundedPayments([], [withStatus("erstattet", "bank")], "bank")).toHaveLength(1);
+    const s = summarize({
+      ...workspace,
+      expenses: [withStatus("abgelehnt", "jerry")],
+      ...pots,
+    });
+    expect(s.pots.find((pot) => pot.id === "jerry")?.paid).toBe(1000);
+    expect(s.pots.find((pot) => pot.id === "bank")?.spent).toBe(0);
+  });
+
+  it("splits a partially reimbursed expense without changing the total", () => {
+    const eingereicht: Expense = { ...expense, amount: 300.1, budget_pot_id: "jerry" };
+    const split = splitExpense(eingereicht, 120.05, "erstattet", "Part", pots)!;
+    expect(split.remainder).toBe(180.05);
+    expect(split.part).toMatchObject({
+      title: "Part",
+      amount: 120.05,
+      status: "erstattet",
+      budget_pot_id: "bank",
+      cost_item_id: eingereicht.cost_item_id,
+      document_id: eingereicht.document_id,
+    });
+    expect(split.part).not.toHaveProperty("id");
+
+    const submitted = splitExpense(eingereicht, 50, "eingereicht", "Part", pots)!;
+    expect(submitted.part).toMatchObject({ budget_pot_id: "jerry" });
+
+    for (const amount of [0, -5, 300.1, 400, Number.NaN])
+      expect(splitExpense(eingereicht, amount, "erstattet", "Part", pots)).toBeNull();
+
+    const s = summarize({
+      ...workspace,
+      expenses: [
+        { ...eingereicht, amount: split.remainder },
+        { ...(split.part as Expense), id: "p" },
+      ],
+      ...pots,
+    });
+    expect(s.pots.find((pot) => pot.id === "jerry")?.spent).toBe(180.05);
+    expect(s.pots.find((pot) => pot.id === "bank")?.spent).toBe(120.05);
   });
 });

@@ -11,7 +11,8 @@ const PRE_CREDIT_NAV_PATHS = [
   "/sammlungen",
   "/kontakte",
 ] as const;
-export const NAV_PATHS = [...PRE_CREDIT_NAV_PATHS, "/kredit"] as const;
+const PRE_ANALYSIS_NAV_PATHS = [...PRE_CREDIT_NAV_PATHS, "/kredit"] as const;
+export const NAV_PATHS = [...PRE_ANALYSIS_NAV_PATHS, "/analyse"] as const;
 export const navigationSchema = z
   .object({
     order: z.array(z.enum(NAV_PATHS)).length(NAV_PATHS.length),
@@ -32,28 +33,37 @@ export const DEFAULT_NAVIGATION: NavigationPreferences = {
   hidden: [],
 };
 
-const legacyNavigationSchema = z
-  .object({
-    order: z.array(z.enum(PRE_CREDIT_NAV_PATHS)).length(PRE_CREDIT_NAV_PATHS.length),
-    hidden: z.array(z.enum(PRE_CREDIT_NAV_PATHS)),
-  })
-  .strict();
+/** Navigation schemas from before a page was introduced; the missing pages are appended. */
+const LEGACY_NAVIGATION = [PRE_ANALYSIS_NAV_PATHS, PRE_CREDIT_NAV_PATHS] as const;
 
 /** Adds newly introduced pages to existing, otherwise valid navigation preferences. */
 export function parseNavigation(value: unknown): NavigationPreferences {
   const current = navigationSchema.safeParse(value);
   if (current.success) return current.data;
-  const legacy = legacyNavigationSchema.parse(value);
-  if (
-    new Set(legacy.order).size !== PRE_CREDIT_NAV_PATHS.length ||
-    new Set(legacy.hidden).size !== legacy.hidden.length
-  ) {
-    throw new Error("Navigation entries must be unique");
+  for (const known of LEGACY_NAVIGATION) {
+    const legacy = z
+      .object({
+        order: z.array(z.enum(known)).length(known.length),
+        hidden: z.array(z.enum(known)),
+      })
+      .strict()
+      .safeParse(value);
+    if (!legacy.success) continue;
+    if (
+      new Set(legacy.data.order).size !== known.length ||
+      new Set(legacy.data.hidden).size !== legacy.data.hidden.length
+    ) {
+      throw new Error("Navigation entries must be unique");
+    }
+    return navigationSchema.parse({
+      order: [
+        ...legacy.data.order,
+        ...NAV_PATHS.filter((path) => !(known as readonly string[]).includes(path)),
+      ],
+      hidden: legacy.data.hidden,
+    });
   }
-  return navigationSchema.parse({
-    order: [...legacy.order, "/kredit"],
-    hidden: legacy.hidden,
-  });
+  return navigationSchema.parse(value);
 }
 
 export function visibleNavigation(value: NavigationPreferences) {
@@ -66,15 +76,4 @@ export function activeNavIndex(items: readonly { to: string }[], pathname: strin
   return items.findIndex((item) =>
     item.to === "/" ? path === "/" : path === item.to || path.startsWith(`${item.to}/`),
   );
-}
-
-export const BAR_HIDE_AFTER = 64;
-const BAR_JITTER = 8;
-
-/** Hide the bottom bar when scrolling down past a threshold, show it when scrolling up. */
-export function nextBarVisibility(visible: boolean, lastY: number, y: number) {
-  if (y <= BAR_HIDE_AFTER) return true;
-  if (y - lastY > BAR_JITTER) return false;
-  if (y < lastY) return true;
-  return visible;
 }

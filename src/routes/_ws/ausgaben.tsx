@@ -2,7 +2,8 @@ import { tr } from "@/i18n";
 import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { FileText, Pencil, Plus, Search, Split, Trash2 } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { eur, fmtDate, todayISO } from "@/lib/format";
 import {
@@ -15,9 +16,10 @@ import {
   tradeOptions,
 } from "@/lib/options";
 import { type Expense, type ExpenseStatus } from "@/lib/schema";
-import { expenseIsOverdue } from "@/lib/expenses";
+import { expenseIsOverdue, reimbursementSource } from "@/lib/expenses";
 import { Empty, MetricCard, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { ExpenseDialog } from "@/components/app/ExpenseDialog";
+import { ExpenseSplitDialog } from "@/components/app/ExpenseSplitDialog";
 import { resolveFileUrl } from "@/components/app/doc-open";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,12 +55,13 @@ export const Route = createFileRoute("/_ws/ausgaben")({
 
 const EXPENSE_STATUS: Record<
   ExpenseStatus,
-  { label: string; tone: "neutral" | "warning" | "success" | "info" | "primary" }
+  { label: string; tone: "neutral" | "warning" | "success" | "info" | "primary" | "danger" }
 > = {
   offen: { label: tr("shared.open"), tone: "warning" },
   bezahlt: { label: tr("shared.paid"), tone: "success" },
   eingereicht: { label: tr("shared.submitted"), tone: "info" },
   erstattet: { label: tr("shared.reimbursed"), tone: "primary" },
+  abgelehnt: { label: tr("shared.rejected"), tone: "danger" },
 };
 const STATUS_OPTIONS = Object.entries(EXPENSE_STATUS).map(([value, s]) => ({
   value,
@@ -74,6 +77,7 @@ function ExpensesPage() {
   const [trade, setTrade] = useState("all");
   const [contact, setContact] = useState("all");
   const [offer, setOffer] = useState("all");
+  const [splitting, setSplitting] = useState<Expense | null>(null);
   const [sort, setSort] = useState("date");
   const [dlg, setDlg] = useState<{ id?: string; initial?: Record<string, unknown> } | null>(() =>
     typeof window !== "undefined" &&
@@ -90,6 +94,32 @@ function ExpensesPage() {
     return linked ? contactLabel(linked) : expense.vendor;
   };
   const linkedOffer = (expense: Expense) => ws.offers.find((item) => item.id === expense.offer_id);
+  const changeStatus = (expense: Expense, value: string) => {
+    if (value === expense.status) return;
+    const bankSource = reimbursementSource(
+      { status: value, budget_pot_id: expense.budget_pot_id },
+      expense,
+      ws,
+    );
+    update.mutate(
+      {
+        table: "expenses",
+        id: expense.id,
+        patch: bankSource ? { status: value, budget_pot_id: bankSource } : { status: value },
+      },
+      {
+        onSuccess: () => {
+          if (bankSource)
+            toast.success(
+              tr("expenses.moved_to_source", {
+                source: potName(ws, bankSource) ?? "",
+                previous: potName(ws, expense.budget_pot_id) ?? "–",
+              }),
+            );
+        },
+      },
+    );
+  };
   const statusPill = (expense: Expense) => (
     <Pill tone={expenseIsOverdue(expense, today) ? "danger" : EXPENSE_STATUS[expense.status]?.tone}>
       {expenseIsOverdue(expense, today)
@@ -148,6 +178,10 @@ function ExpensesPage() {
   const sumBy = (st: ExpenseStatus) =>
     ws.expenses.filter((e) => e.status === st).reduce((a, e) => a + Number(e.amount), 0);
   const total = ws.expenses.reduce((a, e) => a + Number(e.amount), 0);
+  const hasRejected = ws.expenses.some((e) => e.status === "abgelehnt");
+  const overdueTotal = ws.expenses
+    .filter((e) => expenseIsOverdue(e, today))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
   const listTotal = list.reduce((a, e) => a + Number(e.amount), 0);
 
   const openDoc = async (docId: string | null) => {
@@ -175,13 +209,16 @@ function ExpensesPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Stat label={tr("shared.total")} value={eur(total, true)} tone="neutral" />
+      <div
+        className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${hasRejected ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}
+      >
+        <Stat label={tr("shared.total")} value={eur(total, true)} amount={total} tone="neutral" />
         {(["offen", "bezahlt", "eingereicht"] as const).map((st) => (
           <Stat
             key={st}
             label={EXPENSE_STATUS[st].label}
             value={eur(sumBy(st), true)}
+            amount={sumBy(st)}
             tone={EXPENSE_STATUS[st].tone}
             active={status === st}
             onClick={() => setStatus(status === st ? "all" : st)}
@@ -189,12 +226,8 @@ function ExpensesPage() {
         ))}
         <Stat
           label={tr("shared.overdue")}
-          value={eur(
-            ws.expenses
-              .filter((e) => expenseIsOverdue(e, today))
-              .reduce((sum, e) => sum + Number(e.amount), 0),
-            true,
-          )}
+          value={eur(overdueTotal, true)}
+          amount={overdueTotal}
           tone="danger"
           active={status === "overdue"}
           onClick={() => setStatus(status === "overdue" ? "all" : "overdue")}
@@ -202,10 +235,21 @@ function ExpensesPage() {
         <Stat
           label={EXPENSE_STATUS.erstattet.label}
           value={eur(sumBy("erstattet"), true)}
+          amount={sumBy("erstattet")}
           tone={EXPENSE_STATUS.erstattet.tone}
           active={status === "erstattet"}
           onClick={() => setStatus(status === "erstattet" ? "all" : "erstattet")}
         />
+        {hasRejected && (
+          <Stat
+            label={EXPENSE_STATUS.abgelehnt.label}
+            value={eur(sumBy("abgelehnt"), true)}
+            amount={sumBy("abgelehnt")}
+            tone={EXPENSE_STATUS.abgelehnt.tone}
+            active={status === "abgelehnt"}
+            onClick={() => setStatus(status === "abgelehnt" ? "all" : "abgelehnt")}
+          />
+        )}
       </div>
 
       {ws.budget_pots.length > 0 && (
@@ -233,8 +277,8 @@ function ExpensesPage() {
         </div>
       )}
 
-      <div className="my-4 flex flex-wrap gap-2">
-        <div className="relative w-full sm:w-72">
+      <div className="my-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <div className="relative col-span-2 w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
@@ -244,7 +288,7 @@ function ExpensesPage() {
           />
         </div>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-44" aria-label={tr("shared.status")}>
+          <SelectTrigger className="w-full sm:w-44" aria-label={tr("shared.status")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -261,7 +305,7 @@ function ExpensesPage() {
         </Select>
         {ws.budget_pots.length > 0 && (
           <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="w-44" aria-label={tr("shared.paid_2")}>
+            <SelectTrigger className="w-full sm:w-44" aria-label={tr("shared.paid_2")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -296,7 +340,7 @@ function ExpensesPage() {
           },
         ].map((filter) => (
           <Select key={filter.label} value={filter.value} onValueChange={filter.onChange}>
-            <SelectTrigger className="w-44" aria-label={filter.label}>
+            <SelectTrigger className="w-full sm:w-44" aria-label={filter.label}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -312,7 +356,7 @@ function ExpensesPage() {
           </Select>
         ))}
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-44" aria-label={tr("expenses.sort_by")}>
+          <SelectTrigger className="w-full sm:w-44" aria-label={tr("expenses.sort_by")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -354,9 +398,9 @@ function ExpensesPage() {
               <TableRow>
                 <TableHead>{tr("shared.date")}</TableHead>
                 <TableHead>{tr("shared.description")}</TableHead>
-                <TableHead>{tr("shared.shop_company")}</TableHead>
-                <TableHead>{tr("shared.category")}</TableHead>
-                <TableHead>{tr("shared.trade")}</TableHead>
+                <TableHead>
+                  {tr("shared.category")} / {tr("shared.trade")}
+                </TableHead>
                 <TableHead>{tr("shared.paid_2")}</TableHead>
                 <TableHead>{tr("shared.payable")}</TableHead>
                 <TableHead className="text-right">{tr("shared.amount")}</TableHead>
@@ -373,6 +417,17 @@ function ExpensesPage() {
                     <div className="truncate font-medium" title={e.title}>
                       {e.title}
                     </div>
+                    {vendor(e) && (
+                      <div className="truncate text-xs text-muted-foreground">
+                        {e.contact_id ? (
+                          <Link to="/kontakte" className="hover:underline">
+                            {vendor(e)}
+                          </Link>
+                        ) : (
+                          vendor(e)
+                        )}
+                      </div>
+                    )}
                     {linkedOffer(e) && (
                       <Link
                         to="/angebote"
@@ -383,20 +438,9 @@ function ExpensesPage() {
                       </Link>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-56 truncate">
-                    {e.contact_id && vendor(e) ? (
-                      <Link to="/kontakte" className="hover:underline">
-                        {vendor(e)}
-                      </Link>
-                    ) : (
-                      (vendor(e) ?? "–")
-                    )}
-                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {e.category ? tr(e.category) : "–"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {tradeName(ws, e.trade_id)}
+                    <div>{e.category ? tr(e.category) : "–"}</div>
+                    {e.trade_id && <div className="text-xs">{tradeName(ws, e.trade_id)}</div>}
                   </TableCell>
                   <TableCell>{potName(ws, e.budget_pot_id) ?? "–"}</TableCell>
                   <TableCell
@@ -410,12 +454,7 @@ function ExpensesPage() {
                   </TableCell>
                   <TableCell className="text-right">{eur(e.amount, true)}</TableCell>
                   <TableCell>
-                    <Select
-                      value={e.status}
-                      onValueChange={(v) =>
-                        update.mutate({ table: "expenses", id: e.id, patch: { status: v } })
-                      }
-                    >
+                    <Select value={e.status} onValueChange={(v) => changeStatus(e, v)}>
                       <SelectTrigger className="h-8 w-36" aria-label={tr("expenses.change_status")}>
                         {statusPill(e)}
                       </SelectTrigger>
@@ -434,12 +473,21 @@ function ExpensesPage() {
                         <FileText className="h-4 w-4" /> {tr("expenses.open")}
                       </Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
                         {tr("expenses.no_receipt")}
                       </span>
                     )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-right">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={tr("expenses.split_action")}
+                      title={tr("expenses.split_action")}
+                      onClick={() => setSplitting(e)}
+                    >
+                      <Split className="h-4 w-4" />
+                    </Button>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -466,7 +514,7 @@ function ExpensesPage() {
             {list.length > 0 && (
               <TableFooter className="tabular">
                 <TableRow>
-                  <TableCell colSpan={7}>{tr("expenses.sum")}</TableCell>
+                  <TableCell colSpan={5}>{tr("expenses.sum")}</TableCell>
                   <TableCell className="text-right">{eur(listTotal, true)}</TableCell>
                   <TableCell colSpan={3} />
                 </TableRow>
@@ -514,12 +562,7 @@ function ExpensesPage() {
                 </p>
               )}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2">
-                <Select
-                  value={e.status}
-                  onValueChange={(v) =>
-                    update.mutate({ table: "expenses", id: e.id, patch: { status: v } })
-                  }
-                >
+                <Select value={e.status} onValueChange={(v) => changeStatus(e, v)}>
                   <SelectTrigger
                     className="h-8 w-40 text-xs"
                     aria-label={tr("expenses.change_status")}
@@ -545,6 +588,15 @@ function ExpensesPage() {
                       <FileText className="h-4 w-4" />
                     </Button>
                   )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={tr("expenses.split_action")}
+                    title={tr("expenses.split_action")}
+                    onClick={() => setSplitting(e)}
+                  >
+                    <Split className="h-4 w-4" />
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -587,6 +639,7 @@ function ExpensesPage() {
         editId={dlg?.id}
         initial={dlg?.initial}
       />
+      <ExpenseSplitDialog expense={splitting} onClose={() => setSplitting(null)} />
     </>
   );
 }
@@ -594,15 +647,28 @@ function ExpensesPage() {
 function Stat({
   label,
   value,
+  amount,
   tone,
   active,
   onClick,
 }: {
   label: string;
   value: string;
+  amount: number;
   tone: "neutral" | "warning" | "success" | "info" | "primary" | "danger";
   active?: boolean;
   onClick?: () => void;
 }) {
-  return <MetricCard label={label} value={value} tone={tone} active={active} onClick={onClick} />;
+  const empty = amount === 0;
+  return (
+    <MetricCard
+      compact
+      muted={empty}
+      label={label}
+      value={value}
+      tone={empty ? "neutral" : tone}
+      active={active}
+      onClick={onClick}
+    />
+  );
 }

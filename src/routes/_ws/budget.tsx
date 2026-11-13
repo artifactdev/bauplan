@@ -6,7 +6,7 @@ import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { summarize, type ItemSummary } from "@/lib/calc";
 import { eur } from "@/lib/format";
 import { tradeName, tradeOptions } from "@/lib/options";
-import { Bar, Empty, PageHeader, Panel } from "@/components/app/ui-bits";
+import { BudgetBreakdown, Empty, PageHeader, Panel } from "@/components/app/ui-bits";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
 import { FundingPanel } from "@/components/app/FundingPanel";
 import { QuickCost } from "@/components/app/quick-actions";
@@ -127,8 +127,6 @@ function BudgetPage() {
     }),
     { planned: 0, committed: 0, invoiced: 0, paid: 0, expected: 0 },
   );
-  const budgetShare =
-    summary.budget > 0 ? Math.round((summary.budgetExpected / summary.budget) * 100) : null;
   const filtersActive = filterTrade !== ALL || filterStage !== ALL;
   const changeSort = (key: SortKey) =>
     setSort((current) => ({
@@ -189,52 +187,69 @@ function BudgetPage() {
               <dd className="text-right">{eur(summary.additionalFunding)}</dd>
             </dl>
             {summary.budget > 0 ? (
-              <>
-                <div className="mt-3">
-                  <Bar
-                    value={summary.budgetExpected}
-                    max={summary.budget}
-                    tone={summary.remaining < 0 ? "danger" : "primary"}
-                    color="expected"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {tr("budget.expected")}:{" "}
-                  <span className="font-medium tabular text-foreground">
-                    {eur(summary.budgetExpected)}
-                  </span>
-                  <span className="mx-1.5">·</span>
-                  <span>
-                    {budgetShare}% {tr("budget.used")}
-                  </span>
-                </p>
-              </>
+              <div className="mt-5">
+                <BudgetBreakdown
+                  budget={summary.budget}
+                  expected={summary.budgetExpected}
+                  paid={summary.budgetPaid}
+                />
+              </div>
             ) : (
               <p className="mt-3 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 {tr("budget.budget_not_set")}
               </p>
             )}
           </div>
-          <dl className="grid grid-cols-2 content-start gap-x-4 gap-y-2 text-sm tabular">
-            <dt className="text-muted-foreground">{tr("budget.planned")}</dt>
-            <dd className="text-right">{eur(summary.planned)}</dd>
-            <dt className="text-muted-foreground">{tr("budget.committed")}</dt>
-            <dd className="text-right">{eur(summary.committed)}</dd>
-            <dt className="text-muted-foreground">{tr("budget.invoiced")}</dt>
-            <dd className="text-right">{eur(summary.invoiced)}</dd>
-            <dt className="text-muted-foreground">{tr("budget.expenses_receipts")}</dt>
-            <dd className="text-right">{eur(summary.expensesTotal)}</dd>
-            <dt className="text-muted-foreground">{tr("shared.paid")}</dt>
-            <dd className="text-right">{eur(summary.paid)}</dd>
-            <dt className="font-medium">{tr("budget.expected")}</dt>
-            <dd className="text-right font-medium">{eur(summary.budgetExpected)}</dd>
-            <dt className="font-medium">{tr("budget.remaining")}</dt>
-            <dd
-              className={`text-right font-medium ${summary.remaining < 0 ? "text-destructive" : "text-success"}`}
-            >
-              {summary.budget > 0 ? eur(summary.remaining) : "–"}
-            </dd>
-          </dl>
+          <div className="grid content-start gap-5 text-sm tabular lg:border-l lg:pl-6">
+            <section aria-labelledby="budget-forecast">
+              <h3
+                id="budget-forecast"
+                className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                {tr("budget.forecast")}
+              </h3>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                <dt>{tr("budget.expected_total")}</dt>
+                <dd className="text-right">{eur(summary.expected)}</dd>
+                {summary.expected !== summary.budgetExpected && (
+                  <>
+                    <dt className="text-muted-foreground">{tr("budget.outside_budget")}</dt>
+                    <dd className="text-right text-muted-foreground">
+                      − {eur(summary.expected - summary.budgetExpected)}
+                    </dd>
+                  </>
+                )}
+                <dt className="border-t pt-1.5">{tr("budget.expected_from_budget")}</dt>
+                <dd className="border-t pt-1.5 text-right">{eur(summary.budgetExpected)}</dd>
+                <dt className="font-medium">{tr("budget.remaining")}</dt>
+                <dd
+                  className={`text-right text-base font-semibold ${summary.remaining < 0 ? "text-destructive" : "text-success"}`}
+                >
+                  {summary.budget > 0 ? eur(summary.remaining) : "–"}
+                </dd>
+              </dl>
+            </section>
+            <section aria-labelledby="budget-stages">
+              <h3
+                id="budget-stages"
+                className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                {tr("budget.stages")}
+              </h3>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                <dt className="text-muted-foreground">{tr("budget.planned")}</dt>
+                <dd className="text-right">{eur(summary.planned)}</dd>
+                <dt className="text-muted-foreground">{tr("budget.committed")}</dt>
+                <dd className="text-right">{eur(summary.committed)}</dd>
+                <dt className="text-muted-foreground">{tr("budget.invoiced")}</dt>
+                <dd className="text-right">{eur(summary.invoiced)}</dd>
+                <dt className="pl-3 text-muted-foreground">{tr("budget.expenses_receipts")}</dt>
+                <dd className="text-right text-muted-foreground">{eur(summary.expensesTotal)}</dd>
+                <dt className="text-muted-foreground">{tr("shared.paid")}</dt>
+                <dd className="text-right">{eur(summary.paid)}</dd>
+              </dl>
+            </section>
+          </div>
         </div>
       </Panel>
 

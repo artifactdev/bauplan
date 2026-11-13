@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   activeNavIndex,
-  nextBarVisibility,
   DEFAULT_NAVIGATION,
   NAV_PATHS,
   navigationSchema,
@@ -29,12 +28,25 @@ describe("Navigation preferences", () => {
       expect(navigationSchema.safeParse(value).success).toBe(false);
   });
   it("adds the credit page to existing saved navigation preferences", () => {
-    const previous = NAV_PATHS.filter((path) => path !== "/kredit");
+    const previous = NAV_PATHS.filter((path) => path !== "/kredit" && path !== "/analyse");
     const parsed = parseNavigation({ order: [...previous].reverse(), hidden: ["/budget"] });
     expect(parsed.order).toHaveLength(NAV_PATHS.length);
-    expect(parsed.order.slice(0, -1)).toEqual([...previous].reverse());
-    expect(parsed.order.at(-1)).toBe("/kredit");
+    expect(parsed.order.slice(0, -2)).toEqual([...previous].reverse());
+    expect(parsed.order.slice(-2)).toEqual(["/kredit", "/analyse"]);
     expect(parsed.hidden).toEqual(["/budget"]);
+  });
+  it("adds the analysis page to saved preferences without changing their order", () => {
+    const previous = NAV_PATHS.filter((path) => path !== "/analyse");
+    const order = [...previous].reverse();
+    const parsed = parseNavigation({ order, hidden: ["/kredit"] });
+    expect(parsed.order).toEqual([...order, "/analyse"]);
+    expect(parsed.hidden).toEqual(["/kredit"]);
+  });
+  it("still rejects invalid legacy preferences", () => {
+    expect(() => parseNavigation({ order: ["/"], hidden: [] })).toThrow();
+    expect(() =>
+      parseNavigation({ order: [...NAV_PATHS].slice(1), hidden: ["/einstellungen"] }),
+    ).toThrow();
   });
   it("finds the active item, including nested routes", () => {
     const items = [{ to: "/" }, { to: "/budget" }, { to: "/kalender" }];
@@ -42,13 +54,5 @@ describe("Navigation preferences", () => {
     expect(activeNavIndex(items, "/budget/")).toBe(1);
     expect(activeNavIndex(items, "/kalender/termin")).toBe(2);
     expect(activeNavIndex(items, "/einstellungen")).toBe(-1);
-  });
-  it("hides the bar on scroll down and shows it on scroll up or near the top", () => {
-    expect(nextBarVisibility(true, 100, 200)).toBe(false);
-    expect(nextBarVisibility(false, 200, 150)).toBe(true);
-    expect(nextBarVisibility(false, 200, 199)).toBe(true);
-    expect(nextBarVisibility(false, 200, 40)).toBe(true);
-    expect(nextBarVisibility(false, 200, 203)).toBe(false);
-    expect(nextBarVisibility(true, 200, 203)).toBe(true);
   });
 });

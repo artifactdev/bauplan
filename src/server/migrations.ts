@@ -6,6 +6,7 @@ import {
   SYNC_OPERATIONS_DDL,
   USER_APPEARANCE_DDL,
   USER_NAVIGATION_DDL,
+  USER_ANALYSIS_VIEWS_DDL,
   PUSH_DDL,
   PAPERLESS_DDL,
   PAPERLESS_AUTO_IMPORT_DDL,
@@ -140,6 +141,13 @@ const MIGRATIONS: readonly Migration[] = [
           "INSERT INTO cost_items (id, created_at, trade_id, title, description, planned) VALUES (?, ?, NULL, ?, NULL, 0)",
         ).run(crypto.randomUUID(), new Date().toISOString(), title);
       }
+    },
+  },
+  {
+    version: 11,
+    name: "analysis-saved-views",
+    up(db) {
+      db.exec(USER_ANALYSIS_VIEWS_DDL);
     },
   },
 ];

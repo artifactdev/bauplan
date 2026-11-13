@@ -20,6 +20,7 @@ export type ItemSummary = {
   paid: number; // paid invoices
   expected: number; // best estimate of final cost, no double counting
   budgetExpected: number; // expected amount deducted from the total budget
+  budgetPaid: number; // part of budgetExpected that is already paid
 };
 
 /**
@@ -72,7 +73,7 @@ export function countsTowardBudget(potId: string | null | undefined, pots: Budge
   return !p || isBankPot(p) || p.deducts_from_budget;
 }
 
-function isBankPot(pot: BudgetPot | undefined) {
+export function isBankPot(pot: BudgetPot | undefined) {
   return pot?.name.trim().toLocaleLowerCase() === "bank";
 }
 
@@ -138,9 +139,14 @@ export function summarize(
     const planned = enteredPlan > 0 ? enteredPlan : committed;
     const budgetInvoiced = amount(budgetInv) + amount(budgetEx);
     const expected = expectedCost(planned, committed, invoiced);
+    const budgetPaidAmount =
+      amount(budgetInv.filter((i) => i.paid)) + amount(budgetEx.filter(expPaid));
     const nonBankInvoiced =
       amount(inv.filter((i) => !isBankPot(potList.find((pot) => pot.id === i.budget_pot_id)))) +
       amount(ex.filter((e) => !isBankPot(potList.find((pot) => pot.id === e.budget_pot_id))));
+    const budgetExpected = isSpecialCostItem(c.title)
+      ? Math.max(0, expected - nonBankInvoiced)
+      : expectedCost(planned, committed, budgetInvoiced);
     return {
       id: c.id,
       title: c.title,
@@ -150,9 +156,8 @@ export function summarize(
       invoiced,
       paid,
       expected,
-      budgetExpected: isSpecialCostItem(c.title)
-        ? Math.max(0, expected - nonBankInvoiced)
-        : expectedCost(planned, committed, budgetInvoiced),
+      budgetExpected,
+      budgetPaid: Math.min(budgetPaidAmount, budgetExpected),
     };
   });
   const sum = (k: keyof ItemSummary) => items.reduce((s, i) => s + (i[k] as number), 0);
@@ -186,6 +191,18 @@ export function summarize(
     unassignedAmount(
       unassignedExpenses.filter((expense) => countsTowardBudget(expense.budget_pot_id, potList)),
     );
+  const budgetPaid =
+    sum("budgetPaid") +
+    unassignedAmount(
+      unassignedInvoices.filter(
+        (invoice) => invoice.paid && countsTowardBudget(invoice.budget_pot_id, potList),
+      ),
+    ) +
+    unassignedAmount(
+      unassignedExpenses.filter(
+        (expense) => expPaid(expense) && countsTowardBudget(expense.budget_pot_id, potList),
+      ),
+    );
   const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const reimbursed = expenses
     .filter((e) => e.status === "erstattet")
@@ -203,6 +220,7 @@ export function summarize(
     open: invoiced - paid,
     expected,
     budgetExpected,
+    budgetPaid: Math.min(budgetPaid, budgetExpected),
     remaining: budget - budgetExpected,
     expensesTotal,
     reimbursed,
@@ -230,6 +248,10 @@ export type CreditMonth = {
   actualCommitment: number;
   plannedInterest: number;
   plannedCommitment: number;
+  /** Cash paid to the bank for the loan itself: interest until the first installment, then the installment. */
+  plannedPayment: number;
+  /** Principal repaid in the month (part of the installment). */
+  plannedRepayment: number;
   actualCumulative: number;
   plannedCumulative: number;
 };
@@ -242,6 +264,8 @@ export type CreditSummary = {
   plannedCommitment: number;
   actualBalance: number;
   plannedBalance: number;
+  /** Forecast balance when the first installment is due (the principal repayment starts from it). */
+  balanceAtRepaymentStart: number;
   annuity: number | null;
 };
 
@@ -272,6 +296,27 @@ function dayCountMonth(value: string) {
     (Date.parse(`${nextMonth(value)}T00:00:00Z`) - Date.parse(`${monthStart(value)}T00:00:00Z`)) /
     86_400_000
   );
+}
+
+/** Monthly installment from loan amount, nominal rate and initial repayment rate (both % p. a.). */
+export function suggestedInstallment(total: number, annualRate: number, repaymentRate: number) {
+  if (
+    !(total > 0) ||
+    !(annualRate >= 0) ||
+    !(repaymentRate >= 0) ||
+    annualRate + repaymentRate <= 0
+  )
+    return null;
+  return Math.round(((total * (annualRate + repaymentRate)) / 1200) * 100) / 100;
+}
+
+/** Number of installments until the loan is repaid, or null if the installment never covers the interest. */
+export function installmentCount(total: number, annualRate: number, installment: number) {
+  if (!(total > 0) || !(installment > 0) || !(annualRate >= 0)) return null;
+  const monthly = annualRate / 1200;
+  if (monthly === 0) return Math.ceil(total / installment - 1e-9);
+  if (installment <= total * monthly) return null;
+  return Math.ceil(-Math.log(1 - (total * monthly) / installment) / Math.log(1 + monthly) - 1e-9);
 }
 
 export function annuityPayment(balance: number, annualRate: number, months: number): number | null {
@@ -317,7 +362,7 @@ export function calculateCreditCosts(
     annualRate < 0 ||
     !Number.isFinite(commitmentRate) ||
     commitmentRate < 0 ||
-    ![360, 365].includes(dayBasis)
+    ![30, 360, 365].includes(dayBasis)
   ) {
     return null;
   }
@@ -382,6 +427,8 @@ export function calculateCreditCosts(
       actualCommitment: a?.commitment ?? 0,
       plannedInterest: p?.interest ?? 0,
       plannedCommitment: p?.commitment ?? 0,
+      plannedPayment: p?.interest ?? 0,
+      plannedRepayment: 0,
       actualCumulative,
       plannedCumulative,
     };
@@ -396,9 +443,78 @@ export function calculateCreditCosts(
     plannedCommitment: planned.commitment,
     actualBalance,
     plannedBalance,
+    balanceAtRepaymentStart: plannedBalance,
     annuity: terms.repayment_months
       ? annuityPayment(plannedBalance, annualRate, terms.repayment_months)
       : null,
+  };
+}
+
+export type CreditTimelineRow = {
+  month: string;
+  kind: "actual" | "forecast";
+  /** Interest, or the installment once repayment has started. */
+  payment: number;
+  /** Principal part of the installment (forecast only). */
+  repayment: number | null;
+  commitment: number;
+  total: number;
+  balance: number;
+  draws: number;
+  repaymentStart: boolean;
+};
+
+/**
+ * One row per month for the loan page: months before the current one show what actually accrued,
+ * the current and later months the forecast.
+ */
+export function creditTimeline(
+  summary: CreditSummary,
+  today: string,
+  firstInstallment: string | null | undefined,
+): CreditTimelineRow[] {
+  const current = today.slice(0, 7);
+  const first = firstInstallment ? firstInstallment.slice(0, 7) : null;
+  return summary.months.map((row) => {
+    const actual = row.month < current;
+    const payment = actual ? row.actualInterest : row.plannedPayment;
+    const commitment = actual ? row.actualCommitment : row.plannedCommitment;
+    return {
+      month: row.month,
+      kind: actual ? "actual" : "forecast",
+      payment,
+      repayment: actual ? null : row.plannedRepayment,
+      commitment,
+      total: payment + commitment,
+      balance: actual ? row.actualBalance : row.plannedBalance,
+      draws: actual ? row.actualDraws : row.plannedDraws,
+      repaymentStart: row.month === first,
+    };
+  });
+}
+
+const monthKey = (iso: string, shift = 0) => {
+  const date = new Date(`${iso.slice(0, 7)}-01T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + shift);
+  return date.toISOString().slice(0, 7);
+};
+
+/**
+ * Monthly cash burden of the loan: this month, and the first full month after the first
+ * installment (installment + commitment fees on the undrawn rest).
+ */
+export function creditMonthlyBurden(
+  summary: CreditSummary,
+  firstInstallment: string | null | undefined,
+  today: string,
+) {
+  const burden = (key: string) => {
+    const month = summary.months.find((row) => row.month === key);
+    return month ? { payment: month.plannedPayment, commitment: month.plannedCommitment } : null;
+  };
+  return {
+    now: burden(monthKey(today)),
+    afterFirstInstallment: firstInstallment ? burden(monthKey(firstInstallment, 1)) : null,
   };
 }
 
@@ -463,7 +579,7 @@ function calculateContractCreditCosts(
     commitmentRate,
     dayBasis,
     commitmentStart,
-    payments,
+    withAssumedDraw(payments, terms, principal, today, firstInstallment),
     repayments,
     firstInstallment,
     Number(terms.monthly_installment ?? 0),
@@ -488,6 +604,8 @@ function calculateContractCreditCosts(
       actualCommitment: a?.commitment ?? 0,
       plannedInterest: p?.interest ?? 0,
       plannedCommitment: p?.commitment ?? 0,
+      plannedPayment: p?.payment ?? 0,
+      plannedRepayment: p?.repayment ?? 0,
       actualCumulative,
       plannedCumulative,
     };
@@ -500,6 +618,7 @@ function calculateContractCreditCosts(
     plannedCommitment: planned.commitment,
     actualBalance: actual.balance,
     plannedBalance: planned.balance,
+    balanceAtRepaymentStart: planned.balanceAtFirstInstallment,
     annuity:
       Number(terms.monthly_installment) > 0
         ? Number(terms.monthly_installment)
@@ -507,6 +626,37 @@ function calculateContractCreditCosts(
           ? annuityPayment(planned.balance, annualRate, terms.repayment_months)
           : null,
   };
+}
+
+/**
+ * Day before the month of the first installment starts: by then the rest is assumed to be drawn, so
+ * that the first installment month already runs on the full loan (30/360 uses month-start balances).
+ */
+export function defaultFullDrawDate(firstInstallment: string) {
+  return shiftISODate(monthStart(firstInstallment), -1);
+}
+
+/**
+ * Forecast only: the not yet drawn rest is drawn on the assumed date. Without an explicit date it
+ * is assumed to be drawn when repayment starts (the contract's full-drawdown deadline). A date in
+ * the past is ignored.
+ */
+function withAssumedDraw(
+  payments: CreditPayment[],
+  terms: CreditTerms,
+  principal: number,
+  today: string,
+  firstInstallment: string,
+) {
+  const date = validISODate(terms.assumed_full_draw_date)
+    ? terms.assumed_full_draw_date
+    : defaultFullDrawDate(firstInstallment);
+  if (date <= today) return payments;
+  const drawn = payments
+    .filter((payment) => validISODate(payment.date) && payment.amount > 0)
+    .reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const rest = principal - drawn;
+  return rest > 0 ? [...payments, { amount: rest, date, actual: false }] : payments;
 }
 
 function calculateContractScenario(
@@ -544,38 +694,83 @@ function calculateContractScenario(
 
   const months = new Map<
     string,
-    { draws: number; interest: number; commitment: number; balance: number }
+    {
+      draws: number;
+      interest: number;
+      commitment: number;
+      balance: number;
+      payment: number;
+      repayment: number;
+    }
   >();
+  let balanceAtFirstInstallment = 0;
   let balance = 0;
+  // Annuity loan: repaid principal cannot be drawn again, so commitment fees apply only to the never-drawn amount.
+  let drawn = 0;
+  // 30/360: interest and commitment fees use the balance at the start of the month, so a drawdown
+  // mid-month (and the part-month it falls in) only costs from the following month.
+  let monthBalance = 0;
+  let monthDrawn = 0;
   let interest = 0;
   let commitment = 0;
   let interestSinceInstallment = 0;
+  // Interest of the drawdown phase is settled separately; only the last month offsets the first installment.
+  const interestWindowStart = addMonths(firstInstallment, -1);
+  const installmentMonth = monthStart(firstInstallment);
   for (let date = start; date < end; date = shiftISODate(date, 1)) {
     const movement = movements.get(date);
-    if (movement)
+    if (movement) {
       balance = Math.min(principal, Math.max(0, balance + movement.draw - movement.repay));
-    const dayInterest = (balance * annualRate) / 100 / dayBasis;
+      drawn = Math.min(principal, drawn + movement.draw);
+    }
+    if (date === monthStart(date)) {
+      monthBalance = balance;
+      monthDrawn = drawn;
+    }
+    // 30/360: every month costs exactly one twelfth of the annual interest, whatever its length.
+    const dayInterest =
+      dayBasis === 30
+        ? (monthBalance * annualRate) / 100 / 12 / dayCountMonth(date)
+        : (balance * annualRate) / 100 / dayBasis;
     const dayCommitment =
       date >= commitmentStart
-        ? (Math.max(0, principal - balance) * commitmentRate) / 100 / dayCountMonth(date)
+        ? (Math.max(0, principal - (dayBasis === 30 ? monthDrawn : drawn)) * commitmentRate) /
+          100 /
+          dayCountMonth(date)
         : 0;
     const month = monthStart(date);
-    const row = months.get(month) ?? { draws: 0, interest: 0, commitment: 0, balance: 0 };
+    const row = months.get(month) ?? {
+      draws: 0,
+      interest: 0,
+      commitment: 0,
+      balance: 0,
+      payment: 0,
+      repayment: 0,
+    };
     row.draws += movement?.draw ?? 0;
     row.interest += dayInterest;
     row.commitment += dayCommitment;
     interest += dayInterest;
     commitment += dayCommitment;
     interestSinceInstallment += dayInterest;
+    // Interest is paid month by month until the month of the first installment.
+    if (month < installmentMonth) row.payment += dayInterest;
+    if (date === interestWindowStart) interestSinceInstallment = 0;
+    if (date === firstInstallment) balanceAtFirstInstallment = balance;
     if (applyScheduledInstallments && scheduledInstallments.has(date) && balance > 0) {
-      const principalRepayment = Math.max(0, monthlyInstallment - interestSinceInstallment);
-      balance = Math.max(0, balance - principalRepayment);
+      // 30/360 annuity: the interest part is one twelfth of the annual interest on the balance.
+      const interestPart =
+        dayBasis === 30 ? (monthBalance * annualRate) / 100 / 12 : interestSinceInstallment;
+      const principalRepayment = Math.min(balance, Math.max(0, monthlyInstallment - interestPart));
+      balance -= principalRepayment;
+      row.repayment += principalRepayment;
+      row.payment += interestPart + principalRepayment;
       interestSinceInstallment = 0;
     }
     row.balance = balance;
     months.set(month, row);
   }
-  return { months, balance, interest, commitment };
+  return { months, balance, interest, commitment, balanceAtFirstInstallment };
 }
 
 function calculateCreditScenario(
@@ -614,7 +809,7 @@ function calculateCreditScenario(
     const movement = movements.get(date);
     if (movement)
       balance = Math.min(principal, Math.max(0, balance + movement.draw - movement.repay));
-    const dayInterest = (balance * annualRate) / 100 / dayBasis;
+    const dayInterest = (balance * annualRate) / 100 / (dayBasis === 30 ? 360 : dayBasis);
     const dayCommitment =
       date > commitmentFreeEnd
         ? (Math.max(0, principal - balance) * commitmentRate) / 100 / dayCountMonth(date)

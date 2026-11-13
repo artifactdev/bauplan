@@ -16,7 +16,8 @@ import type { PaperlessExportMetadata, PaperlessJobState } from "@/lib/paperless
 import { PaperlessError } from "./paperless-client";
 import { calendarEtag, checkConditions, DavError, type DavConditions } from "./caldav-calendar";
 import { appearanceSchema, DEFAULT_APPEARANCE, type Appearance } from "@/lib/appearance";
-import { USER_NAVIGATION_TABLE } from "@/lib/schema";
+import { USER_ANALYSIS_VIEWS_TABLE, USER_NAVIGATION_TABLE } from "@/lib/schema";
+import { DEFAULT_VIEWS, analysisViewsSchema, type AnalysisViews } from "@/lib/analysis";
 import { migrateDatabase } from "./migrations";
 import {
   convertIdeaDocuments,
@@ -44,6 +45,9 @@ export interface Repo {
   readNavigation(userId: string): Promise<NavigationPreferences>;
   writeNavigation(userId: string, value: NavigationPreferences): Promise<void>;
   deleteNavigation(userId: string): Promise<void>;
+  readAnalysisViews(userId: string): Promise<AnalysisViews>;
+  writeAnalysisViews(userId: string, value: AnalysisViews): Promise<void>;
+  deleteAnalysisViews(userId: string): Promise<void>;
   getAll(): Promise<Workspace>;
   getSyncGeneration(): Promise<string>;
   exportBackup(maxBytes?: number): Promise<{ database: BackupDatabase; files: BackupFile[] }>;
@@ -90,6 +94,7 @@ export type BackupDatabase = {
   settings: Record<string, unknown>[];
   appearances: Record<string, unknown>[];
   navigation: Record<string, unknown>[];
+  analysisViews?: Record<string, unknown>[];
   syncOperations: Record<string, unknown>[];
   paperless?: {
     config: Record<string, unknown>[];
@@ -242,6 +247,28 @@ export function sqliteRepo(): Repo {
     async deleteNavigation(userId) {
       (await db()).prepare(`DELETE FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).run(userId);
     },
+    async readAnalysisViews(userId) {
+      const row = (await db())
+        .prepare(`SELECT views FROM ${USER_ANALYSIS_VIEWS_TABLE} WHERE user_id = ?`)
+        .get(userId);
+      if (!row) return structuredClone(DEFAULT_VIEWS);
+      const parsed = analysisViewsSchema.safeParse(JSON.parse(String(row["views"])));
+      return parsed.success ? parsed.data : structuredClone(DEFAULT_VIEWS);
+    },
+    async writeAnalysisViews(userId, value) {
+      const valid = analysisViewsSchema.parse(value);
+      (await db())
+        .prepare(
+          `INSERT INTO ${USER_ANALYSIS_VIEWS_TABLE} (user_id, views) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET views = excluded.views`,
+        )
+        .run(userId, JSON.stringify(valid));
+    },
+    async deleteAnalysisViews(userId) {
+      (await db())
+        .prepare(`DELETE FROM ${USER_ANALYSIS_VIEWS_TABLE} WHERE user_id = ?`)
+        .run(userId);
+    },
     async readAppearance(userId) {
       const row = (await db())
         .prepare(`SELECT palette, mode FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`)
@@ -373,6 +400,9 @@ export function sqliteRepo(): Repo {
             .all(SYNC_GENERATION_SETTING),
           appearances: d.prepare(`SELECT * FROM ${USER_APPEARANCE_TABLE} ORDER BY user_id`).all(),
           navigation: d.prepare(`SELECT * FROM ${USER_NAVIGATION_TABLE} ORDER BY user_id`).all(),
+          analysisViews: d
+            .prepare(`SELECT * FROM ${USER_ANALYSIS_VIEWS_TABLE} ORDER BY user_id`)
+            .all(),
           syncOperations: d.prepare("SELECT * FROM app_sync_operations ORDER BY id").all(),
           paperless: {
             config: d.prepare("SELECT * FROM app_paperless_config").all(),
@@ -437,6 +467,7 @@ export function sqliteRepo(): Repo {
         d.prepare("DELETE FROM app_settings").run();
         d.prepare(`DELETE FROM ${USER_APPEARANCE_TABLE}`).run();
         d.prepare(`DELETE FROM ${USER_NAVIGATION_TABLE}`).run();
+        d.prepare(`DELETE FROM ${USER_ANALYSIS_VIEWS_TABLE}`).run();
         d.prepare("DELETE FROM app_sync_operations").run();
         d.prepare("DELETE FROM app_sessions").run();
         d.exec(
@@ -460,6 +491,7 @@ export function sqliteRepo(): Repo {
         insertRows("app_settings", [{ key: SYNC_GENERATION_SETTING, value: crypto.randomUUID() }]);
         insertRows(USER_APPEARANCE_TABLE, database.appearances);
         insertRows(USER_NAVIGATION_TABLE, database.navigation);
+        insertRows(USER_ANALYSIS_VIEWS_TABLE, database.analysisViews ?? []);
         insertRows("app_sync_operations", database.syncOperations);
         if (database.paperless) {
           insertRows("app_paperless_config", database.paperless.config);

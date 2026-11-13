@@ -22,6 +22,7 @@ import { tradeName } from "@/lib/options";
 import { offerDeadlines } from "@/lib/offer-deadlines";
 import {
   Bar,
+  BudgetBreakdown,
   Empty,
   MetricCard,
   PageHeader,
@@ -83,13 +84,7 @@ function Dashboard() {
     DEFAULT_COST_ITEM_TITLES.map((title) => title.toLocaleLowerCase()),
   );
   const topCostItems = [...s.items].sort((a, b) => b.expected - a.expected).slice(0, 5);
-  const budgetTone =
-    s.budget > 0 && s.budgetExpected > s.budget
-      ? "danger"
-      : s.budget > 0 && s.budgetExpected > s.budget * 0.9
-        ? "warning"
-        : "primary";
-
+  const maxTopExpected = Math.max(...topCostItems.map((item) => item.expected), 1);
   const hasUserCostItems = ws.cost_items.some(
     (item) => !defaultCostItemTitles.has(item.title.trim().toLocaleLowerCase()),
   );
@@ -138,7 +133,7 @@ function Dashboard() {
         </Panel>
       )}
 
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MetricCard
           label={tr("shared.total_budget")}
           value={eur(s.budget)}
@@ -158,7 +153,17 @@ function Dashboard() {
           hint={
             s.budget <= 0
               ? tr("index.budget_not_set")
-              : `${Math.round((s.budgetExpected / s.budget) * 100)} % · ${s.remaining >= 0 ? `${eur(s.remaining)} ${tr("budget.remaining").toLowerCase()}` : `${eur(-s.remaining)} ${tr("index.over_budget")}`}`
+              : s.expected !== s.budgetExpected
+                ? s.remaining >= 0
+                  ? tr("index.expected_split_hint", {
+                      budget: eur(s.budgetExpected),
+                      remaining: eur(s.remaining),
+                    })
+                  : tr("index.expected_over_hint", {
+                      budget: eur(s.budgetExpected),
+                      over: eur(-s.remaining),
+                    })
+                : `${Math.round((s.budgetExpected / s.budget) * 100)} % · ${s.remaining >= 0 ? `${eur(s.remaining)} ${tr("budget.remaining").toLowerCase()}` : `${eur(-s.remaining)} ${tr("index.over_budget")}`}`
           }
           tone={
             s.budget > 0 && s.remaining < 0
@@ -204,54 +209,21 @@ function Dashboard() {
           }
         >
           <div className="mb-4">
-            <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm">
-              <span>
-                {tr("budget.expected")} {eur(s.budgetExpected)}
-              </span>
-              {s.budget > 0 && (
-                <span className="text-muted-foreground">
-                  {tr("shared.from")} {eur(s.budget)}
-                </span>
-              )}
-            </div>
             {s.budget > 0 ? (
-              <Bar value={s.budgetExpected} max={s.budget} tone={budgetTone} color="expected" />
+              <BudgetBreakdown budget={s.budget} expected={s.budgetExpected} paid={s.budgetPaid} />
             ) : (
               <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 {tr("index.budget_not_set")}
               </p>
             )}
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular">
-              <span className="inline-flex items-center gap-1.5">
-                <i
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: "var(--finance-planned)" }}
-                />
-                {tr("budget.planned")} {eur(s.planned)}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <i
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: "var(--finance-committed)" }}
-                />
-                {tr("budget.committed")} {eur(s.committed)}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <i
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: "var(--finance-paid)" }}
-                />
-                {tr("shared.paid")} {eur(s.paid)}
-              </span>
-            </div>
           </div>
-          <div className="mt-6">
+          <div className="mt-6 border-t pt-5">
             <h2 className="mb-3 text-sm font-medium">{tr("budget.top_cost_items")}</h2>
-            <div className="grid gap-5">
+            <div className="grid gap-4">
               {topCostItems.map((item) => (
                 <div key={item.id}>
-                  <div className="mb-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm">
-                    <span className="min-w-0">
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate">
                       {item.title}
                       {item.trade_id && (
                         <span className="ml-2 text-xs text-muted-foreground">
@@ -259,14 +231,31 @@ function Dashboard() {
                         </span>
                       )}
                     </span>
-                    <span className="tabular text-muted-foreground">{eur(item.expected)}</span>
+                    <span className="shrink-0 font-medium tabular">
+                      {eur(item.expected)}
+                      {s.expected > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                          {item.expected > 0 && item.expected / s.expected < 0.01
+                            ? "< 1"
+                            : Math.round((item.expected / s.expected) * 100)}{" "}
+                          %
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <Bar
                     value={item.expected}
-                    max={Math.max(item.planned, item.expected, 1)}
+                    max={maxTopExpected}
                     tone={item.expected > item.planned ? "warning" : "primary"}
                     color="expected"
                   />
+                  {item.planned > 0 && (
+                    <p
+                      className={`mt-1 text-xs tabular ${item.expected > item.planned ? "text-warning" : "text-muted-foreground"}`}
+                    >
+                      {tr("budget.planned")} {eur(item.planned)}
+                    </p>
+                  )}
                 </div>
               ))}
               {!topCostItems.length && <Empty>{tr("budget.no_cost_items_yet")}</Empty>}
@@ -282,7 +271,8 @@ function Dashboard() {
                   <li key={t.id} className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                     <span>
-                      <b className="font-medium">{t.title}</b> überfällig seit {fmtDate(t.due_date)}
+                      <b className="font-medium">{t.title}</b>{" "}
+                      {tr("index.overdue_since", { date: fmtDate(t.due_date) })}
                     </span>
                   </li>
                 ))}
@@ -334,9 +324,11 @@ function Dashboard() {
           {open.slice(0, 6).map((t) => {
             const od = isOverdue(t.due_date, false);
             return (
-              <li key={t.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
-                <span className="min-w-0 flex-1">{t.title}</span>
-                <span className="text-xs text-muted-foreground">{tradeName(ws, t.trade_id)}</span>
+              <li key={t.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-sm">
+                <span className="min-w-0 basis-full sm:flex-1 sm:basis-0">{t.title}</span>
+                {t.trade_id && (
+                  <span className="text-xs text-muted-foreground">{tradeName(ws, t.trade_id)}</span>
+                )}
                 <Pill tone={PRIORITY[t.priority]?.tone}>{PRIORITY[t.priority]?.label}</Pill>
                 <span
                   className={`tabular text-xs ${od ? "font-medium text-destructive" : "text-muted-foreground"}`}

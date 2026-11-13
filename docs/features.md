@@ -47,7 +47,8 @@ Admins can export and restore a complete database-and-documents backup from Sett
 All invoices and receipts, including contractor invoices, partial invoices, hardware store purchases, and fees, are recorded here. There is no separate invoice workflow.
 
 - **Create expense** opens one form, with or without a receipt. Optionally select an existing document or expand **Add document** to upload, photograph, or scan a receipt; recognized values prefill the editable fields. The same document options are available when editing an expense. No separate manual/upload workflow or assignment step is needed on this page.
-- Status: **open**, **paid**, **submitted**, **reimbursed**.
+- Status: **open**, **paid**, **submitted**, **reimbursed**, **rejected** (submitted but not accepted by the bank; the payment source is unchanged). Setting **reimbursed** moves the expense to the Bank source.
+- **Split** (row action) divides one expense into two when only part of it is reimbursed: enter the partial amount and its status. The partial amount becomes its own expense (copying receipt, contact, trade and cost item; reimbursed parts move to the Bank source) and the original keeps the remainder, status and source. The total stays unchanged.
 - Optional invoice due date, planned/actual payment date, payment source, contact, and related quote. Choosing a quote prefills its company, contact, trade, and cost item, but never replaces the expense amount or dates. These assignments remain editable. Multiple expenses can reference the same quote for installments.
 - Recognized invoices prefill the matched contact and due date and start as **open** when creating an expense; uploading a replacement document while editing preserves the current payment status. Review the extracted values before saving. Receipts retain the paid-by-default workflow.
 - **Overdue** is derived from an open expense whose due date is before today. Both desktop and mobile show the due date and overdue status.
@@ -143,6 +144,25 @@ Ideas and inspiration (flooring, tiles, lighting …): collection, title, link, 
 - Clicking the image opens a gallery that you can swipe, page with arrow keys or the buttons, and that shows "image x of y".
 - Removing an image in the edit dialog deletes it; a linked legacy document is only unlinked and stays in Documents. Deleting an idea deletes its images.
 - Tags use the same tag picker as documents, suggesting tags already used in collections.
+
+## Analysis
+
+The **Analysis** page (`/analyse`) evaluates the whole project in six sections, switchable with the tabs: **Overview**, **Budget**, **Expenses**, **Quotes**, **Tasks & schedule** and **Loan** (only when loan terms exist). Like every other page it can be hidden and reordered in Settings → Navigation; new installations and existing navigation preferences get it appended at the end.
+
+- **Overview:** key figures (budget, expected cost from budget, paid, open, reimbursement rate, task progress), the budget split, automatically generated highlights (budget overrun, items above plan, overdue payments, rejected or pending reimbursements, expiring quotes, overdue tasks) and a data-quality check (expenses without cost item, receipt or payment source; cost items without plan; quotes without trade) that links to the affected page.
+- **Budget:** plan → committed → invoiced → paid → expected against the total budget, expected cost by trade, plan vs. forecast per cost item with deviation, and cumulative spending over time against the budget.
+- **Expenses:** spending per week/month/quarter stacked by category, trade, payment source or status; distribution by source and status; reimbursement funnel with rate (reimbursed ÷ decided); open expenses by due date; top vendors; the ten largest expenses.
+- **Quotes:** cheapest/accepted/most expensive quote per cost item with the saving, quote status pipeline, quotes expiring within 30 days.
+- **Tasks & schedule:** progress by phase, trade or assignee, a timeline of tasks, appointments and deadlines with a "today" marker, and the list of overdue tasks.
+- **Loan:** amount drawn, monthly burden now and after the first installment, and per month the forecast split into interest, repayment and commitment fees with the actual costs to date, over a selectable horizon (from the Loan page's calculation; forecasts only include recorded drawdowns).
+
+**Filters** apply to all sections: period (presets or free dates) based on expense, payment or due date, group by week/month/quarter, trade, cost item, category, payment source, status, contact, phase, assignee, and "only costs that count toward the budget". Budget figures (total, expected, plan vs. forecast) always cover the whole project; the date filter applies to expenses, quotes and tasks. The current section and non-default filters are kept in the URL, so a link reproduces the view.
+
+**Ready-made analyses** (budget check, open payments, reimbursements, privately advanced, last 90 days, quarterly report, craftsmen costs, DIY & material, quote comparison, schedule, loan costs) are listed in the view selector; relative periods are always current, and presets without matching data (private source, loan) are hidden. Any of them can be saved as your own view.
+
+**Saved views** store a name, section and filters per account (up to 20, one can be marked as default). They can be updated, renamed and deleted from the page.
+
+Every chart has an equivalent **table** (toggle) and can be exported as **CSV** (semicolon-separated, UTF-8 with BOM, decimal comma in German) with the current filters applied.
 
 ## Contacts
 

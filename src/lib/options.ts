@@ -19,7 +19,9 @@ export const potName = (ws: Workspace, id: string | null | undefined) =>
 export const tradeName = (ws: Workspace, id: string | null) =>
   ws.trades.find((t) => t.id === id)?.name ?? "–";
 export const contactLabel = (c: { name: string; company: string | null }) =>
-  c.company ? `${c.company} (${c.name})` : c.name;
+  c.company && c.company.trim().toLocaleLowerCase() !== c.name.trim().toLocaleLowerCase()
+    ? `${c.company} (${c.name})`
+    : c.name;
 export const contactOptions = (ws: Workspace) =>
   ws.contacts.map((c) => ({ value: c.id, label: contactLabel(c) }));
 export const offerOptions = (ws: Workspace) =>

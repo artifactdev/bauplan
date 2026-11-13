@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { strFromU8, strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
 import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, type TableName } from "@/lib/schema";
 import { appearanceSchema } from "@/lib/appearance";
-import { navigationSchema } from "@/lib/navigation";
+import { parseNavigation } from "@/lib/navigation";
+import { analysisViewsSchema } from "@/lib/analysis";
 import { legacyInvoiceExpense } from "@/lib/expenses";
 import { validateFundingEntry } from "@/lib/funding";
 import { parseTaskChecklist } from "@/lib/tasks";
@@ -78,6 +79,7 @@ function validateDatabase(value: unknown): BackupDatabase {
           "settings",
           "appearances",
           "navigation",
+          "analysisViews",
           "syncOperations",
           "paperless",
         ].includes(key),
@@ -103,7 +105,9 @@ function validateDatabase(value: unknown): BackupDatabase {
             ? columns.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
             : table === "events"
               ? columns.filter((column) => !["caldav_uid", "caldav_data"].includes(column))
-              : columns;
+              : table === "credit_terms"
+                ? columns.filter((column) => column !== "assumed_full_draw_date")
+                : columns;
     const validatedRows = validateRows(
       OPTIONAL_TABLES.has(table) && !(table in tables) ? [] : tables[table],
       columns,
@@ -125,13 +129,18 @@ function validateDatabase(value: unknown): BackupDatabase {
                 contact_id: row["contact_id"] ?? null,
                 due_date: row["due_date"] ?? null,
               }))
-            : table === "events"
+            : table === "credit_terms"
               ? validatedRows.map((row) => ({
                   ...row,
-                  caldav_uid: row["caldav_uid"] ?? null,
-                  caldav_data: row["caldav_data"] ?? null,
+                  assumed_full_draw_date: row["assumed_full_draw_date"] ?? null,
                 }))
-              : validatedRows;
+              : table === "events"
+                ? validatedRows.map((row) => ({
+                    ...row,
+                    caldav_uid: row["caldav_uid"] ?? null,
+                    caldav_data: row["caldav_data"] ?? null,
+                  }))
+                : validatedRows;
     for (const row of rows) {
       if (table === "tasks") parseTaskChecklist(row["checklist"]);
       for (const [column, item] of Object.entries(row)) {
@@ -233,12 +242,23 @@ function validateDatabase(value: unknown): BackupDatabase {
       if (typeof row["preferences"] !== "string")
         fail("Navigationsoptionen im Backup sind ungültig.");
       try {
-        navigationSchema.parse(JSON.parse(row["preferences"]));
+        parseNavigation(JSON.parse(row["preferences"]));
       } catch {
         fail("Navigationsoptionen im Backup sind ungültig.");
       }
     },
   );
+  const analysisViews =
+    value["analysisViews"] === undefined
+      ? undefined
+      : validateUserRows(value["analysisViews"], ["user_id", "views"], userIds, (row) => {
+          try {
+            if (typeof row["views"] !== "string") throw new Error("invalid");
+            analysisViewsSchema.parse(JSON.parse(row["views"]));
+          } catch {
+            fail("Analyseansichten im Backup sind ungültig.");
+          }
+        });
   const syncOperations = value["syncOperations"];
   if (!Array.isArray(syncOperations)) fail("Sync-Metadaten im Backup sind ungültig.");
   const operationIds = new Set<string>();
@@ -265,6 +285,7 @@ function validateDatabase(value: unknown): BackupDatabase {
     settings,
     appearances,
     navigation,
+    ...(analysisViews ? { analysisViews } : {}),
     syncOperations: validSyncOperations,
     ...(value["paperless"] === undefined
       ? {}

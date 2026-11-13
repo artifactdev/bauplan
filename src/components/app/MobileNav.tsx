@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
-import { activeNavIndex, nextBarVisibility } from "@/lib/navigation";
+import { activeNavIndex } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 type Item = { to: string; label: string; icon: ComponentType<{ className?: string }> };
@@ -13,7 +13,6 @@ export function MobileNav({ items, label }: { items: Item[]; label: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const listRef = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
-  const [visible, setVisible] = useState(true);
   const [edges, setEdges] = useState({ start: false, end: false });
   const active = activeNavIndex(items, pathname);
 
@@ -26,7 +25,6 @@ export function MobileNav({ items, label }: { items: Item[]; label: string }) {
       behavior: firstRender.current || prefersReducedMotion() ? "auto" : "smooth",
     });
     firstRender.current = false;
-    setVisible(true);
   }, [active, pathname]);
 
   useEffect(() => {
@@ -46,17 +44,6 @@ export function MobileNav({ items, label }: { items: Item[]; label: string }) {
     };
   }, [items.length]);
 
-  useEffect(() => {
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      setVisible((v) => nextBarVisibility(v, lastY, y));
-      lastY = y;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   const mask =
     edges.start && edges.end
       ? "linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent)"
@@ -71,10 +58,7 @@ export function MobileNav({ items, label }: { items: Item[]; label: string }) {
       aria-label={label}
       className={cn(
         "fixed inset-x-0 bottom-0 z-30 border-t bg-card/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 shadow-card backdrop-blur-xl md:hidden",
-        "transition-transform duration-200 motion-reduce:transition-none",
-        !visible && "translate-y-full",
       )}
-      onFocusCapture={() => setVisible(true)}
     >
       <div
         ref={listRef}

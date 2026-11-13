@@ -9,6 +9,7 @@ import {
   Receipt,
   Wallet,
   CreditCard,
+  ChartColumnBig,
 } from "lucide-react";
 import { tr } from "@/i18n";
 import type { NAV_PATHS } from "@/lib/navigation";
@@ -24,6 +25,7 @@ export const NAV_ITEMS = [
   { to: "/sammlungen", label: () => tr("shared.collections"), icon: Bookmark },
   { to: "/kontakte", label: () => tr("shared.contacts"), icon: Contact },
   { to: "/kredit", label: () => tr("shared.loan"), icon: CreditCard },
+  { to: "/analyse", label: () => tr("analysis.title"), icon: ChartColumnBig },
 ] as const;
 
 export function navigationItem(path: (typeof NAV_PATHS)[number]) {

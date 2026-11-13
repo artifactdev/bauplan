@@ -4,7 +4,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { USER_APPEARANCE_TABLE, USER_NAVIGATION_TABLE } from "@/lib/schema";
+import {
+  USER_ANALYSIS_VIEWS_TABLE,
+  USER_APPEARANCE_TABLE,
+  USER_NAVIGATION_TABLE,
+} from "@/lib/schema";
+import { DEFAULT_FILTERS, DEFAULT_VIEWS } from "@/lib/analysis";
 import { DEFAULT_NAVIGATION, NAV_PATHS } from "@/lib/navigation";
 
 const dir = mkdtempSync(join(tmpdir(), "bauplan-appearance-"));
@@ -43,6 +48,24 @@ describe("Account appearance SQLite persistence", () => {
     expect(await repo.getAll()).not.toHaveProperty(USER_NAVIGATION_TABLE);
     db.prepare(`INSERT INTO ${USER_NAVIGATION_TABLE} VALUES (?, ?)`).run("invalid", "{}");
     await expect(repo.readNavigation("invalid")).rejects.toThrow();
+  });
+  it("stores analysis views privately per account and falls back when the data is corrupt", async () => {
+    expect(await repo.readAnalysisViews("alice")).toEqual(DEFAULT_VIEWS);
+    const views = {
+      views: [{ id: "v1", name: "Q4", section: "expenses" as const, filters: DEFAULT_FILTERS }],
+      defaultId: "v1",
+    };
+    await repo.writeAnalysisViews("alice", views);
+    expect(await repo.readAnalysisViews("alice")).toEqual(views);
+    expect(await repo.readAnalysisViews("bob")).toEqual(DEFAULT_VIEWS);
+    await expect(
+      repo.writeAnalysisViews("alice", { views: [], defaultId: "missing" }),
+    ).rejects.toThrow();
+    expect(await repo.getAll()).not.toHaveProperty(USER_ANALYSIS_VIEWS_TABLE);
+    db.prepare(`INSERT INTO ${USER_ANALYSIS_VIEWS_TABLE} VALUES (?, ?)`).run("broken", "{}");
+    expect(await repo.readAnalysisViews("broken")).toEqual(DEFAULT_VIEWS);
+    await repo.deleteAnalysisViews("alice");
+    expect(await repo.readAnalysisViews("alice")).toEqual(DEFAULT_VIEWS);
   });
   it("initializes additively without changing legacy project data", async () => {
     expect((await repo.getAll()).projects[0]?.name).toBe("Keep me");

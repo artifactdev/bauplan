@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   annuityPayment,
+  creditTimeline,
+  installmentCount,
+  suggestedInstallment,
   bankFundedPayments,
   calculateCreditCosts,
   expectedCost,
@@ -357,7 +360,21 @@ describe("expenses", () => {
 
     expect(s.expected).toBe(220000);
     expect(s.budgetExpected).toBe(201000);
+    expect(s.budgetPaid).toBe(201000);
     expect(s.remaining).toBe(160000);
+  });
+
+  it("splits the budget forecast into paid and still-to-pay without exceeding it", () => {
+    const s = summarize({
+      ...base,
+      cost_items: [{ id: "c", trade_id: null, title: "Baumarkt", description: null, planned: 0 }],
+      offers: [],
+      invoices: [],
+      expenses: [exp(120, "bezahlt"), exp(80, "offen")],
+    });
+    expect(s.budgetExpected).toBe(200);
+    expect(s.budgetPaid).toBe(120);
+    expect(s.items[0]?.budgetPaid).toBe(120);
   });
 });
 
@@ -591,5 +608,183 @@ describe("credit interest", () => {
     expect(result?.months.find((month) => month.month === "2026-02")?.plannedDraws).toBe(2000);
     expect(result?.plannedBalance).toBeLessThan(3000);
     expect(result?.annuity).toBe(900);
+  });
+
+  describe("real-world loan (30/360, interest-only until the first installment)", () => {
+    const loan = {
+      ...terms,
+      total_credit: 361000,
+      annual_rate: 4.1,
+      commitment_rate: 0.2,
+      interest_free_start: null,
+      interest_free_end: null,
+      repayment_start: null,
+      commitment_free_end: null,
+      day_basis: 30 as const,
+      first_installment_date: "2028-02-07",
+      commitment_start: "2028-02-07",
+      monthly_installment: 1759.88,
+      repayment_count: 354,
+    };
+    const draws = [{ amount: 201000, date: "2026-10-30", actual: true }];
+    // the rest is drawn long after the repayment start, so commitment fees run
+    const late = { ...loan, assumed_full_draw_date: "2029-01-01" };
+    const month = (result: ReturnType<typeof calculateCreditCosts>, key: string) =>
+      result!.months.find((row) => row.month === key)!;
+
+    it("charges one twelfth of the annual interest every month", () => {
+      const result = calculateCreditCosts(loan, draws, [], "2026-11-13");
+      expect(month(result, "2026-12").plannedInterest).toBeCloseTo(686.75, 2);
+      expect(month(result, "2027-02").plannedInterest).toBeCloseTo(686.75, 2);
+      expect(month(result, "2027-12").plannedPayment).toBeCloseTo(686.75, 2);
+      expect(month(result, "2027-12").plannedRepayment).toBe(0);
+    });
+
+    it("does not charge the part-month of the first drawdown; the first full month costs 686.75", () => {
+      const result = calculateCreditCosts(loan, draws, [], "2026-11-13")!;
+      expect(month(result, "2026-10").plannedInterest).toBe(0);
+      expect(month(result, "2026-10").actualInterest).toBe(0);
+      expect(month(result, "2026-11").plannedInterest).toBeCloseTo(686.75, 2);
+      expect(month(result, "2026-11").plannedPayment).toBeCloseTo(686.75, 2);
+    });
+
+    it("lets a drawdown mid-month start costing interest in the following month", () => {
+      const result = calculateCreditCosts(
+        loan,
+        [...draws, { amount: 10000, date: "2026-12-10", actual: false }],
+        [],
+        "2026-11-13",
+      )!;
+      expect(month(result, "2026-12").plannedInterest).toBeCloseTo(686.75, 2);
+      expect(month(result, "2027-01").plannedInterest).toBeCloseTo((211000 * 4.1) / 1200, 2);
+    });
+
+    it("pays the installment from the first installment date and reports the repayment part", () => {
+      const result = calculateCreditCosts(late, draws, [], "2026-11-13");
+      const march = month(result, "2028-03");
+      expect(march.plannedPayment).toBeCloseTo(1759.88, 2);
+      expect(march.plannedRepayment).toBeGreaterThan(1000);
+      expect(march.plannedRepayment).toBeLessThan(1100);
+      expect(march.plannedBalance).toBeLessThan(201000);
+      expect(march.plannedCommitment).toBeCloseTo(320, 1);
+      expect(result!.balanceAtRepaymentStart).toBeCloseTo(201000, 2);
+    });
+
+    it("stops commitment fees once the rest is assumed to be drawn", () => {
+      const result = calculateCreditCosts(
+        { ...loan, assumed_full_draw_date: "2027-06-15" },
+        draws,
+        [],
+        "2026-11-13",
+      );
+      expect(month(result, "2028-03").plannedCommitment).toBe(0);
+      expect(result!.balanceAtRepaymentStart).toBeCloseTo(361000, 2);
+      expect(month(result, "2027-12").plannedInterest).toBeCloseTo((361000 * 4.1) / 1200, 2);
+      // the assumption never changes what has actually been drawn
+      expect(month(result, "2027-12").actualBalance).toBe(0);
+      expect(result!.actualBalance).toBe(201000);
+    });
+
+    it("pays the full monthly interest in the month before the first installment", () => {
+      const result = calculateCreditCosts(loan, draws, [], "2026-11-13")!;
+      expect(month(result, "2028-01").plannedPayment).toBeCloseTo(686.75, 2);
+      expect(month(result, "2028-02").plannedPayment).toBeCloseTo(1759.88, 2);
+    });
+
+    it("builds one timeline: actual before this month, forecast from this month on", () => {
+      const result = calculateCreditCosts(loan, draws, [], "2026-11-13")!;
+      const rows = creditTimeline(result, "2026-11-13", "2028-02-07");
+      const row = (key: string) => rows.find((entry) => entry.month === key)!;
+      expect(row("2026-10")).toMatchObject({ kind: "actual", repayment: null, draws: 201000 });
+      expect(row("2026-11").kind).toBe("forecast");
+      expect(row("2027-06")).toMatchObject({ payment: expect.closeTo(686.75, 2), repayment: 0 });
+      expect(row("2028-02")).toMatchObject({
+        repaymentStart: true,
+        payment: expect.closeTo(1759.88, 2),
+      });
+      expect(row("2028-03").total).toBeCloseTo(1759.88, 2);
+      expect(rows.filter((entry) => entry.repaymentStart)).toHaveLength(1);
+    });
+
+    it("assumes the rest is drawn when repayment starts if no date is given", () => {
+      const result = calculateCreditCosts(loan, draws, [], "2026-11-13")!;
+      const feb = month(result, "2028-02");
+      const march = month(result, "2028-03");
+      // no commitment fees, and the installment is the whole monthly burden (interest + repayment)
+      expect(feb.plannedCommitment).toBe(0);
+      expect(march.plannedCommitment).toBe(0);
+      expect(feb.plannedPayment).toBeCloseTo(1759.88, 2);
+      expect(march.plannedPayment).toBeCloseTo(1759.88, 2);
+      expect(result!.balanceAtRepaymentStart).toBeCloseTo(361000, 2);
+      // interest on the full loan is 1,232.58 per month, the rest of the installment repays principal
+      expect(month(result, "2028-03").plannedInterest).toBeGreaterThan(1225);
+      expect(month(result, "2028-03").plannedInterest).toBeLessThan((361000 * 4.1) / 1200);
+      // standard annuity split from the first installment on: 1,759.88 - 361,000 x 4.1 % / 12
+      expect(feb.plannedRepayment).toBeCloseTo(1759.88 - (361000 * 4.1) / 1200, 2);
+      expect(march.plannedRepayment).toBeGreaterThan(526);
+      expect(march.plannedRepayment).toBeLessThan(530);
+    });
+
+    it("ignores an assumed draw date in the past", () => {
+      const result = calculateCreditCosts(
+        { ...loan, assumed_full_draw_date: "2026-01-01" },
+        draws,
+        [],
+        "2026-11-13",
+      );
+      expect(month(result, "2028-03").plannedCommitment).toBeCloseTo(320, 1);
+    });
+  });
+
+  describe("with scheduled installments", () => {
+    const contract = {
+      ...terms,
+      total_credit: 10000,
+      annual_rate: 3.65,
+      commitment_rate: 1,
+      interest_free_start: null,
+      interest_free_end: null,
+      repayment_start: null,
+      commitment_free_end: null,
+      first_installment_date: "2026-03-01",
+      commitment_start: "2026-03-01",
+      monthly_installment: 500,
+      repayment_count: 6,
+      // the rest stays undrawn for the whole term
+      assumed_full_draw_date: "2030-01-01",
+    };
+    const draws = [{ amount: 6000, date: "2026-01-01", actual: true }];
+
+    it("does not charge commitment fees on principal that was already repaid", () => {
+      const result = calculateCreditCosts(contract, draws, [], "2026-01-15")!;
+      const fee = (month: string) =>
+        result.months.find((row) => row.month === month)!.plannedCommitment;
+      // 4,000 stays undrawn at 1 % per month; repaying the drawn 6,000 must not increase it.
+      expect(fee("2026-03")).toBeCloseTo(40, 1);
+      expect(fee("2026-06")).toBeCloseTo(40, 1);
+    });
+
+    it("lets the first installment repay principal even after a long drawdown phase", () => {
+      const result = calculateCreditCosts(contract, draws, [], "2026-01-15")!;
+      // Only the interest of the month before the first installment offsets it:
+      // 6,000 * 3.65 % / 12 = 18.25, so 500 - 18.25 of principal is repaid on 2026-03-01.
+      const march = result.months.find((row) => row.month === "2026-03")!;
+      expect(march.plannedBalance).toBeCloseTo(6000 - (500 - 0.6 * 28), 0);
+    });
+  });
+});
+
+describe("loan form helpers", () => {
+  it("derives the bank installment and number of installments from the contract data", () => {
+    expect(suggestedInstallment(361000, 4.1, 1.75)).toBe(1759.88);
+    expect(installmentCount(361000, 4.1, 1759.88)).toBe(354);
+    expect(installmentCount(12000, 0, 1000)).toBe(12);
+  });
+
+  it("rejects data that cannot produce a schedule", () => {
+    expect(suggestedInstallment(0, 4.1, 1.75)).toBeNull();
+    expect(suggestedInstallment(1000, 0, 0)).toBeNull();
+    expect(installmentCount(361000, 4.1, 1000)).toBeNull();
+    expect(installmentCount(361000, 4.1, 0)).toBeNull();
   });
 });
