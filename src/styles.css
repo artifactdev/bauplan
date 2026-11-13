@@ -179,6 +179,12 @@
   }
   body {
     background-color: var(--color-background);
+    background-image: radial-gradient(
+      52rem 26rem at 88% -6rem,
+      color-mix(in srgb, var(--primary) 8%, transparent),
+      transparent
+    );
+    background-repeat: no-repeat;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     line-height: 1.5;
@@ -203,6 +209,11 @@
 .metric-card {
   --metric-accent: var(--muted-foreground);
   background-color: color-mix(in srgb, var(--metric-accent) 7%, var(--card));
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--metric-accent) 12%, transparent),
+    transparent 65%
+  );
   border-color: color-mix(in srgb, var(--metric-accent) 24%, var(--border));
   color: var(--card-foreground);
 }

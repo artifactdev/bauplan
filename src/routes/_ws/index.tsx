@@ -133,7 +133,7 @@ function Dashboard() {
         </Panel>
       )}
 
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MetricCard
           label={tr("shared.total_budget")}
           value={eur(s.budget)}
@@ -324,9 +324,11 @@ function Dashboard() {
           {open.slice(0, 6).map((t) => {
             const od = isOverdue(t.due_date, false);
             return (
-              <li key={t.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
-                <span className="min-w-0 flex-1">{t.title}</span>
-                <span className="text-xs text-muted-foreground">{tradeName(ws, t.trade_id)}</span>
+              <li key={t.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-sm">
+                <span className="min-w-0 basis-full sm:flex-1 sm:basis-0">{t.title}</span>
+                {t.trade_id && (
+                  <span className="text-xs text-muted-foreground">{tradeName(ws, t.trade_id)}</span>
+                )}
                 <Pill tone={PRIORITY[t.priority]?.tone}>{PRIORITY[t.priority]?.label}</Pill>
                 <span
                   className={`tabular text-xs ${od ? "font-medium text-destructive" : "text-muted-foreground"}`}

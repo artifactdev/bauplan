@@ -35,7 +35,12 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-xl bg-card p-5 shadow-card md:p-6", className)}>
+    <section
+      className={cn(
+        "min-w-0 rounded-xl bg-card p-4 shadow-card ring-1 ring-border/40 sm:p-5 md:p-6",
+        className,
+      )}
+    >
       {(title || action) && (
         <div className="mb-3 flex items-center justify-between gap-2">
           {title && <h2 className="text-base font-semibold">{title}</h2>}
@@ -72,7 +77,7 @@ export function MetricCard({
 }) {
   const className = cn(
     "metric-card min-w-0 rounded-xl border shadow-card",
-    compact ? "p-3 md:p-4" : "p-4 md:p-5",
+    compact ? "p-3 md:p-4" : "p-3 sm:p-4 md:p-5",
     onClick && "cursor-pointer text-left hover:brightness-105",
     active && "metric-card-active",
   );
@@ -81,7 +86,10 @@ export function MetricCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 text-sm font-medium text-muted-foreground">{label}</div>
         {icon && (
-          <span aria-hidden="true" className="metric-card-icon shrink-0 rounded-lg p-2">
+          <span
+            aria-hidden="true"
+            className="metric-card-icon hidden shrink-0 rounded-lg p-2 sm:block"
+          >
             {icon}
           </span>
         )}
@@ -89,13 +97,15 @@ export function MetricCard({
       <div
         className={cn(
           "metric-card-value break-words font-display font-semibold tracking-tight tabular",
-          compact ? "mt-1.5 text-xl" : "mt-3 text-2xl md:text-3xl",
+          compact ? "mt-1.5 text-xl" : "mt-2 text-xl sm:mt-3 sm:text-2xl md:text-3xl",
           muted && "opacity-60",
         )}
       >
         {value}
       </div>
-      {hint && <div className="mt-2 text-sm text-muted-foreground">{hint}</div>}
+      {hint && (
+        <div className="mt-1.5 text-xs text-muted-foreground sm:mt-2 sm:text-sm">{hint}</div>
+      )}
     </>
   );
   return onClick ? (
@@ -211,13 +221,16 @@ export function BudgetBreakdown({
       <div
         role="img"
         aria-label={rows.map((row) => `${row.label}: ${eur(row.value)}`).join(", ")}
-        className="relative flex h-3 w-full overflow-hidden rounded-full bg-muted"
+        className="relative flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
       >
         <div
-          className="h-full"
+          className="h-full rounded-full"
           style={{ width: width(paidAmount), backgroundColor: rows[0]!.color }}
         />
-        <div className="h-full" style={{ width: width(toPay), backgroundColor: rows[1]!.color }} />
+        <div
+          className="h-full rounded-full"
+          style={{ width: width(toPay), backgroundColor: rows[1]!.color }}
+        />
         {over > 0 && (
           <span
             aria-hidden="true"
@@ -228,13 +241,13 @@ export function BudgetBreakdown({
       </div>
       <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm tabular sm:grid-cols-3">
         {rows.map((row) => (
-          <div key={row.key} className="flex min-w-0 items-start gap-2">
+          <div key={row.key} className="flex min-w-0 items-center gap-2 sm:items-start">
             <i
               aria-hidden="true"
-              className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+              className="h-2.5 w-2.5 shrink-0 rounded-full sm:mt-1.5"
               style={{ backgroundColor: row.color, opacity: row.key === "free" ? 0.35 : 1 }}
             />
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2 sm:block">
               <dt className="text-xs text-muted-foreground">{row.label}</dt>
               <dd className="font-medium">
                 {eur(row.value)}

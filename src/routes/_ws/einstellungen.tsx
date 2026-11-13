@@ -50,7 +50,7 @@ function SettingsPage() {
     <>
       <PageHeader title={tr("shared.settings")} subtitle={t("settingsHint")} />
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList aria-label={tr("shared.settings")} className="mb-5 flex h-auto w-full flex-wrap justify-start gap-1">
+        <TabsList aria-label={tr("shared.settings")} className="mb-5 flex h-auto w-full justify-start gap-1 overflow-x-auto [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           <TabsTrigger value="personal" className="min-h-11 whitespace-normal text-left">{t("personal")}</TabsTrigger>
           <TabsTrigger value="calendar" className="min-h-11 whitespace-normal text-left">{t("calendar")}</TabsTrigger>
           <TabsTrigger value="project" className="min-h-11 whitespace-normal text-left">{t("project")}</TabsTrigger>

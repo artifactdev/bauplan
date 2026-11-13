@@ -353,7 +353,7 @@ function DocsPage() {
             />
           </div>
         </div>
-        <div className="flex w-full flex-wrap gap-1">
+        <div className="-mx-4 flex w-auto gap-1 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:w-full sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden [&>button]:shrink-0">
           <Button
             size="sm"
             variant={cat === null ? "secondary" : "ghost"}

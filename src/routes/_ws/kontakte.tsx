@@ -66,7 +66,7 @@ function ContactsPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         <Input className="max-w-xs" placeholder={tr("shared.search")} value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={trade} onValueChange={setTrade}>
-          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>{tr("shared.all_trades")}</SelectItem>
             {tradeOptions(ws).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}

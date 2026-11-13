@@ -197,9 +197,9 @@ function OffersPage() {
             </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Input
-            className="w-56"
+            className="col-span-2 sm:w-56"
             placeholder={tr("shared.search")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -584,7 +584,7 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-44">
+      <SelectTrigger className="w-full sm:w-44">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

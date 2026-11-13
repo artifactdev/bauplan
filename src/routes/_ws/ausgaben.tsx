@@ -234,8 +234,8 @@ function ExpensesPage() {
         </div>
       )}
 
-      <div className="my-4 flex flex-wrap gap-2">
-        <div className="relative w-full sm:w-72">
+      <div className="my-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <div className="relative col-span-2 w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
@@ -245,7 +245,7 @@ function ExpensesPage() {
           />
         </div>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-44" aria-label={tr("shared.status")}>
+          <SelectTrigger className="w-full sm:w-44" aria-label={tr("shared.status")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -262,7 +262,7 @@ function ExpensesPage() {
         </Select>
         {ws.budget_pots.length > 0 && (
           <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="w-44" aria-label={tr("shared.paid_2")}>
+            <SelectTrigger className="w-full sm:w-44" aria-label={tr("shared.paid_2")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -297,7 +297,7 @@ function ExpensesPage() {
           },
         ].map((filter) => (
           <Select key={filter.label} value={filter.value} onValueChange={filter.onChange}>
-            <SelectTrigger className="w-44" aria-label={filter.label}>
+            <SelectTrigger className="w-full sm:w-44" aria-label={filter.label}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -313,7 +313,7 @@ function ExpensesPage() {
           </Select>
         ))}
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-44" aria-label={tr("expenses.sort_by")}>
+          <SelectTrigger className="w-full sm:w-44" aria-label={tr("expenses.sort_by")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
