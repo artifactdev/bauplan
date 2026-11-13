@@ -104,6 +104,7 @@ describe("unified expenses", () => {
       ...expense,
       id: "invoice-old",
       created_at: "2026-01-01",
+      project_id: null,
       title: "Roofing",
       offer_id: null,
       status: "offen",

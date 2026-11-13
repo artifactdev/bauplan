@@ -26,6 +26,7 @@ afterAll(() => {
 
 describe("offline row synchronization", () => {
   it("validates funding writes and protects sources needed by the funding ledger", async () => {
+    await repo.insert("projects", { id: "funding-project", name: "Funding project" });
     await repo.insert("budget_pots", { id: "grandma", name: "Oma", deducts_from_budget: true });
     const row = {
       id: "funding",
@@ -55,14 +56,18 @@ describe("offline row synchronization", () => {
     ).rejects.toThrow("funding.source_in_use");
     await expect(repo.remove("budget_pots", "grandma")).rejects.toThrow("funding.source_in_use");
     await expect(
-      repo.applySyncChange("account-1", {
-        id: "invalid-funding-operation",
-        table: "funding_entries",
-        action: "create",
-        rowId: "invalid",
-        base: null,
-        row: { ...row, amount: -100 },
-      }),
+      repo.applySyncChange(
+        "account-1",
+        {
+          id: "invalid-funding-operation",
+          table: "funding_entries",
+          action: "create",
+          rowId: "invalid",
+          base: null,
+          row: { ...row, amount: -100, project_id: "funding-project" },
+        },
+        "funding-project",
+      ),
     ).rejects.toThrow("funding.invalid_amount");
     expect(
       db.prepare("SELECT id FROM app_sync_operations WHERE id = 'invalid-funding-operation'").get(),
@@ -71,6 +76,46 @@ describe("offline row synchronization", () => {
     expect((await repo.getAll()).funding_entries[0]?.amount).toBe(9000);
     await repo.remove("funding_entries", "funding");
     await repo.remove("budget_pots", "grandma");
+  });
+  it("isolates workspace rows and rejects cross-project references and mutations", async () => {
+    await repo.insert("projects", { id: "project-a", name: "Project A" });
+    await repo.insert("projects", { id: "project-b", name: "Project B" });
+    await repo.insert(
+      "trades",
+      { id: "trade-a", name: "Roofing", budget: 100 },
+      undefined,
+      "project-a",
+    );
+    await repo.insert(
+      "trades",
+      { id: "trade-b", name: "Electrical", budget: 200 },
+      undefined,
+      "project-b",
+    );
+    await repo.insert(
+      "cost_items",
+      { id: "cost-a", trade_id: "trade-a", title: "Roof", planned: 50 },
+      undefined,
+      "project-a",
+    );
+
+    expect((await repo.getAll("project-a")).trades.map((row) => row.id)).toEqual(["trade-a"]);
+    expect((await repo.getAll("project-b")).trades.map((row) => row.id)).toEqual(["trade-b"]);
+    await expect(
+      repo.insert(
+        "cost_items",
+        { id: "cross-cost", trade_id: "trade-b", title: "Wrong project", planned: 10 },
+        undefined,
+        "project-a",
+      ),
+    ).rejects.toThrow("projects.related_record_not_in_project");
+    await expect(
+      repo.update("trades", "trade-b", { name: "Moved" }, undefined, "project-a"),
+    ).rejects.toThrow("projects.row_not_in_project");
+    await expect(repo.remove("trades", "trade-b", "project-a")).rejects.toThrow(
+      "projects.row_not_in_project",
+    );
+    await expect(repo.getAll("missing-project")).rejects.toThrow("projects.not_found");
   });
   it("rejects obsolete invoice writes explicitly rather than hiding or double-counting them", async () => {
     await expect(repo.insert("invoices", { amount: 100 })).rejects.toThrow(
@@ -118,7 +163,7 @@ describe("offline row synchronization", () => {
       current: null,
     });
     await repo.applySyncChange("account-1", create);
-    expect((await repo.getAll()).projects).toHaveLength(1);
+    expect((await repo.getAll()).projects.some((project) => project.id === "project-1")).toBe(true);
 
     const base = (await repo.getAll()).projects[0] as unknown as Record<string, unknown>;
     await repo.update("projects", "project-1", { name: "Changed online" });

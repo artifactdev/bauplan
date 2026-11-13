@@ -137,9 +137,10 @@ export const SYNC_OPERATIONS_DDL = `CREATE TABLE IF NOT EXISTS app_sync_operatio
 
 export const TABLES = {
   projects: ["name", "address", "total_budget", "start_date", "end_date"],
-  trades: ["name", "budget", "color"],
-  cost_items: ["trade_id", "title", "description", "planned"],
+  trades: ["project_id", "name", "budget", "color"],
+  cost_items: ["project_id", "trade_id", "title", "description", "planned"],
   offers: [
+    "project_id",
     "trade_id",
     "cost_item_id",
     "document_id",
@@ -154,6 +155,7 @@ export const TABLES = {
     "notes",
   ],
   invoices: [
+    "project_id",
     "trade_id",
     "cost_item_id",
     "document_id",
@@ -168,6 +170,7 @@ export const TABLES = {
     "budget_pot_id",
   ],
   documents: [
+    "project_id",
     "name",
     "category",
     "tags",
@@ -180,6 +183,7 @@ export const TABLES = {
     "cost_item_id",
   ],
   tasks: [
+    "project_id",
     "title",
     "assignee_id",
     "trade_id",
@@ -194,6 +198,7 @@ export const TABLES = {
     "checklist",
   ],
   events: [
+    "project_id",
     "title",
     "event_date",
     "start_time",
@@ -206,6 +211,7 @@ export const TABLES = {
     "caldav_data",
   ],
   ideas: [
+    "project_id",
     "collection",
     "title",
     "url",
@@ -217,9 +223,20 @@ export const TABLES = {
     "price",
     "favorite",
   ],
-  idea_images: ["idea_id", "name", "storage_path", "mime_type", "size"],
-  contacts: ["name", "company", "trade_id", "phone", "email", "address", "website", "notes"],
+  idea_images: ["project_id", "idea_id", "name", "storage_path", "mime_type", "size"],
+  contacts: [
+    "project_id",
+    "name",
+    "company",
+    "trade_id",
+    "phone",
+    "email",
+    "address",
+    "website",
+    "notes",
+  ],
   expenses: [
+    "project_id",
     "title",
     "vendor",
     "contact_id",
@@ -236,9 +253,10 @@ export const TABLES = {
     "notes",
     "budget_pot_id",
   ],
-  budget_pots: ["name", "deducts_from_budget", "notes"],
-  funding_entries: ["budget_pot_id", "amount", "received_date", "notes"],
+  budget_pots: ["project_id", "name", "deducts_from_budget", "notes"],
+  funding_entries: ["project_id", "budget_pot_id", "amount", "received_date", "notes"],
   credit_terms: [
+    "project_id",
     "budget_pot_id",
     "total_credit",
     "annual_rate",
@@ -260,7 +278,7 @@ export const TABLES = {
     "commitment_start",
     "assumed_full_draw_date",
   ],
-  credit_repayments: ["amount", "repayment_date", "notes"],
+  credit_repayments: ["project_id", "amount", "repayment_date", "notes"],
 } as const;
 
 export type TableName = keyof typeof TABLES;
@@ -287,7 +305,7 @@ export const NUMERIC_COLS = new Set([
 ]);
 export const BOOL_COLS = new Set(["paid", "favorite", "deducts_from_budget"]);
 
-type Base = { id: string; created_at?: string };
+type Base = { id: string; created_at?: string; project_id?: string | null };
 export type Project = Base & {
   name: string;
   address: string | null;

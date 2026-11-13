@@ -54,7 +54,7 @@ export const Route = createFileRoute("/_ws/")({
 });
 
 function Dashboard() {
-  const { ws } = useWorkspace();
+  const { ws, projectId } = useWorkspace();
   const qc = useQueryClient();
   const [dlg, setDlg] = useState<null | "task" | "cost" | "upload">(null);
   const s = useMemo(() => summarize(ws), [ws]);
@@ -122,7 +122,11 @@ function Dashboard() {
               size="sm"
               variant="secondary"
               onClick={async () => {
-                await loadDemoData();
+                if (!projectId) {
+                  toast.error(tr("offline.no_active_project"));
+                  return;
+                }
+                await loadDemoData({ data: { projectId } });
                 await qc.invalidateQueries({ queryKey: ["ws"] });
                 toast.success(tr("index.sample_data_loaded"));
               }}

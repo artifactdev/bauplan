@@ -150,6 +150,30 @@ const MIGRATIONS: readonly Migration[] = [
       db.exec(USER_ANALYSIS_VIEWS_DDL);
     },
   },
+  {
+    version: 12,
+    name: "multiple-project-workspaces",
+    up(db) {
+      const projectId = db
+        .prepare("SELECT id FROM projects ORDER BY created_at, id LIMIT 1")
+        .get()?.["id"];
+      const tables = TABLE_NAMES.filter((table) => table !== "projects");
+      for (const table of TABLE_NAMES) {
+        if (table === "projects") continue;
+        if (typeof projectId === "string")
+          db.prepare(`UPDATE ${table} SET project_id = ? WHERE project_id IS NULL`).run(projectId);
+        db.exec(`CREATE INDEX IF NOT EXISTS ${table}_project_id ON ${table}(project_id)`);
+      }
+      db.exec(`
+        CREATE TRIGGER IF NOT EXISTS first_project_assigns_workspace
+        AFTER INSERT ON projects
+        WHEN (SELECT COUNT(*) FROM projects) = 1
+        BEGIN
+          ${tables.map((table) => `UPDATE ${table} SET project_id = NEW.id WHERE project_id IS NULL;`).join("\n")}
+        END;
+      `);
+    },
+  },
 ];
 
 function toSqlValue(value: unknown): string | number | null {

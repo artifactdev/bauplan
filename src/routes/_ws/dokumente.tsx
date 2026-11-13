@@ -172,7 +172,7 @@ function DocsPage() {
       toast.success(t("reconciled"));
     },
   });
-  const { ws } = useWorkspace();
+  const { ws, projectId } = useWorkspace();
   const { update, remove } = useMutations();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
@@ -745,7 +745,8 @@ function DocsPage() {
               });
               toast.success(t("reconciled"));
             } else {
-              const result = await importPaperlessDocument({ data: { remoteId } });
+              if (!projectId) throw new Error(tr("offline.no_active_project"));
+              const result = await importPaperlessDocument({ data: { remoteId, projectId } });
               await client.invalidateQueries({ queryKey: ["ws"] });
               toast.success(t(result.duplicate ? "alreadyImported" : "imported"));
               if (!result.duplicate) {

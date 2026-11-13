@@ -6,10 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function CalendarSyncPanel({ email }: { email: string }) {
+export function CalendarSyncPanel({
+  email,
+  projectId,
+  primaryProjectId,
+  projectName,
+}: {
+  email: string;
+  projectId: string | null;
+  primaryProjectId: string | undefined;
+  projectName: string | undefined;
+}) {
   const { t } = useTranslation("caldav");
-  const url = typeof window === "undefined" ? "" : `${window.location.origin}/api/caldav/`;
+  const projectPath =
+    projectId && projectId !== primaryProjectId
+      ? `/api/caldav/projects/${encodeURIComponent(projectId)}/`
+      : "/api/caldav/";
+  const url =
+    typeof window === "undefined" || !projectId ? "" : `${window.location.origin}${projectPath}`;
   const copy = async () => {
+    if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
       toast.success(t("copied"));
@@ -21,6 +37,7 @@ export function CalendarSyncPanel({ email }: { email: string }) {
     <Panel title={t("title")}>
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">{t("description")}</p>
+        {projectName && <p className="text-sm">{t("activeProject", { name: projectName })}</p>}
         <dl className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <dt>
@@ -33,7 +50,12 @@ export function CalendarSyncPanel({ email }: { email: string }) {
                 value={url}
                 onFocus={(event) => event.currentTarget.select()}
               />
-              <Button variant="outline" aria-label={t("copy")} onClick={() => void copy()}>
+              <Button
+                variant="outline"
+                aria-label={t("copy")}
+                onClick={() => void copy()}
+                disabled={!url}
+              >
                 <Copy data-icon="inline-start" />
               </Button>
             </dd>

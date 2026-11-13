@@ -12,7 +12,7 @@ vi.mock("@tanstack/react-router", async (original) => ({
   useRouterState: () => "/aufgaben",
 }));
 vi.mock("@/hooks/use-workspace", () => ({
-  useWorkspace: () => ({ ws: { projects: [] }, isLoading: true }),
+  useWorkspace: () => ({ ws: { projects: [] }, projects: [], projectId: null, isLoading: true }),
   useMutations: () => ({}),
   useOfflineSync: () => ({ ...state, conflicts: [], syncing: false, sync: vi.fn() }),
 }));
@@ -24,6 +24,7 @@ vi.mock("@/components/app/AppearanceProvider", () => ({
   AccountAppearance: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@/components/app/ProjectDialog", () => ({ ProjectDialog: () => null }));
+vi.mock("@/components/app/ProjectCreateDialog", () => ({ ProjectCreateDialog: () => null }));
 vi.mock("@/components/app/SharedImport", () => ({ SharedImport: () => null }));
 
 beforeEach(async () => {

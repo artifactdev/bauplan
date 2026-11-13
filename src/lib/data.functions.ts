@@ -21,6 +21,7 @@ import {
   paperlessSettingsSchema,
   paperlessSearchSchema,
   paperlessRemoteSchema,
+  paperlessImportSchema,
   paperlessExportSchema,
   paperlessDocumentIdsSchema,
   paperlessReconcileSchema,
@@ -137,9 +138,14 @@ export const previewPaperless = createServerFn({ method: "POST" })
 
 export const importPaperlessDocument = createServerFn({ method: "POST" })
   .middleware([dataContext])
-  .inputValidator((data: unknown) => paperlessRemoteSchema.parse(data))
+  .inputValidator((data: unknown) => paperlessImportSchema.parse(data))
   .handler(async ({ context, data }) =>
-    (await import("@/server/paperless")).importDocument(context.user.id, data.remoteId),
+    (await import("@/server/paperless")).importDocument(
+      context.user.id,
+      data.remoteId,
+      undefined,
+      data.projectId,
+    ),
   );
 
 export const getPaperlessDocuments = createServerFn()
@@ -420,9 +426,14 @@ export const importSetupBackup = createServerFn({ method: "POST" })
     return { users };
   });
 
+export const getProjects = createServerFn()
+  .middleware([dataContext])
+  .handler(async ({ context }) => context.repo.getProjects());
+
 export const getWorkspace = createServerFn()
   .middleware([dataContext])
-  .handler(async ({ context }) => context.repo.getAll());
+  .inputValidator((d: unknown) => z.object({ projectId: z.string().min(1) }).parse(d))
+  .handler(async ({ context, data }) => context.repo.getAll(data.projectId));
 
 export const getWorkspaceSyncGeneration = createServerFn()
   .middleware([dataContext])
@@ -454,14 +465,26 @@ async function validateTaskAssignee(value: unknown) {
 export const createRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((d: unknown) =>
-    z.object({ table: tableSchema, row: z.record(z.unknown()) }).parse(d),
+    z
+      .object({
+        table: tableSchema,
+        row: z.record(z.unknown()),
+        projectId: z.string().min(1).optional(),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
+    if (data.table !== "projects" && !data.projectId)
+      throw new Error("projects.selection_required");
     if (data.table === "tasks") await validateTaskAssignee(data.row["assignee_id"]);
     const row = await context.repo.insert(
       data.table,
-      cleanRow(data.table, data.row),
+      cleanRow(data.table, {
+        ...data.row,
+        ...(data.table === "projects" ? {} : { project_id: data.projectId }),
+      }),
       context.user.id,
+      data.projectId,
     );
     if (data.table === "tasks") (await import("@/server/push")).wakePush();
     return { id: String(row["id"]) };
@@ -470,9 +493,18 @@ export const createRow = createServerFn({ method: "POST" })
 export const updateRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((d: unknown) =>
-    z.object({ table: tableSchema, id: z.string(), patch: z.record(z.unknown()) }).parse(d),
+    z
+      .object({
+        table: tableSchema,
+        id: z.string(),
+        patch: z.record(z.unknown()),
+        projectId: z.string().min(1).optional(),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
+    if (data.table !== "projects" && !data.projectId)
+      throw new Error("projects.selection_required");
     if (data.table === "tasks" && "assignee_id" in data.patch)
       await validateTaskAssignee(data.patch["assignee_id"]);
     await context.repo.update(
@@ -480,6 +512,7 @@ export const updateRow = createServerFn({ method: "POST" })
       data.id,
       cleanRow(data.table, data.patch),
       context.user.id,
+      data.projectId,
     );
     if (data.table === "tasks") (await import("@/server/push")).wakePush();
     return { ok: true };
@@ -487,10 +520,20 @@ export const updateRow = createServerFn({ method: "POST" })
 
 export const deleteRow = createServerFn({ method: "POST" })
   .middleware([dataContext])
-  .inputValidator((d: unknown) => z.object({ table: tableSchema, id: z.string() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        table: tableSchema,
+        id: z.string(),
+        projectId: z.string().min(1).optional(),
+      })
+      .parse(d),
+  )
   .handler(async ({ context, data }) => {
-    const owned = await ownedFiles(context.repo, data.table, data.id);
-    await context.repo.remove(data.table, data.id);
+    if (data.table !== "projects" && !data.projectId)
+      throw new Error("projects.selection_required");
+    const owned = await ownedFiles(context.repo, data.table, data.id, data.projectId);
+    await context.repo.remove(data.table, data.id, data.projectId);
     await removeOwnedFiles(context.repo, owned);
     return { ok: true };
   });
@@ -498,10 +541,15 @@ export const deleteRow = createServerFn({ method: "POST" })
 type OwnedFiles = { paths: string[]; images: string[] };
 
 /** Files (and idea images) that belong to a row and must go when it is deleted. */
-async function ownedFiles(repo: Repo, table: TableName, id: string): Promise<OwnedFiles> {
+async function ownedFiles(
+  repo: Repo,
+  table: TableName,
+  id: string,
+  projectId?: string,
+): Promise<OwnedFiles> {
   if (table !== "documents" && table !== "idea_images" && table !== "ideas")
     return { paths: [], images: [] };
-  const ws = await repo.getAll();
+  const ws = await repo.getAll(projectId);
   if (table === "documents") {
     const path = ws.documents.find((doc) => doc.id === id)?.storage_path;
     return { paths: path ? [path] : [], images: [] };
@@ -535,6 +583,7 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
               base: z.record(z.unknown()).nullable(),
               row: z.record(z.unknown()).nullable(),
               syncGeneration: z.string().nullable(),
+              projectId: z.string().min(1).nullable(),
             }),
           )
           .max(50),
@@ -549,6 +598,8 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
       );
     const results = [];
     for (const change of data.changes) {
+      if (change.table !== "projects" && !change.projectId)
+        throw new Error("projects.selection_required");
       const { syncGeneration: _syncGeneration, ...syncChange } = change;
       if (
         change.table === "tasks" &&
@@ -559,9 +610,18 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
         await validateTaskAssignee(change.row["assignee_id"]);
       const owned =
         change.action === "delete"
-          ? await ownedFiles(context.repo, change.table, change.rowId)
+          ? await ownedFiles(
+              context.repo,
+              change.table,
+              change.rowId,
+              change.projectId ?? undefined,
+            )
           : { paths: [], images: [] };
-      const result = await context.repo.applySyncChange(context.user.id, syncChange);
+      const result = await context.repo.applySyncChange(
+        context.user.id,
+        syncChange,
+        change.projectId ?? undefined,
+      );
       if (result.applied) await removeOwnedFiles(context.repo, owned);
       results.push({ id: change.id, ...result });
     }
@@ -578,7 +638,9 @@ export const uploadDocument = createServerFn({ method: "POST" })
     if (file.size > MAX_UPLOAD_BYTES) throw new Error(`Datei größer als ${MAX_UPLOAD_MB} MB`);
     const meta = JSON.parse(String(d.get("meta") ?? "{}")) as Record<string, unknown>;
     const syncGeneration = d.has("syncGeneration") ? String(d.get("syncGeneration")) : undefined;
-    return { file, meta, syncGeneration };
+    const projectId = String(d.get("projectId") ?? "");
+    if (!projectId) throw new Error("projects.selection_required");
+    return { file, meta, syncGeneration, projectId };
   })
   .handler(async ({ context, data }) => {
     if (
@@ -591,7 +653,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
     const requestedId = typeof data.meta["id"] === "string" ? data.meta["id"] : undefined;
     const ideaId = typeof data.meta["idea_id"] === "string" ? data.meta["idea_id"] : undefined;
     const table = ideaId ? "idea_images" : "documents";
-    const ws = await context.repo.getAll();
+    const ws = await context.repo.getAll(data.projectId);
     if (requestedId) {
       const existing = ws[table].find((row) => row.id === requestedId);
       if (existing) {
@@ -627,11 +689,17 @@ export const uploadDocument = createServerFn({ method: "POST" })
       typeof data.meta["created_at"] === "string" ? data.meta["created_at"] : undefined;
     let row: Record<string, unknown>;
     try {
-      row = await context.repo.insert(table, {
-        ...documentRow,
-        ...(requestedId ? { id: requestedId } : {}),
-        ...(createdAt ? { created_at: createdAt } : {}),
-      });
+      row = await context.repo.insert(
+        table,
+        {
+          ...documentRow,
+          project_id: data.projectId,
+          ...(requestedId ? { id: requestedId } : {}),
+          ...(createdAt ? { created_at: createdAt } : {}),
+        },
+        undefined,
+        data.projectId,
+      );
     } catch (error) {
       await context.repo.deleteFile(storage_path);
       throw error;
@@ -650,20 +718,27 @@ export const getFileUrl = createServerFn({ method: "POST" })
 
 export const loadDemoData = createServerFn({ method: "POST" })
   .middleware([dataContext])
-  .handler(async ({ context }) => {
-    const ws = await context.repo.getAll();
+  .inputValidator((d: unknown) => z.object({ projectId: z.string().min(1) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const ws = await context.repo.getAll(data.projectId);
     if (ws.trades.length || ws.cost_items.length) return { ok: false };
     const seed = buildSeed();
     for (const t of TABLE_NAMES) {
-      for (const row of seed[t]) await context.repo.insert(t, { id: row.id, ...cleanRow(t, row) });
+      if (t === "projects") continue;
+      for (const row of seed[t])
+        await context.repo.insert(
+          t,
+          { id: row.id, ...cleanRow(t, { ...row, project_id: data.projectId }) },
+          undefined,
+          data.projectId,
+        );
     }
     if (ws.projects[0]) {
       await context.repo.update(
         "projects",
-        ws.projects[0].id,
+        data.projectId,
         cleanRow("projects", seed.projects[0]!),
       );
-      await context.repo.remove("projects", seed.projects[0]!.id);
     }
     return { ok: true };
   });

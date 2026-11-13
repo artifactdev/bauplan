@@ -31,6 +31,9 @@ export const paperlessSearchSchema = z.object({
   dateTo: z.string().date().optional(),
 });
 export const paperlessRemoteSchema = z.object({ remoteId });
+export const paperlessImportSchema = paperlessRemoteSchema.extend({
+  projectId: z.string().min(1),
+});
 export const paperlessExportMetadataSchema = z.object({
   documentId: z.string().min(1).max(200),
   title: z.string().trim().min(1).max(250),

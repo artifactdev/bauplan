@@ -26,6 +26,7 @@ import { PasswordDialog } from "@/components/app/PasswordDialog";
 import { CalendarSyncPanel } from "@/components/app/CalendarSyncPanel";
 import { PushSettingsPanel } from "@/components/app/PushSettingsPanel";
 import { PaperlessSettings } from "@/components/app/PaperlessSettings";
+import { ProjectDialog } from "@/components/app/ProjectDialog";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/einstellungen")({
@@ -47,6 +48,11 @@ function SettingsPage() {
   const { backend, auth } = Route.useRouteContext();
   const isAdmin = auth.user?.role === "admin";
   const [tab, setTab] = useState("personal");
+  const workspace = useWorkspace();
+  const activeProject =
+    workspace.ws.projects.find((project) => project.id === workspace.projectId) ??
+    workspace.ws.projects[0];
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   return (
     <>
       <PageHeader title={tr("shared.settings")} subtitle={t("settingsHint")} />
@@ -82,21 +88,35 @@ function SettingsPage() {
       </TabsContent>
       <TabsContent value="calendar" forceMount hidden={tab !== "calendar"}>
         <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
-          <CalendarSyncPanel email={auth.user!.email} />
+          <CalendarSyncPanel
+            email={auth.user!.email}
+            projectId={workspace.projectId}
+            primaryProjectId={workspace.projects[0]?.id}
+            projectName={workspace.ws.projects[0]?.name}
+          />
         </div>
       </TabsContent>
       <TabsContent value="project" forceMount hidden={tab !== "project"}>
         <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
-          <Panel title={tr("settings.data_storage")}>
-            <div className="flex gap-3 rounded-lg border border-primary bg-accent/40 p-3">
-              <Database className="h-5 w-5 shrink-0 text-primary" />
-              <div className="flex-1">
-                <div className="font-medium">{tr("settings.sqlite_self_hosted")}</div>
-                <p className="text-sm text-muted-foreground">{tr("settings.data_stored_locally_sqlite")}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{tr("settings.database")} <code>{backend.dataDir}</code></p>
-                <p className="text-xs text-muted-foreground">{tr("settings.documents")} <code>{backend.uploadsDir}</code></p>
-              </div>
-            </div>
+          <Panel title={t("projectSettings")}>
+            {activeProject ? (
+              <>
+                <p className="font-medium">{activeProject.name}</p>
+                {activeProject.address && (
+                  <p className="mb-3 text-sm text-muted-foreground">{activeProject.address}</p>
+                )}
+                <Button variant="outline" onClick={() => setProjectDialogOpen(true)}>
+                  {t("editProject")}
+                </Button>
+                <ProjectDialog
+                  project={activeProject}
+                  open={projectDialogOpen}
+                  onOpenChange={setProjectDialogOpen}
+                />
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("noActiveProject")}</p>
+            )}
           </Panel>
           <PaymentSourcesPanel />
         </div>
@@ -111,6 +131,7 @@ function SettingsPage() {
       {isAdmin && (
         <TabsContent value="admin" forceMount hidden={tab !== "admin"}>
           <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <StoragePanel backend={backend} />
             <BackupPanel />
             <PaperlessSettings admin />
             <OidcPanel />
@@ -120,6 +141,26 @@ function SettingsPage() {
       )}
       </Tabs>
     </>
+  );
+}
+
+function StoragePanel({ backend }: { backend: { dataDir: string; uploadsDir: string } }) {
+  return (
+    <Panel title={tr("settings.data_storage")}>
+      <div className="flex gap-3 rounded-lg border border-primary bg-accent/40 p-3">
+        <Database className="h-5 w-5 shrink-0 text-primary" />
+        <div className="flex-1">
+          <div className="font-medium">{tr("settings.sqlite_self_hosted")}</div>
+          <p className="text-sm text-muted-foreground">{tr("settings.data_stored_locally_sqlite")}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {tr("settings.database")} <code>{backend.dataDir}</code>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {tr("settings.documents")} <code>{backend.uploadsDir}</code>
+          </p>
+        </div>
+      </div>
+    </Panel>
   );
 }
 

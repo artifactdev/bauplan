@@ -34,7 +34,7 @@ export function ScanBar({
   onBusyChange?: (uploading: boolean) => void;
   initialFile?: File | undefined;
 }) {
-  const { ws } = useWorkspace();
+  const { ws, projectId } = useWorkspace();
   const { upload } = useMutations();
   const cam = useRef<HTMLInputElement>(null);
   const pick = useRef<HTMLInputElement>(null);
@@ -71,8 +71,9 @@ export function ScanBar({
     }
     try {
       const canRead = file.type === "application/pdf" || file.type.startsWith("image/");
+      if (canRead && !projectId) throw new Error(tr("offline.no_active_project"));
       const r = canRead
-        ? await analyzeDocument({ data: { documentId: id } })
+        ? await analyzeDocument({ data: { documentId: id, projectId } })
         : { result: null, error: "unsupported", warnings: [] };
       logOcrResult(file.name, r);
       const vals = mapExtraction(target, r.result, file.name, ws.trades);

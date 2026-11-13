@@ -1,6 +1,6 @@
 # Features
 
-Visible areas appear in the left navigation in the account's chosen order. On mobile, the bottom bar offers the first four visible areas and a **More** menu for the remaining areas and Settings. The shared top bar provides account controls and shows connection status only when offline or changes await synchronization. Appearance is configured only in personal Settings. All approved users work on the **same project**.
+Visible areas appear in the left navigation in the account's chosen order. On mobile, the bottom bar offers the first four visible areas and a **More** menu for the remaining areas and Settings. The shared top bar provides account controls, a project switcher, and connection status only when offline or changes await synchronization. Appearance is configured only in personal Settings. All approved users can access and collaborate on every project; each project's workspace data is kept separate.
 
 ## Installable app & offline use
 
@@ -130,8 +130,9 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   [yassir-jeraidi/full-calendar](https://github.com/yassir-jeraidi/full-calendar) (MIT);
   Bauplan implements its own presentation adapter using existing components and data.
 - Two-way CalDAV synchronization with Apple Calendar using the existing
-  Bauplan email/password. Single appointments are editable; tasks and quote deadlines appear in a
-  separate read-only calendar. Recurring series are not supported. Previously generated iCal
+  Bauplan email/password and a separate calendar address for each project. The existing project's
+  `/api/caldav/` address remains unchanged. Single appointments are editable; tasks and quote
+  deadlines appear in a separate read-only calendar. Recurring series are not supported. Previously generated iCal
   subscription links remain valid, but the legacy link-management panel is no longer shown
   in Settings: [calendar integration](calendar-feed.md).
 
@@ -180,7 +181,7 @@ Every chart has an equivalent **table** (toggle) and can be exported as **CSV** 
 
 - **Password:** the Account card opens a password-change modal. Existing local accounts confirm their current password; OIDC-only accounts can set a local password. Cancelling clears the fields, successful changes close the modal, and errors keep the form open.
 - **Navigation:** approved users can reorder or hide page links under Personal preferences, then save to their account. Drag the handles with a mouse or touch, use Space/arrow keys/Space on a focused handle (Escape cancels), or use the up/down buttons. Only handles initiate dragging so checkboxes and normal page scrolling remain usable. The sidebar follows this order; mobile shows the first four visible pages and puts the rest under More. Settings always stays available, even if all page links are hidden. Restore default layout resets the draft; Save applies it. Hidden links do not restrict page access. Preferences synchronize on reload, sign-in, and window focus.
-- Accessible tabs separate personal preferences (appearance, account, language), calendar synchronization (CalDAV setup), project configuration (storage and payment sources), admin-only user management, and admin-only administration (backups, OIDC, OCR), in that order. Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
+- Accessible tabs separate personal preferences (appearance, account, language), project-specific calendar synchronization (CalDAV setup), active-project configuration (project details and payment sources), admin-only user management, and admin-only administration (storage, backups, OIDC, OCR), in that order. Arrow keys switch tabs, the tab bar wraps on small screens, and switching tabs preserves unsaved form entries until leaving the page.
 - Account and sign-out; storage mode display.
 - **Language:** German or English, chosen during setup or in Settings; saved per browser.
 - **Appearance:** Current, Blue, Green, or Violet palette, independently combined with Light, Dark, or System mode (default: Current + System). Personal Settings has palette previews and mode controls; there is no header mode switch. Changes save automatically per approved user account and synchronize on sign-in, reload, and window focus. System follows each device's own OS preference. The browser remembers the last appearance for the sign-in/setup screens; the signed-in account always takes precedence. Failed saves restore the previous choice and display an error.

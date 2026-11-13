@@ -15,6 +15,9 @@ import {
   Download,
   Info,
   CircleArrowUp,
+  ChevronDown,
+  Check,
+  Plus,
 } from "lucide-react";
 import { getBackendInfo, getWorkspaceSyncGeneration } from "@/lib/data.functions";
 import { getAuthState, logoutLocal } from "@/lib/auth.functions";
@@ -38,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { getUpdateReady, subscribeUpdateReady } from "@/lib/sw-update";
 import { AccountAppearance } from "@/components/app/AppearanceProvider";
 import { ProjectDialog } from "@/components/app/ProjectDialog";
+import { ProjectCreateDialog } from "@/components/app/ProjectCreateDialog";
 import { SharedImport } from "@/components/app/SharedImport";
 import { MobileNav } from "@/components/app/MobileNav";
 import { useNavItems } from "@/hooks/use-navigation";
@@ -45,8 +49,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { setActiveProjectId } from "@/hooks/use-project-selection";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -90,7 +96,9 @@ export const Route = createFileRoute("/_ws")({
     return { backend: info, auth };
   },
   component: Layout,
-  pendingComponent: () => <div className="p-10 text-sm text-muted-foreground">{tr("shared.loading")}</div>,
+  pendingComponent: () => (
+    <div className="p-10 text-sm text-muted-foreground">{tr("shared.loading")}</div>
+  ),
 });
 
 export async function signOut(userId = getOfflineAccount()?.id) {
@@ -99,12 +107,7 @@ export async function signOut(userId = getOfflineAccount()?.id) {
       ? await Promise.all([listChanges(userId), listUploads(userId)])
       : [[], []];
     if (changes.length + uploads.length > 0) {
-      if (
-        !window.confirm(
-          tr("route.unsynchronized_changes_discard_sign"),
-        )
-      )
-        return;
+      if (!window.confirm(tr("route.unsynchronized_changes_discard_sign"))) return;
     }
     if (navigator.onLine) {
       await logoutLocal();
@@ -116,11 +119,7 @@ export async function signOut(userId = getOfflineAccount()?.id) {
     clearOfflineAccount();
     window.location.href = "/auth";
   } catch (error) {
-    toast.error(
-      error instanceof Error
-        ? error.message
-        : tr("shared.not_complete_sign_out"),
-    );
+    toast.error(error instanceof Error ? error.message : tr("shared.not_complete_sign_out"));
   }
 }
 
@@ -156,12 +155,13 @@ function Shell() {
   const { t } = useTranslation("shell");
   const { auth } = Route.useRouteContext();
   const workspace = useWorkspace();
-  const { ws, isLoading } = workspace;
+  const { ws, isLoading, projects, projectId } = workspace;
   const sync = useOfflineSync(auth.user!.id);
   const updateReady = useSyncExternalStore(subscribeUpdateReady, getUpdateReady, () => false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-  const project = ws.projects[0];
+  const project = ws.projects.find((item) => item.id === projectId) ?? ws.projects[0];
   const [projectOpen, setProjectOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const { navigation, items } = useNavItems(auth.user!.id);
 
   useEffect(() => {
@@ -185,11 +185,7 @@ function Shell() {
       await installPrompt.userChoice;
       setInstallPrompt(null);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : tr("route.not_start_installation"),
-      );
+      toast.error(error instanceof Error ? error.message : tr("route.not_start_installation"));
     }
   };
 
@@ -206,7 +202,11 @@ function Shell() {
           to="/"
           className="mb-7 flex items-center gap-3 rounded-lg px-3 font-display text-lg font-semibold text-sidebar-accent-foreground"
         >
-          <img src="/app-icon.svg" alt="" className="h-9 w-9 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
+          <img
+            src="/app-icon.svg"
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15"
+          />
           {tr("shared.bauplan")}
         </Link>
         <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
@@ -245,21 +245,62 @@ function Shell() {
             <Pencil className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           </button>
         )}
-        <p className={cn("shrink-0 px-3 pt-3 text-[11px] text-muted-foreground/70", !project && "mt-auto")}>
+        <p
+          className={cn(
+            "shrink-0 px-3 pt-3 text-[11px] text-muted-foreground/70",
+            !project && "mt-auto",
+          )}
+        >
           {t("appVersion", { version: appVersion })}
         </p>
       </aside>
 
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b bg-sidebar/60 px-4 backdrop-blur-xl md:bg-sidebar md:px-8 md:backdrop-blur-none">
-          <div className="min-w-0">
-            <Link to="/" className="flex items-center gap-2 font-semibold md:hidden">
-              <img src="/app-icon.svg" alt="" className="h-6 w-6 shrink-0 rounded-[17%] dark:ring-1 dark:ring-white/15" />
-              {tr("shared.bauplan")}
+          <div className="flex min-w-0 items-center gap-2">
+            <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold md:hidden">
+              <img
+                src="/app-icon.svg"
+                alt=""
+                className="h-6 w-6 rounded-[17%] dark:ring-1 dark:ring-white/15"
+              />
+              <span className="sr-only">{tr("shared.bauplan")}</span>
             </Link>
-            <span className="hidden truncate text-sm text-muted-foreground md:block">
-              {project?.name ?? t("workspace")}
-            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="min-w-0 max-w-[min(55vw,22rem)] justify-start gap-1 px-2 text-sm"
+                  aria-label={t("switchProject")}
+                >
+                  <span className="truncate">{project?.name ?? t("workspace")}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                {projects.map((item) => (
+                  <DropdownMenuItem
+                    key={item.id}
+                    className="min-h-11"
+                    onSelect={() => setActiveProjectId(auth.user!.id, item.id)}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                    {item.id === projectId && <Check className="h-4 w-4" aria-hidden="true" />}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="min-h-11" onSelect={() => setCreateProjectOpen(true)}>
+                  <Plus />
+                  {t("newProject")}
+                </DropdownMenuItem>
+                {project && (
+                  <DropdownMenuItem className="min-h-11" onSelect={() => setProjectOpen(true)}>
+                    <Pencil />
+                    {t("editProject")}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {updateReady && (
@@ -404,6 +445,7 @@ function Shell() {
       {project && (
         <ProjectDialog project={project} open={projectOpen} onOpenChange={setProjectOpen} />
       )}
+      <ProjectCreateDialog open={createProjectOpen} onOpenChange={setCreateProjectOpen} />
     </div>
   );
 }
@@ -415,9 +457,7 @@ function ProjectSetup() {
   return (
     <div className="mx-auto mt-10 max-w-md rounded-xl border bg-card p-6 shadow-card">
       <h1 className="text-2xl font-semibold">{tr("route.create_project")}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {tr("route.just_two_details_add")}
-      </p>
+      <p className="mt-1 text-sm text-muted-foreground">{tr("route.just_two_details_add")}</p>
       <form
         className="mt-6 grid gap-4"
         onSubmit={(e) => {

@@ -8,6 +8,7 @@ import { AssignDialog } from "./AssignDialog";
 const mutations = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn() }));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
+    projectId: "project-test",
     ws: {
       trades: [],
       cost_items: [],

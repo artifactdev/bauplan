@@ -13,8 +13,6 @@ import {
 } from "./caldav-calendar";
 
 const BASE = "/api/caldav/";
-const HOME = `${BASE}calendars/`;
-const PRINCIPAL = `${BASE}principal/`;
 const MAX_BODY = 512 * 1024;
 const DAV = "1, 3, calendar-access";
 const ALLOW = "OPTIONS, PROPFIND, REPORT, GET, HEAD, PUT, DELETE";
@@ -89,12 +87,12 @@ function parseXml(text: string): Node {
   return record(parser.parse(text));
 }
 
-function resources(ws: Workspace, collection: string): Resource[] {
+function resources(ws: Workspace, collection: string, home: string): Resource[] {
   if (collection === "events")
     return ws.events.map((event) => {
       const data = calendarObject(event);
       return {
-        href: `${HOME}events/${encodeURIComponent(event.id)}.ics`,
+        href: `${home}events/${encodeURIComponent(event.id)}.ics`,
         data,
         etag: contentEtag(data),
       };
@@ -107,7 +105,7 @@ function resources(ws: Workspace, collection: string): Resource[] {
     if (!uid) throw new Error(`Missing UID for derived calendar entry ${index}.`);
     const data = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Bauplan//CalDAV//EN\r\n${event}\r\nEND:VCALENDAR\r\n`;
     return {
-      href: `${HOME}deadlines/${encodeURIComponent(uid)}.ics`,
+      href: `${home}deadlines/${encodeURIComponent(uid)}.ics`,
       data,
       etag: contentEtag(data),
     };
@@ -169,20 +167,27 @@ function resourceResponse(resource: Resource, requested: Node | null) {
 const missingResponse = (path: string) =>
   `<d:response>${href(path)}<d:status>HTTP/1.1 404 Not Found</d:status></d:response>`;
 
-function collectionProperties(path: string, ws: Workspace, email: string) {
-  const calendar = path === `${HOME}events/` || path === `${HOME}deadlines/`;
-  const readonly = path === `${HOME}deadlines/`;
-  const items = calendar ? resources(ws, readonly ? "deadlines" : "events") : [];
+function collectionProperties(
+  path: string,
+  ws: Workspace,
+  email: string,
+  home: string,
+  principal: string,
+  projectName: string,
+) {
+  const calendar = path === `${home}events/` || path === `${home}deadlines/`;
+  const readonly = path === `${home}deadlines/`;
+  const items = calendar ? resources(ws, readonly ? "deadlines" : "events", home) : [];
   const props: Record<string, string> = {
     displayname: xml(
-      calendar ? (readonly ? labels.deadlines : ws.projects[0]?.name || "Bauplan") : "Bauplan",
+      calendar ? (readonly ? labels.deadlines : projectName || "Bauplan") : "Bauplan",
     ),
-    resourcetype: `<d:collection/>${calendar ? "<c:calendar/>" : path === PRINCIPAL ? "<d:principal/>" : ""}`,
-    "current-user-principal": href(PRINCIPAL),
-    "principal-URL": href(PRINCIPAL),
-    "calendar-home-set": href(HOME),
+    resourcetype: `<d:collection/>${calendar ? "<c:calendar/>" : path === principal ? "<d:principal/>" : ""}`,
+    "current-user-principal": href(principal),
+    "principal-URL": href(principal),
+    "calendar-home-set": href(home),
     "calendar-user-address-set": href(`mailto:${email}`),
-    owner: href(PRINCIPAL),
+    owner: href(principal),
     "current-user-privilege-set": `<d:privilege><d:read/></d:privilege>${readonly || !calendar ? "" : "<d:privilege><d:write/></d:privilege>"}<d:privilege><d:read-current-user-privilege-set/></d:privilege>`,
   };
   if (calendar)
@@ -263,10 +268,31 @@ async function dispatch(request: Request) {
       "www-authenticate": 'Basic realm="Bauplan CalDAV", charset="UTF-8"',
     });
   calendarTimezone();
+  const projectPath = /^\/api\/caldav\/projects\/([^/]+)(?:\/|$)/.exec(url.pathname);
+  let explicitProjectId: string | undefined;
+  if (projectPath) {
+    try {
+      explicitProjectId = decodeURIComponent(projectPath[1]!);
+    } catch {
+      throw new DavError(404, "Not found.");
+    }
+    if (!/^[\w.-]{1,160}$/.test(explicitProjectId)) throw new DavError(404, "Not found.");
+  }
+  const projects = await context.repo.getProjects();
+  if (explicitProjectId && !projects.some((project) => project.id === explicitProjectId))
+    throw new DavError(404, "Not found.");
+  const projectId = explicitProjectId ?? projects[0]?.id;
+  const base = explicitProjectId
+    ? `${BASE}projects/${encodeURIComponent(explicitProjectId)}/`
+    : BASE;
+  const home = `${base}calendars/`;
+  const principal = `${base}principal/`;
+  const projectName = projects.find((project) => project.id === projectId)?.name ?? "Bauplan";
   const path =
     url.pathname.endsWith("/") || url.pathname.endsWith(".ics") ? url.pathname : `${url.pathname}/`;
-  const collectionPaths = [BASE, PRINCIPAL, HOME, `${HOME}events/`, `${HOME}deadlines/`];
-  const objectMatch = /^\/api\/caldav\/calendars\/(events|deadlines)\/([^/]+)\.ics$/.exec(path);
+  const collectionPaths = [base, principal, home, `${home}events/`, `${home}deadlines/`];
+  const relativePath = path.startsWith(base) ? path.slice(base.length) : "";
+  const objectMatch = /^calendars\/(events|deadlines)\/([^/]+)\.ics$/.exec(relativePath);
   if (!collectionPaths.includes(path) && !objectMatch) throw new DavError(404, "Not found.");
   if (["PUT", "DELETE"].includes(request.method)) {
     if (!objectMatch || objectMatch[1] !== "events")
@@ -284,17 +310,22 @@ async function dispatch(request: Request) {
     )
       throw new DavError(415, "Use Content-Type: text/calendar.");
     const value = request.method === "PUT" ? parseCalendarEvent(await bodyText(request)) : null;
-    const result = await context.repo.writeCalendarEvent(id, value, {
-      match: request.headers.get("if-match"),
-      noneMatch: request.headers.get("if-none-match"),
-    });
+    const result = await context.repo.writeCalendarEvent(
+      id,
+      value,
+      {
+        match: request.headers.get("if-match"),
+        noneMatch: request.headers.get("if-none-match"),
+      },
+      projectId,
+    );
     // PUT may normalize data. Clients retrieve the canonical object and ETag in the next REPORT/GET.
     return response(null, result.created ? 201 : 204, result.created ? { location: path } : {});
   }
-  const ws = await context.repo.getAll();
+  const ws = await context.repo.getAll(projectId);
   if (request.method === "GET" || request.method === "HEAD") {
     if (!objectMatch) throw new DavError(405, "This collection is accessed using CalDAV.");
-    const object = resources(ws, objectMatch[1]!).find((item) => item.href === path);
+    const object = resources(ws, objectMatch[1]!, home).find((item) => item.href === path);
     if (!object) throw new DavError(404, "Not found.");
     if (request.headers.get("if-none-match") === object.etag)
       return response(null, 304, { etag: object.etag });
@@ -314,35 +345,35 @@ async function dispatch(request: Request) {
     const requested = "prop" in query ? record(query["prop"]) : null;
     const namesOnly = "propname" in query;
     if (objectMatch) {
-      const object = resources(ws, objectMatch[1]!).find((item) => item.href === path);
+      const object = resources(ws, objectMatch[1]!, home).find((item) => item.href === path);
       return multistatus([object ? resourceResponse(object, requested) : missingResponse(path)]);
     }
     const paths = [path];
     if (depth === "1") {
-      if (path === BASE) paths.push(PRINCIPAL, HOME);
-      if (path === HOME) paths.push(`${HOME}events/`, `${HOME}deadlines/`);
+      if (path === base) paths.push(principal, home);
+      if (path === home) paths.push(`${home}events/`, `${home}deadlines/`);
     }
     const responses = paths.map((child) =>
       propertyResponse(
         child,
-        collectionProperties(child, ws, context.user.email),
+        collectionProperties(child, ws, context.user.email, home, principal, projectName),
         requested,
         namesOnly,
       ),
     );
-    if (depth === "1" && path.startsWith(HOME) && path !== HOME)
+    if (depth === "1" && path.startsWith(home) && path !== home)
       responses.push(
-        ...resources(ws, path === `${HOME}events/` ? "events" : "deadlines").map((item) =>
+        ...resources(ws, path === `${home}events/` ? "events" : "deadlines", home).map((item) =>
           resourceResponse(item, requested),
         ),
       );
     return multistatus(responses);
   }
   if (request.method === "REPORT") {
-    if (path !== `${HOME}events/` && path !== `${HOME}deadlines/`)
+    if (path !== `${home}events/` && path !== `${home}deadlines/`)
       throw new DavError(403, "REPORT requires a calendar collection.", "supported-report");
     const document = parseXml(await bodyText(request));
-    const all = resources(ws, path === `${HOME}events/` ? "events" : "deadlines");
+    const all = resources(ws, path === `${home}events/` ? "events" : "deadlines", home);
     if ("calendar-multiget" in document) {
       const query = record(document["calendar-multiget"]);
       const requested = "prop" in query ? record(query["prop"]) : null;

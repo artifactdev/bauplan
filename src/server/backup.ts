@@ -98,51 +98,57 @@ function validateDatabase(value: unknown): BackupDatabase {
   for (const table of TABLE_NAMES) {
     const columns = ["id", "created_at", ...TABLES[table]];
     const required =
+      table !== "projects" ? columns.filter((column) => column !== "project_id") : columns;
+    const requiredWithLegacyColumns =
       table === "tasks"
-        ? columns.filter((column) => !["assignee_id", "checklist"].includes(column))
+        ? required.filter((column) => !["assignee_id", "checklist"].includes(column))
         : table === "offers"
-          ? columns.filter((column) => column !== "valid_until")
+          ? required.filter((column) => column !== "valid_until")
           : table === "expenses"
-            ? columns.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
+            ? required.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
             : table === "events"
-              ? columns.filter((column) => !["caldav_uid", "caldav_data"].includes(column))
+              ? required.filter((column) => !["caldav_uid", "caldav_data"].includes(column))
               : table === "credit_terms"
-                ? columns.filter((column) => column !== "assumed_full_draw_date")
-                : columns;
+                ? required.filter((column) => column !== "assumed_full_draw_date")
+                : required;
     const validatedRows = validateRows(
       OPTIONAL_TABLES.has(table) && !(table in tables) ? [] : tables[table],
       columns,
-      required,
+      requiredWithLegacyColumns,
     );
     const rows: Record<string, unknown>[] =
+      table !== "projects"
+        ? validatedRows.map((row) => ({ project_id: row["project_id"] ?? null, ...row }))
+        : validatedRows;
+    const normalizedRows: Record<string, unknown>[] =
       table === "tasks"
-        ? validatedRows.map((row) => ({
+        ? rows.map((row) => ({
             ...row,
             assignee_id: row["assignee_id"] ?? null,
             checklist: row["checklist"] ?? null,
           }))
         : table === "offers"
-          ? validatedRows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
+          ? rows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
           : table === "expenses"
-            ? validatedRows.map((row) => ({
+            ? rows.map((row) => ({
                 ...row,
                 offer_id: row["offer_id"] ?? null,
                 contact_id: row["contact_id"] ?? null,
                 due_date: row["due_date"] ?? null,
               }))
             : table === "credit_terms"
-              ? validatedRows.map((row) => ({
+              ? rows.map((row) => ({
                   ...row,
                   assumed_full_draw_date: row["assumed_full_draw_date"] ?? null,
                 }))
               : table === "events"
-                ? validatedRows.map((row) => ({
+                ? rows.map((row) => ({
                     ...row,
                     caldav_uid: row["caldav_uid"] ?? null,
                     caldav_data: row["caldav_data"] ?? null,
                   }))
-                : validatedRows;
-    for (const row of rows) {
+                : rows;
+    for (const row of normalizedRows) {
       if (table === "tasks") parseTaskChecklist(row["checklist"]);
       for (const [column, item] of Object.entries(row)) {
         if (item !== null && NUMERIC_COLS.has(column) && typeof item !== "number")
@@ -165,8 +171,20 @@ function validateDatabase(value: unknown): BackupDatabase {
           fail("Backup-Datensatz enthält ungültige Textwerte.");
       }
     }
-    normalizedTables[table] = rows;
+    normalizedTables[table] = normalizedRows;
   }
+  const defaultProject = normalizedTables.projects
+    .slice()
+    .sort(
+      (left, right) =>
+        String(left["created_at"]).localeCompare(String(right["created_at"])) ||
+        String(left["id"]).localeCompare(String(right["id"])),
+    )[0];
+  if (typeof defaultProject?.["id"] === "string")
+    for (const table of TABLE_NAMES) {
+      if (table === "projects") continue;
+      for (const row of normalizedTables[table]) row["project_id"] ??= defaultProject["id"];
+    }
   const expenseIds = new Set(normalizedTables.expenses.map((row) => row["id"]));
   for (const invoice of normalizedTables.invoices) {
     const expense = legacyInvoiceExpense(invoice);

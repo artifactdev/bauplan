@@ -16,6 +16,7 @@ export type OfflineChange = {
   rowId: string;
   base: Record<string, unknown> | null;
   row: Record<string, unknown> | null;
+  projectId?: string | null;
   syncGeneration?: string | undefined;
   conflict?: Record<string, unknown> | null;
 };
@@ -27,6 +28,7 @@ export type PendingUpload = {
   name: string;
   mime: string;
   meta: Record<string, unknown>;
+  projectId?: string;
   syncGeneration?: string | undefined;
 };
 
@@ -125,25 +127,80 @@ export function clearPendingOfflineLogout() {
   localStorage.removeItem(LOGOUT_KEY);
 }
 
-export async function saveSnapshot(userId: string, workspace: Workspace) {
-  await (await database()).put("snapshots", structuredClone(workspace), userId);
+export async function saveSnapshot(userId: string, workspace: Workspace, projectId?: string) {
+  await (
+    await database()
+  ).put(
+    "snapshots",
+    structuredClone(workspace),
+    projectId ? snapshotKey(userId, projectId) : userId,
+  );
 }
 
-export async function loadSnapshot(userId: string) {
-  const snapshot = await (await database()).get("snapshots", userId);
-  return snapshot ? { ...snapshot, funding_entries: snapshot.funding_entries ?? [] } : undefined;
+export async function loadSnapshot(userId: string, projectId?: string) {
+  const db = await database();
+  const projectSnapshot = projectId
+    ? await db.get("snapshots", snapshotKey(userId, projectId))
+    : undefined;
+  const legacySnapshot = projectSnapshot ? undefined : await db.get("snapshots", userId);
+  if (
+    projectId &&
+    legacySnapshot &&
+    (legacySnapshot.projects.length !== 1 ||
+      legacySnapshot.projects[0]?.id !== projectId ||
+      Object.entries(legacySnapshot).some(
+        ([table, rows]) =>
+          table !== "projects" &&
+          Array.isArray(rows) &&
+          rows.some((row) => row["project_id"] != null),
+      ))
+  )
+    return undefined;
+  const snapshot = projectSnapshot ?? legacySnapshot;
+  if (!snapshot) return undefined;
+  const workspace = { ...snapshot, funding_entries: snapshot.funding_entries ?? [] };
+  if (projectId) {
+    const records = workspace as unknown as Record<string, Record<string, unknown>[]>;
+    for (const table of Object.keys(workspace) as (keyof Workspace)[]) {
+      if (table === "projects") continue;
+      records[table] = (records[table] ?? []).map((row) =>
+        row["project_id"] == null ? { ...row, project_id: projectId } : row,
+      );
+    }
+  }
+  return workspace;
+}
+
+export async function loadProjectListSnapshot(userId: string) {
+  const db = await database();
+  const keys = await db.getAllKeys("snapshots");
+  const matchingKeys = keys.filter(
+    (key) => key === userId || (typeof key === "string" && key.startsWith(`${userId}::`)),
+  );
+  for (const key of matchingKeys) {
+    const snapshot = await db.get("snapshots", key);
+    if (snapshot?.projects) return snapshot.projects;
+  }
+  return undefined;
 }
 
 export async function saveChange(change: OfflineChange) {
   await (await database()).put("changes", change);
 }
 
-export async function persistChange(userId: string, workspace: Workspace, change: OfflineChange) {
+export async function persistChange(
+  userId: string,
+  workspace: Workspace,
+  change: OfflineChange,
+  projectId?: string,
+) {
   const db = await database();
   const tx = db.transaction(["snapshots", "changes", "metadata"], "readwrite");
   const sequence = Number((await tx.objectStore("metadata").get(userId)) ?? 0) + 1;
   await Promise.all([
-    tx.objectStore("snapshots").put(structuredClone(workspace), userId),
+    tx
+      .objectStore("snapshots")
+      .put(structuredClone(workspace), projectId ? snapshotKey(userId, projectId) : userId),
     tx.objectStore("changes").put({ ...change, sequence }),
     tx.objectStore("metadata").put(sequence, userId),
   ]);
@@ -154,7 +211,12 @@ export async function persistUpload(userId: string, workspace: Workspace, upload
   const db = await database();
   const tx = db.transaction(["snapshots", "uploads"], "readwrite");
   await Promise.all([
-    tx.objectStore("snapshots").put(structuredClone(workspace), userId),
+    tx
+      .objectStore("snapshots")
+      .put(
+        structuredClone(workspace),
+        upload.projectId ? snapshotKey(userId, upload.projectId) : userId,
+      ),
     tx.objectStore("uploads").put(upload),
   ]);
   await tx.done;
@@ -186,8 +248,17 @@ export async function clearAccountData(userId: string) {
   const db = await database();
   const tx = db.transaction(["snapshots", "changes", "uploads", "metadata"], "readwrite");
   await Promise.all([
-    tx.objectStore("snapshots").delete(userId),
     tx.objectStore("metadata").delete(userId),
+    tx
+      .objectStore("snapshots")
+      .openCursor()
+      .then(async (cursor) => {
+        while (cursor) {
+          if (cursor.key === userId || String(cursor.key).startsWith(`${userId}::`))
+            await cursor.delete();
+          cursor = await cursor.continue();
+        }
+      }),
     tx
       .objectStore("changes")
       .index("userId")
@@ -210,6 +281,10 @@ export async function clearAccountData(userId: string) {
       }),
   ]);
   await tx.done;
+}
+
+function snapshotKey(userId: string, projectId: string) {
+  return `${userId}::${projectId}`;
 }
 
 export function applyChange(workspace: Workspace, change: OfflineChange): Workspace {

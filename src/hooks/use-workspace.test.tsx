@@ -13,11 +13,14 @@ import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import i18n from "@/i18n";
+import { getAuthState } from "@/lib/auth.functions";
 import { EntityDialog } from "@/components/app/EntityDialog";
 import {
   createRow,
   deleteRow,
+  getProjects,
   getWorkspace,
+  syncWorkspaceChanges,
   updateRow,
   uploadDocument,
 } from "@/lib/data.functions";
@@ -28,10 +31,14 @@ import {
   listUploads,
   loadSnapshot,
   persistChange,
+  persistUpload,
+  saveSnapshot,
+  saveChange,
   setOfflineAccount,
 } from "@/lib/offline-store";
 import type { Workspace } from "@/lib/schema";
-import { useMutations, useWorkspace } from "./use-workspace";
+import { useMutations, useOfflineSync, useWorkspace } from "./use-workspace";
+import { getActiveProjectId, setActiveProjectId } from "./use-project-selection";
 
 vi.mock("@/lib/data.functions", () => ({
   createRow: vi.fn(),
@@ -39,6 +46,7 @@ vi.mock("@/lib/data.functions", () => ({
   deleteRow: vi.fn(),
   uploadDocument: vi.fn(),
   getWorkspace: vi.fn(),
+  getProjects: vi.fn(),
   syncWorkspaceChanges: vi.fn(),
 }));
 vi.mock("@/lib/auth.functions", () => ({ getAuthState: vi.fn() }));
@@ -51,7 +59,16 @@ vi.mock("@/lib/offline-store", async (original) => ({
 
 const userId = "offline-mutations-test";
 const empty: Workspace = {
-  projects: [],
+  projects: [
+    {
+      id: "project-test",
+      name: "Test project",
+      address: null,
+      total_budget: 0,
+      start_date: null,
+      end_date: null,
+    },
+  ],
   trades: [],
   cost_items: [],
   offers: [],
@@ -78,10 +95,12 @@ beforeEach(async () => {
   const store = await vi.importActual<typeof import("@/lib/offline-store")>("@/lib/offline-store");
   vi.mocked(persistChange).mockImplementation(store.persistChange);
   setOfflineAccount({ id: userId, email: "offline@example.test", name: "Test", role: "member" });
+  setActiveProjectId(userId, "project-test");
+  await saveSnapshot(userId, structuredClone(empty), "project-test");
   client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  client.setQueryData(["ws", userId], structuredClone(empty));
+  client.setQueryData(["ws", userId, "project-test"], structuredClone(empty));
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   onlineManager.setOnline(false);
 });
@@ -89,6 +108,7 @@ afterEach(async () => {
   cleanup();
   client.clear();
   await clearAccountData(userId);
+  setActiveProjectId(userId, null);
   clearOfflineAccount();
   onlineManager.setOnline(true);
   vi.restoreAllMocks();
@@ -104,7 +124,7 @@ describe("offline mutation completion", () => {
         row: { title: "Multi-day", start_date: "2026-11-02", due_date: "2026-11-04" },
       }));
     });
-    expect((await loadSnapshot(userId))?.tasks[0]).toMatchObject({
+    expect((await loadSnapshot(userId, "project-test"))?.tasks[0]).toMatchObject({
       start_date: "2026-11-02",
       due_date: "2026-11-04",
     });
@@ -119,7 +139,7 @@ describe("offline mutation completion", () => {
     });
     expect(await listChanges(userId)).toHaveLength(1);
     expect(toast.error).toHaveBeenCalledWith("The due date must not be before the start date.");
-    expect((await loadSnapshot(userId))?.tasks[0]?.due_date).toBe("2026-11-04");
+    expect((await loadSnapshot(userId, "project-test"))?.tasks[0]?.due_date).toBe("2026-11-04");
   });
   it("persists a new entry and completes even when React Query is offline", async () => {
     const { result } = renderHook(
@@ -135,7 +155,11 @@ describe("offline mutation completion", () => {
     expect(result.current.mutations.create.isPaused).toBe(false);
     await waitFor(() => expect(result.current.mutations.create.isSuccess).toBe(true));
     expect((await listChanges(userId))[0]?.row?.["title"]).toBe("Offline task");
-    expect((await loadSnapshot(userId))?.tasks[0]?.title).toBe("Offline task");
+    expect((await listChanges(userId))[0]).toMatchObject({
+      projectId: "project-test",
+      row: { project_id: "project-test" },
+    });
+    expect((await loadSnapshot(userId, "project-test"))?.tasks[0]?.title).toBe("Offline task");
     expect(result.current.workspace.ws.tasks[0]?.title).toBe("Offline task");
     expect(createRow).not.toHaveBeenCalled();
     expect(getWorkspace).not.toHaveBeenCalled();
@@ -215,5 +239,122 @@ describe("offline mutation completion", () => {
     expect(createRow).toHaveBeenCalledOnce();
     expect(toast.success).not.toHaveBeenCalled();
     expect(await listChanges(userId)).toHaveLength(0);
+  });
+
+  it("selects a newly created online project", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    onlineManager.setOnline(true);
+    vi.mocked(createRow).mockResolvedValue({ id: "project-new" });
+    const { result } = renderHook(useMutations, { wrapper: Wrapper });
+    await act(async () => {
+      await result.current.create.mutateAsync({
+        table: "projects",
+        row: { name: "New project", total_budget: 50000 },
+      });
+    });
+    expect(getActiveProjectId(userId)).toBe("project-new");
+    expect(createRow).toHaveBeenCalledWith({
+      data: { table: "projects", row: { name: "New project", total_budget: 50000 } },
+    });
+  });
+
+  it("creates an isolated project while offline and keeps it selected", async () => {
+    const existingWorkspace = {
+      ...structuredClone(empty),
+      tasks: [{ id: "existing-task", project_id: "project-test", title: "Existing task" }],
+    } as Workspace;
+    await saveSnapshot(userId, existingWorkspace, "project-test");
+    client.setQueryData(["ws", userId, "project-test"], existingWorkspace);
+    const { result } = renderHook(
+      () => ({ mutations: useMutations(), workspace: useWorkspace() }),
+      { wrapper: Wrapper },
+    );
+    let projectId = "";
+    await act(async () => {
+      ({ id: projectId } = await result.current.mutations.create.mutateAsync({
+        table: "projects",
+        row: { name: "Offline project", total_budget: 75000 },
+      }));
+    });
+    expect(getActiveProjectId(userId)).toBe(projectId);
+    expect(result.current.workspace.projects.map((project) => project.id)).toEqual([
+      "project-test",
+      projectId,
+    ]);
+    expect(result.current.workspace.ws.projects.map((project) => project.id)).toEqual([
+      projectId,
+      "project-test",
+    ]);
+    expect((await loadSnapshot(userId, projectId))?.tasks).toEqual([]);
+    expect((await listChanges(userId))[0]).toMatchObject({
+      table: "projects",
+      projectId: null,
+      row: { id: projectId, name: "Offline project" },
+    });
+  });
+
+  it("syncs a queued project before uploading files assigned to it", async () => {
+    setOfflineAccount({
+      id: userId,
+      email: "offline@example.test",
+      name: "Test",
+      role: "member",
+      syncGeneration: "generation",
+    });
+    await saveChange({
+      id: "project-change",
+      userId,
+      sequence: 1,
+      table: "projects",
+      action: "create",
+      rowId: "project-new",
+      projectId: null,
+      base: null,
+      row: { id: "project-new", name: "Offline project" },
+      syncGeneration: "generation",
+    });
+    await persistUpload(
+      userId,
+      { ...structuredClone(empty), projects: [] },
+      {
+        id: "upload-new",
+        userId,
+        file: new Blob(["pdf"], { type: "application/pdf" }),
+        name: "plan.pdf",
+        mime: "application/pdf",
+        meta: { project_id: "project-new" },
+        projectId: "project-new",
+        syncGeneration: "generation",
+      },
+    );
+    const order: string[] = [];
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    onlineManager.setOnline(true);
+    vi.mocked(getAuthState).mockResolvedValue({
+      needsSetup: false,
+      user: {
+        id: userId,
+        email: "offline@example.test",
+        name: "Test",
+        role: "member",
+      },
+      oidc: { enabled: false, label: "" },
+    });
+    vi.mocked(getProjects).mockResolvedValue(empty.projects);
+    vi.mocked(syncWorkspaceChanges).mockImplementation(async () => {
+      order.push("projects");
+      return [{ id: "project-change", applied: true, current: null }];
+    });
+    vi.mocked(uploadDocument).mockImplementation(async () => {
+      order.push("upload");
+      return { id: "upload-new", storage_path: "documents/plan.pdf", created_at: "2026-01-01" };
+    });
+
+    renderHook(() => useOfflineSync(userId), { wrapper: Wrapper });
+    await waitFor(async () => {
+      expect(await listChanges(userId)).toHaveLength(0);
+      expect(await listUploads(userId)).toHaveLength(0);
+    });
+    expect(order).toEqual(["projects", "upload"]);
   });
 });

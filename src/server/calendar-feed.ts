@@ -40,11 +40,14 @@ export async function feedData(): Promise<{
   name: string;
 }> {
   const { sqliteRepo } = await import("@/server/repo");
-  const ws = await sqliteRepo().getAll();
+  const repo = sqliteRepo();
+  const projects = await repo.getProjects();
+  const projectId = projects[0]?.id;
+  const ws = await repo.getAll(projectId);
   return {
     events: ws.events,
     tasks: ws.tasks,
     offers: ws.offers,
-    name: ws.projects[0]?.name ?? "Bauplan",
+    name: projects.find((project) => project.id === projectId)?.name ?? "Bauplan",
   };
 }

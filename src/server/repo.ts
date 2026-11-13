@@ -9,6 +9,7 @@ import {
   type TableName,
   type Workspace,
   type CalEvent,
+  type Project,
 } from "@/lib/schema";
 import { TABLES } from "@/lib/schema";
 import type { PushJob, PushSubscriptionData } from "@/lib/push";
@@ -41,6 +42,7 @@ export interface Repo {
     id: string,
     value: Omit<CalEvent, "id"> | null,
     conditions: DavConditions,
+    projectId?: string,
   ): Promise<{ created: boolean; etag: string | null }>;
   readNavigation(userId: string): Promise<NavigationPreferences>;
   writeNavigation(userId: string, value: NavigationPreferences): Promise<void>;
@@ -48,7 +50,8 @@ export interface Repo {
   readAnalysisViews(userId: string): Promise<AnalysisViews>;
   writeAnalysisViews(userId: string, value: AnalysisViews): Promise<void>;
   deleteAnalysisViews(userId: string): Promise<void>;
-  getAll(): Promise<Workspace>;
+  getProjects(): Promise<Project[]>;
+  getAll(projectId?: string): Promise<Workspace>;
   getSyncGeneration(): Promise<string>;
   exportBackup(
     maxBytes?: number,
@@ -64,14 +67,16 @@ export interface Repo {
     table: TableName,
     row: Record<string, unknown>,
     actorId?: string,
+    projectId?: string,
   ): Promise<Record<string, unknown>>;
   update(
     table: TableName,
     id: string,
     patch: Record<string, unknown>,
     actorId?: string,
+    projectId?: string,
   ): Promise<void>;
-  remove(table: TableName, id: string): Promise<void>;
+  remove(table: TableName, id: string, projectId?: string): Promise<void>;
   /** Stores a file in a folder relative to the uploads root, e.g. documentFolder(category). */
   putFile(name: string, mime: string, bytes: Uint8Array, folder?: string): Promise<string>;
   fileUrl(path: string): Promise<string>;
@@ -85,6 +90,7 @@ export interface Repo {
   applySyncChange(
     userId: string,
     change: SyncChange,
+    projectId?: string,
   ): Promise<{
     applied: boolean;
     current: Record<string, string | number | boolean | null> | null;
@@ -119,6 +125,69 @@ export type SyncChange = {
   base: Record<string, unknown> | null;
   row: Record<string, unknown> | null;
 };
+
+const PROJECT_REFERENCES: Partial<Record<TableName, { column: string; table: TableName }[]>> = {
+  cost_items: [{ column: "trade_id", table: "trades" }],
+  offers: [
+    { column: "trade_id", table: "trades" },
+    { column: "cost_item_id", table: "cost_items" },
+    { column: "document_id", table: "documents" },
+    { column: "contact_id", table: "contacts" },
+  ],
+  invoices: [
+    { column: "trade_id", table: "trades" },
+    { column: "cost_item_id", table: "cost_items" },
+    { column: "document_id", table: "documents" },
+    { column: "contact_id", table: "contacts" },
+  ],
+  documents: [
+    { column: "trade_id", table: "trades" },
+    { column: "task_id", table: "tasks" },
+    { column: "cost_item_id", table: "cost_items" },
+  ],
+  tasks: [
+    { column: "trade_id", table: "trades" },
+    { column: "cost_item_id", table: "cost_items" },
+    { column: "document_id", table: "documents" },
+  ],
+  events: [{ column: "trade_id", table: "trades" }],
+  ideas: [
+    { column: "document_id", table: "documents" },
+    { column: "trade_id", table: "trades" },
+  ],
+  idea_images: [{ column: "idea_id", table: "ideas" }],
+  contacts: [{ column: "trade_id", table: "trades" }],
+  expenses: [
+    { column: "contact_id", table: "contacts" },
+    { column: "offer_id", table: "offers" },
+    { column: "trade_id", table: "trades" },
+    { column: "cost_item_id", table: "cost_items" },
+    { column: "document_id", table: "documents" },
+    { column: "budget_pot_id", table: "budget_pots" },
+  ],
+  funding_entries: [{ column: "budget_pot_id", table: "budget_pots" }],
+  credit_terms: [{ column: "budget_pot_id", table: "budget_pots" }],
+};
+
+function assertProjectReferences(
+  db: SqliteDb,
+  table: TableName,
+  row: Record<string, unknown>,
+  projectId: string,
+) {
+  const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(projectId);
+  if (!project) throw new Error("projects.not_found");
+  if (row["project_id"] != null && row["project_id"] !== projectId)
+    throw new Error("projects.row_not_in_project");
+  for (const reference of PROJECT_REFERENCES[table] ?? []) {
+    const id = row[reference.column];
+    if (id == null || id === "") continue;
+    if (typeof id !== "string") throw new Error("projects.related_record_not_in_project");
+    const related = db.prepare(`SELECT project_id FROM ${reference.table} WHERE id = ?`).get(id);
+    if (related?.["project_id"] !== projectId)
+      throw new Error("projects.related_record_not_in_project");
+  }
+}
 
 // Uses Node's built-in node:sqlite (Node >= 22.5). Computed dynamic imports
 // keep Node-only modules out of browser-side module graphs.
@@ -183,28 +252,41 @@ export function getSqliteDb(): Promise<SqliteDb> {
 export function sqliteRepo(): Repo {
   const db = () => (dbPromise ??= openDb());
   return {
-    async writeCalendarEvent(id, value, conditions) {
+    async writeCalendarEvent(id, value, conditions, projectId) {
       const d = await db();
       d.exec("BEGIN IMMEDIATE");
       try {
-        const raw = d.prepare("SELECT * FROM events WHERE id = ?").get(id);
+        if (projectId && !d.prepare("SELECT id FROM projects WHERE id = ?").get(projectId))
+          throw new DavError(404, "Project not found.");
+        const raw = projectId
+          ? d.prepare("SELECT * FROM events WHERE id = ? AND project_id = ?").get(id, projectId)
+          : d.prepare("SELECT * FROM events WHERE id = ?").get(id);
         const current = raw ? (normalize(raw) as CalEvent) : null;
         checkConditions(current ? calendarEtag(current) : null, conditions);
         if (!value) {
           if (!current) throw new DavError(404, "Appointment not found.");
-          d.prepare("DELETE FROM events WHERE id = ?").run(id);
+          if (projectId)
+            d.prepare("DELETE FROM events WHERE id = ? AND project_id = ?").run(id, projectId);
+          else d.prepare("DELETE FROM events WHERE id = ?").run(id);
           d.exec("COMMIT");
           return { created: false, etag: null };
         }
+        if (!current && projectId && d.prepare("SELECT id FROM events WHERE id = ?").get(id))
+          throw new DavError(409, "Resource name is already in use.", "no-uid-conflict");
         if (current && (current.caldav_uid || `${id}@bauplan`) !== value.caldav_uid)
           throw new DavError(409, "An appointment's UID cannot change.", "no-uid-conflict");
-        if (
-          d
-            .prepare(
-              "SELECT id FROM events WHERE COALESCE(caldav_uid, id || '@bauplan') = ? AND id != ?",
-            )
-            .get(value.caldav_uid, id)
-        )
+        const duplicateUid = projectId
+          ? d
+              .prepare(
+                "SELECT id FROM events WHERE project_id = ? AND COALESCE(caldav_uid, id || '@bauplan') = ? AND id != ?",
+              )
+              .get(projectId, value.caldav_uid, id)
+          : d
+              .prepare(
+                "SELECT id FROM events WHERE COALESCE(caldav_uid, id || '@bauplan') = ? AND id != ?",
+              )
+              .get(value.caldav_uid, id);
+        if (duplicateUid)
           throw new DavError(
             403,
             "An appointment with this UID already exists.",
@@ -216,7 +298,15 @@ export function sqliteRepo(): Repo {
           kind: current?.kind || "termin",
           trade_id: current?.trade_id || null,
           created_at: current?.created_at || new Date().toISOString(),
+          project_id:
+            projectId ??
+            current?.project_id ??
+            (d.prepare("SELECT id FROM projects ORDER BY created_at, id LIMIT 1").get()?.["id"] as
+              string | undefined) ??
+            null,
         };
+        if (typeof next.project_id === "string")
+          assertProjectReferences(d, "events", next, next.project_id);
         const keys = ["id", "created_at", ...TABLES.events];
         const record: Record<string, unknown> = next;
         d.prepare(
@@ -291,7 +381,7 @@ export function sqliteRepo(): Repo {
     async deleteAppearance(userId) {
       (await db()).prepare(`DELETE FROM ${USER_APPEARANCE_TABLE} WHERE user_id = ?`).run(userId);
     },
-    async applySyncChange(userId, change) {
+    async applySyncChange(userId, change, projectId) {
       if (change.table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       d.exec("BEGIN IMMEDIATE");
@@ -303,14 +393,33 @@ export function sqliteRepo(): Repo {
           d.exec("COMMIT");
           return { applied: true, current: null };
         }
-        const raw = d.prepare(`SELECT * FROM ${change.table} WHERE id = ?`).get(change.rowId);
+        const existingRow = d
+          .prepare(`SELECT * FROM ${change.table} WHERE id = ?`)
+          .get(change.rowId);
+        const effectiveProjectId =
+          projectId ??
+          (typeof change.row?.["project_id"] === "string"
+            ? change.row["project_id"]
+            : typeof change.base?.["project_id"] === "string"
+              ? change.base["project_id"]
+              : typeof existingRow?.["project_id"] === "string"
+                ? existingRow["project_id"]
+                : (d.prepare("SELECT id FROM projects ORDER BY created_at, id LIMIT 1").get()?.[
+                    "id"
+                  ] as string | undefined));
+        const raw =
+          change.table !== "projects" && effectiveProjectId
+            ? d
+                .prepare(`SELECT * FROM ${change.table} WHERE id = ? AND project_id = ?`)
+                .get(change.rowId, effectiveProjectId)
+            : d.prepare(`SELECT * FROM ${change.table} WHERE id = ?`).get(change.rowId);
         const current = raw ? serializeRow(normalize(raw)) : null;
         if (!sameRecord(current, change.base)) {
           d.exec("ROLLBACK");
           return { applied: false, current };
         }
         if (change.action === "delete") {
-          await this.remove(change.table, change.rowId);
+          await this.remove(change.table, change.rowId, effectiveProjectId);
         } else if (change.action === "create") {
           if (!change.row) throw new Error("Sync create requires a row");
           await this.insert(
@@ -321,10 +430,17 @@ export function sqliteRepo(): Repo {
               created_at: change.row["created_at"],
             },
             userId,
+            effectiveProjectId,
           );
         } else {
           if (!change.row) throw new Error("Sync update requires a row");
-          await this.update(change.table, change.rowId, cleanRow(change.table, change.row), userId);
+          await this.update(
+            change.table,
+            change.rowId,
+            cleanRow(change.table, change.row),
+            userId,
+            effectiveProjectId,
+          );
         }
         d.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
           change.id,
@@ -341,11 +457,26 @@ export function sqliteRepo(): Repo {
     async deleteSyncOperations(userId) {
       (await db()).prepare("DELETE FROM app_sync_operations WHERE user_id = ?").run(userId);
     },
-    async getAll() {
+    async getProjects() {
+      return (await db())
+        .prepare("SELECT * FROM projects ORDER BY created_at, id")
+        .all()
+        .map(normalize) as unknown as Project[];
+    },
+    async getAll(projectId) {
       const d = await db();
+      if (projectId && !d.prepare("SELECT id FROM projects WHERE id = ?").get(projectId))
+        throw new Error("projects.not_found");
       const out = {} as Record<string, unknown[]>;
-      for (const t of TABLE_NAMES)
-        out[t] = d.prepare(`SELECT * FROM ${t} ORDER BY created_at`).all().map(normalize);
+      for (const t of TABLE_NAMES) {
+        const rows =
+          projectId && t !== "projects"
+            ? d
+                .prepare(`SELECT * FROM ${t} WHERE project_id = ? ORDER BY created_at, id`)
+                .all(projectId)
+            : d.prepare(`SELECT * FROM ${t} ORDER BY created_at, id`).all();
+        out[t] = rows.map(normalize);
+      }
       return out as unknown as Workspace;
     },
     async getSyncGeneration() {
@@ -576,16 +707,31 @@ export function sqliteRepo(): Repo {
       }
       if (!preserveUploads) organizeUploads(d, await uploadsEnv());
     },
-    async insert(table, row, actorId) {
+    async insert(table, row, actorId, projectId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
+      const targetProjectId =
+        table === "projects"
+          ? undefined
+          : (projectId ??
+            (typeof row["project_id"] === "string"
+              ? row["project_id"]
+              : (d.prepare("SELECT id FROM projects ORDER BY created_at, id LIMIT 1").get()?.[
+                  "id"
+                ] as string | undefined)));
+      if (projectId) assertProjectReferences(d, table, row, projectId);
       if (table === "tasks") {
         validateTaskDates(row);
         if ("checklist" in row) parseTaskChecklist(row["checklist"]);
       }
       if (table === "funding_entries") validateFundingEntry(row, fundingSources(d));
       const id = (row["id"] as string) || crypto.randomUUID();
-      const full = { ...row, id, created_at: row["created_at"] ?? new Date().toISOString() };
+      const full = {
+        ...row,
+        ...(table === "projects" ? {} : { project_id: targetProjectId ?? null }),
+        id,
+        created_at: row["created_at"] ?? new Date().toISOString(),
+      };
       const keys = Object.keys(full);
       if (table === "tasks" && actorId) d.exec("SAVEPOINT task_notification");
       try {
@@ -603,12 +749,20 @@ export function sqliteRepo(): Repo {
         throw error;
       }
     },
-    async update(table, id, input, actorId) {
+    async update(table, id, input, actorId, projectId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       // File locations are managed by the server and follow category or collection changes.
-      const { storage_path: _storagePath, ...managed } = input;
-      const patch = table === "documents" || table === "idea_images" ? managed : input;
+      const { storage_path: _storagePath, project_id: requestedProjectId, ...managed } = input;
+      if (projectId && requestedProjectId != null && requestedProjectId !== projectId)
+        throw new Error("projects.row_not_in_project");
+      const patch = managed;
       const d = await db();
+      if (table !== "projects" && projectId) {
+        const existing = d.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+        if (!existing || existing["project_id"] !== projectId)
+          throw new Error("projects.row_not_in_project");
+        assertProjectReferences(d, table, { ...existing, ...patch }, projectId);
+      }
       if (table === "tasks") {
         const existing = d.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
         validateTaskDates({ ...existing, ...patch });
@@ -657,9 +811,13 @@ export function sqliteRepo(): Repo {
               : null;
       if (scope) organizeUploads(d, await uploadsEnv(), scope);
     },
-    async remove(table, id) {
+    async remove(table, id, projectId) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
+      if (table !== "projects" && projectId) {
+        const row = d.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).get(id);
+        if (!row || row["project_id"] !== projectId) throw new Error("projects.row_not_in_project");
+      }
       if (
         table === "budget_pots" &&
         d.prepare("SELECT id FROM funding_entries WHERE budget_pot_id = ? LIMIT 1").get(id)
@@ -1050,6 +1208,7 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
       document: Record<string, unknown>,
       actorId: string,
       autoRule?: PaperlessAutoImportRule,
+      projectId?: string,
     ) {
       const db = await database();
       const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
@@ -1116,11 +1275,22 @@ export function paperlessRepository(database: () => Promise<SqliteDb> = getSqlit
           db.exec("COMMIT");
           return { documentId, duplicate: true };
         }
+        const targetProjectId =
+          projectId ??
+          (typeof document["project_id"] === "string"
+            ? document["project_id"]
+            : (db.prepare("SELECT id FROM projects ORDER BY created_at, id LIMIT 1").get()?.[
+                "id"
+              ] as string | undefined));
         const row = {
-          ...cleanRow("documents", document),
+          ...cleanRow("documents", {
+            ...document,
+            project_id: targetProjectId ?? null,
+          }),
           id: link.document_id,
           created_at: link.linked_at,
         };
+        if (targetProjectId) assertProjectReferences(db, "documents", row, targetProjectId);
         const keys = Object.keys(row);
         db.prepare(
           `INSERT INTO documents (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,

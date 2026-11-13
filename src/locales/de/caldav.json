@@ -1,6 +1,7 @@
 {
   "title": "Kalender synchronisieren (CalDAV)",
   "description": "Termine mit Apple Kalender anlegen, bearbeiten und löschen. Änderungen werden mit Bauplan synchronisiert.",
+  "activeProject": "Aktives Projekt: {{name}}",
   "deadlines": "Aufgaben und Angebotsfristen",
   "readonly": "Aufgaben und Angebotsfristen sind schreibgeschützt. Bearbeite sie in Bauplan.",
   "server": "Serveradresse",

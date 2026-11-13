@@ -130,6 +130,7 @@ import {
   saveAppearance,
   getTaskAssignees,
   createRow,
+  getWorkspace,
   updateRow,
 } from "./data.functions";
 import { analyzeDocument } from "./ocr.functions";
@@ -155,6 +156,15 @@ beforeEach(() => {
 });
 
 describe("Task assignment functions", () => {
+  it("requires and scopes a selected project for workspace reads and writes", async () => {
+    harness.state.user = { id: "member-1", role: "member" };
+    await getWorkspace({ data: { projectId: "project-a" } });
+    expect(harness.state.repo.getAll).toHaveBeenCalledWith("project-a");
+    await expect(
+      createRow({ data: { table: "trades", row: { name: "Roofing" } } }),
+    ).rejects.toThrow("projects.selection_required");
+    expect(harness.state.repo.insert).not.toHaveBeenCalled();
+  });
   it("only exposes active admin and member accounts to signed-in project users", async () => {
     harness.state.user = { id: "member-1", role: "member" };
     await expect(getTaskAssignees()).resolves.toEqual([
@@ -168,20 +178,35 @@ describe("Task assignment functions", () => {
     harness.state.user = { id: "member-1", role: "member" };
     await expect(
       createRow({
-        data: { table: "tasks", row: { title: "Check roof", assignee_id: "pending-1" } },
+        data: {
+          table: "tasks",
+          projectId: "project-1",
+          row: { title: "Check roof", assignee_id: "pending-1" },
+        },
       }),
     ).rejects.toThrow("tasks.assignee_not_available");
     expect(harness.state.repo.insert).not.toHaveBeenCalled();
     await createRow({
-      data: { table: "tasks", row: { title: "Check roof", assignee_id: "member-1" } },
+      data: {
+        table: "tasks",
+        projectId: "project-1",
+        row: { title: "Check roof", assignee_id: "member-1" },
+      },
     });
     expect(harness.state.repo.insert).toHaveBeenCalledWith(
       "tasks",
       expect.objectContaining({ assignee_id: "member-1" }),
+      "member-1",
+      "project-1",
     );
     await expect(
       updateRow({
-        data: { table: "tasks", id: "task-1", patch: { assignee_id: "deleted-user" } },
+        data: {
+          table: "tasks",
+          id: "task-1",
+          projectId: "project-1",
+          patch: { assignee_id: "deleted-user" },
+        },
       }),
     ).rejects.toThrow("tasks.assignee_not_available");
     expect(harness.state.repo.update).not.toHaveBeenCalled();
@@ -304,7 +329,9 @@ describe("OCR server-function authorization and orchestration", () => {
   it.each([null, "pending"])("rejects document analysis for %s", async (role) => {
     harness.state.user = role ? { id: "user", role } : null;
     await expect(
-      analyzeDocument({ data: { documentId: "11111111-1111-4111-8111-111111111111" } }),
+      analyzeDocument({
+        data: { documentId: "11111111-1111-4111-8111-111111111111", projectId: "project-1" },
+      }),
     ).rejects.toThrow("Unauthorized");
     expect(processDocument).not.toHaveBeenCalled();
   });
@@ -318,7 +345,7 @@ describe("OCR server-function authorization and orchestration", () => {
       }),
     );
     const result = await analyzeDocument({
-      data: { documentId: "11111111-1111-4111-8111-111111111111" },
+      data: { documentId: "11111111-1111-4111-8111-111111111111", projectId: "project-1" },
     });
     expect(result).toMatchObject({ error: null, result: { amount: 12.5 } });
     expect(processDocument).toHaveBeenCalledWith(

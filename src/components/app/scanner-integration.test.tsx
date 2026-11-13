@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
+    projectId: "project-test",
     ws: {
       trades: [{ id: "t1", name: "Elektro" }],
       cost_items: [],
@@ -214,7 +215,9 @@ describe("scanner save integration", () => {
 
     await waitFor(() => expect(onFill).toHaveBeenCalled());
     expect(mocks.upload).toHaveBeenCalledWith({ file: mocks.scanned, meta: { category: "Beleg" } });
-    expect(analyzeDocument).toHaveBeenCalledWith({ data: { documentId: "doc-1" } });
+    expect(analyzeDocument).toHaveBeenCalledWith({
+      data: { documentId: "doc-1", projectId: "project-test" },
+    });
     expect(onFill.mock.calls[0]![0]).toMatchObject({ document_id: "doc-1" });
   });
 

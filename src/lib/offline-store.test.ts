@@ -93,6 +93,44 @@ describe("account-scoped offline storage", () => {
     expect(getOfflineAccount()).toBeNull();
   });
 
+  it("keeps per-project snapshots isolated and only upgrades a matching legacy snapshot", async () => {
+    const legacy: Workspace = {
+      ...structuredClone(emptyWorkspace),
+      projects: [
+        {
+          id: "legacy-project",
+          name: "Legacy project",
+          address: null,
+          total_budget: 0,
+          start_date: null,
+          end_date: null,
+        },
+      ],
+      tasks: [
+        {
+          id: "legacy-task",
+          title: "Legacy task",
+          assignee_id: null,
+          trade_id: null,
+          phase: null,
+          priority: "mittel",
+          status: "offen",
+          due_date: null,
+          notes: null,
+          cost_item_id: null,
+          document_id: null,
+        },
+      ],
+    };
+    await saveSnapshot("legacy-project-user", legacy);
+
+    expect(await loadSnapshot("legacy-project-user", "another-project")).toBeUndefined();
+    expect((await loadSnapshot("legacy-project-user", "legacy-project"))?.tasks[0]).toMatchObject({
+      project_id: "legacy-project",
+    });
+    await clearAccountData("legacy-project-user");
+  });
+
   it("initializes the funding ledger in old snapshots and queues funding changes without losing existing data", async () => {
     const legacy = structuredClone(emptyWorkspace);
     Reflect.deleteProperty(legacy, "funding_entries");

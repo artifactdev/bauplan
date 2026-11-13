@@ -42,7 +42,7 @@ describe("database migrations", () => {
           .map((column) => column["name"]),
       ).toEqual(columns);
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(12);
     expect(db.prepare("SELECT title FROM cost_items ORDER BY title").all()).toEqual([
       { title: "Anschaffung" },
       { title: "Rückbau" },
@@ -109,7 +109,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(12);
     expect(
       db.prepare("SELECT start_date, due_date, checklist FROM tasks WHERE id = 'task'").get(),
     ).toEqual({
@@ -162,7 +162,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_access; PRAGMA user_version=7;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_access").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(12);
   });
 
   it("upgrades v6 with an empty private auto-import table without enabling imports", () => {
@@ -171,7 +171,50 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_auto_import; PRAGMA user_version=6;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_auto_import").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(12);
+  });
+
+  it("assigns legacy rows while preserving existing CalDAV UIDs and leaves empty workspaces empty", () => {
+    const db = database();
+    migrateDatabase(db);
+    expect(db.prepare("SELECT project_id FROM cost_items").all()).toEqual([
+      { project_id: null },
+      { project_id: null },
+    ]);
+
+    db.exec(`
+      INSERT INTO projects (id, created_at, name, total_budget)
+      VALUES ('existing-project', '2026-01-01', 'Existing project', 50000);
+      INSERT INTO trades (id, created_at, name, budget)
+      VALUES ('existing-trade', '2026-01-01', 'Roofing', 10000);
+      INSERT INTO expenses (id, created_at, title, amount)
+      VALUES ('existing-expense', '2026-01-01', 'Materials', 100);
+      INSERT INTO events (id, created_at, title, event_date, caldav_uid, caldav_data)
+      VALUES ('caldav-event', '2026-01-01', 'Appointment', '2026-01-10',
+        'client-event-uid', 'preserved-client-calendar-data');
+      PRAGMA user_version = 11;
+    `);
+
+    migrateDatabase(db);
+
+    expect(db.prepare("SELECT project_id FROM trades WHERE id = 'existing-trade'").get()).toEqual({
+      project_id: "existing-project",
+    });
+    expect(
+      db.prepare("SELECT project_id FROM expenses WHERE id = 'existing-expense'").get(),
+    ).toEqual({ project_id: "existing-project" });
+    expect(
+      db
+        .prepare("SELECT project_id, caldav_uid, caldav_data FROM events WHERE id = 'caldav-event'")
+        .get(),
+    ).toEqual({
+      project_id: "existing-project",
+      caldav_uid: "client-event-uid",
+      caldav_data: "preserved-client-calendar-data",
+    });
+    expect(db.prepare("SELECT DISTINCT project_id FROM cost_items").all()).toEqual([
+      { project_id: "existing-project" },
+    ]);
   });
 
   it("upgrades v5 Paperless links and preserves their source URL when settings are saved", async () => {
@@ -209,7 +252,7 @@ describe("database migrations", () => {
       "https://new.example.test",
     );
     expect(await repository.credential("user", "instance")).toBe("encrypted-token");
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(12);
   });
 
   it("upgrades an empty v5 links table so initial Paperless settings can be saved", async () => {
@@ -264,6 +307,7 @@ describe("database migrations", () => {
     const db = database();
     migrateDatabase(db);
     db.exec(`
+      DROP TRIGGER first_project_assigns_workspace;
       DROP TABLE funding_entries;
       PRAGMA user_version = 2;
       INSERT INTO projects (id, created_at, total_budget) VALUES ('project', '2026-01-01', 100000);
@@ -272,7 +316,7 @@ describe("database migrations", () => {
     migrateDatabase(db);
     expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
     expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(11);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(12);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

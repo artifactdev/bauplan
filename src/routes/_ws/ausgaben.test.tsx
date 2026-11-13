@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
+    projectId: "project-test",
     ws: {
       expenses: mocks.expenses,
       offers: mocks.offers,

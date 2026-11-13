@@ -6,6 +6,7 @@ export function legacyInvoiceExpense(invoice: Record<string, unknown>): Record<s
   return {
     id: `invoice-${String(invoice["id"])}`,
     created_at: invoice["created_at"],
+    project_id: invoice["project_id"] ?? null,
     title: invoice["title"] || invoice["contractor"] || "",
     vendor: invoice["contractor"] ?? null,
     contact_id: invoice["contact_id"] ?? null,

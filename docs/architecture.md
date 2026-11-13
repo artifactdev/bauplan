@@ -19,20 +19,20 @@ Server functions (src/lib/*.functions.ts)
    ▼
 SQLite repository (src/server/repo.ts)
 ```
-The entire project is loaded as a single "Workspace" object (all tables). For a private renovation project the amount of data is small, which keeps the interface simple.
+The workspace response includes the shared project list and rows for the selected project. Every non-project workspace row has a `project_id`; repository reads and mutations are scoped to that project, including validation of linked records. All approved members share access to all projects. The client remembers the selected project per account and keeps offline snapshots and queued changes project-scoped. CalDAV has a project-specific path; the legacy `/api/caldav/` path remains bound to the existing (first) project.
 
 The service worker precaches the generic app shell and versioned static assets only; it excludes `/api/*` and does not cache authenticated workspace responses or private files. `src/lib/offline-store.ts` stores account-keyed workspace snapshots, queued row changes, and upload blobs in IndexedDB. The offline identity marker is browser-profile local and is set only after a successful online session check. The `_ws` route can use that marker and cached snapshot while disconnected.
 
 Queued row changes include the complete row seen before editing. The server applies each operation in a SQLite `BEGIN IMMEDIATE` transaction only if the current row still matches that base snapshot. `app_sync_operations` makes retries idempotent. A mismatch is retained as a conflict rather than overwritten; the user can discard it or explicitly rebase the local version. Uploads use a stable document ID so retries after a lost response do not create duplicate document rows. Sign-out clears the account's snapshot, changes, and queued files; pending work requires an explicit discard confirmation.
 
 ## Data model (`src/lib/schema.ts`)
-The single source of truth for workspace tables and columns. Before the production server listens, a Nitro startup plugin opens SQLite and runs `src/server/migrations.ts`. Workspace tables are created and missing columns added from the shared schema; ordered private-schema/data migrations are tracked with SQLite `PRAGMA user_version`. Schema changes, backfills, and the version update commit in one `BEGIN IMMEDIATE` transaction. Repository initialization uses the same migration gate for development and tests. A migration failure rolls back the transaction and prevents startup; databases with a newer version are rejected rather than downgraded.
+The single source of truth for workspace tables and columns. Before the production server listens, a Nitro startup plugin opens SQLite and runs `src/server/migrations.ts`. Workspace tables are created and missing columns added from the shared schema; ordered private-schema/data migrations are tracked with SQLite `PRAGMA user_version`. Schema changes, backfills, and the version update commit in one `BEGIN IMMEDIATE` transaction. Migration 12 adds `project_id` to workspace tables, assigns existing rows to the existing project, and adds a first-project trigger to adopt unassigned starter rows when an installation has not created a project yet. Repository initialization uses the same migration gate for development and tests. A migration failure rolls back the transaction and prevents startup; databases with a newer version are rejected rather than downgraded.
 
 | Table | Purpose |
 | --- | --- |
-| projects | Project (name, address, total budget, time period) |
-| trades | Trades with budget and color |
-| cost_items | Cost items with planned amount |
+| projects | Projects (name, address, total budget, time period) |
+| trades | Project-scoped trades with budget and color |
+| cost_items | Project-scoped cost items with planned amount |
 | offers | Quotes, including requests (status requested/received/accepted/rejected, contact, request date) |
 | invoices | Contractor invoices (contact, due date, paid) |
 | expenses | General expenses/receipts with status |

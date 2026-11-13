@@ -3,23 +3,30 @@
 ## Two-way synchronization with Apple Calendar (CalDAV)
 
 Bauplan includes a CalDAV endpoint; no additional calendar service is required.
-Use **Settings → Calendar → Sync calendars (CalDAV)** to copy your server address and username.
+Switch to the desired project, then use **Settings → Calendar → Sync calendars (CalDAV)** to copy
+that project's server address and your username.
 
 1. In Apple Calendar on macOS, choose **Add Account → Other CalDAV Account → Manual**.
    On iPhone, open **Settings → Apps → Calendar → Calendar Accounts → Add Account → Other → Add CalDAV Account**.
 2. Use your existing **Bauplan email address and password**. There are no separate calendar credentials.
    SSO-only users must first set a local password using **Settings → Personal → Change password**.
-3. Use `https://<your-bauplan-host>/api/caldav/` as the server URL. In advanced settings that separate
-   server name and server path, enter the hostname and `/api/caldav/` respectively, and enable SSL.
-   Automatic discovery is also available at `/.well-known/caldav`.
+3. Use the server URL shown in Bauplan. The existing project's URL remains
+   `https://<your-bauplan-host>/api/caldav/`; other projects use a project-specific path such as
+   `https://<your-bauplan-host>/api/caldav/projects/<project-id>/`. In advanced settings that
+   separate server name and server path, enter the hostname and the path shown in Bauplan, and enable SSL.
+   Automatic discovery at `/.well-known/caldav` continues to resolve to the existing project's
+   unchanged URL.
 4. The project calendar contains editable appointments. Select it when creating a new appointment
    in Apple Calendar, rather than a local or iCloud calendar. A separate **Tasks and quote deadlines**
    calendar contains read-only projections; edit their source records in Bauplan.
 
-Appointments created, edited or deleted by either client use the same local `events` table.
+Each CalDAV address contains only its project's events, tasks, and offer deadlines. Appointments
+created, edited or deleted by either client use the same local `events` table and are assigned to
+the project in that address.
 Updates appear on the next client synchronization or web app refresh (there is no push service).
 There is no need to subscribe to the ICS feed as well; doing so displays duplicate entries.
-The existing read-only ICS feed remains available and unchanged.
+The existing read-only ICS feed URL and token remain available; the legacy feed shows the existing
+project only.
 
 ### Supported scope
 

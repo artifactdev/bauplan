@@ -342,9 +342,17 @@ describe("Bauplan backups", () => {
       database: { tables: Record<string, Record<string, unknown>[]> };
     };
     const tables = manifest.database.tables;
+    for (const [table, rows] of Object.entries(tables)) {
+      if (table === "projects") continue;
+      for (const row of rows) delete row["project_id"];
+    }
     tables["invoices"] = [
       {
-        ...Object.fromEntries(TABLES.invoices.map((column) => [column, null])),
+        ...Object.fromEntries(
+          TABLES.invoices
+            .filter((column) => column !== "project_id")
+            .map((column) => [column, null]),
+        ),
         id: "legacy-invoice",
         created_at: "2026-01-01",
         contractor: "Roofing",
@@ -376,6 +384,11 @@ describe("Bauplan backups", () => {
     const parsed = parseBackup(archive);
     expect(parsed.database.tables.invoices).toEqual([]);
     expect(parsed.database.tables.expenses).toHaveLength(2);
+    expect(
+      parsed.database.tables.expenses.find(
+        (expense) => expense["id"] === "invoice-legacy-invoice",
+      )?.["project_id"],
+    ).toBe(tables["projects"]?.[0]?.["id"]);
     expect(parsed.database.tables.expenses[0]).toMatchObject({
       offer_id: null,
       contact_id: null,

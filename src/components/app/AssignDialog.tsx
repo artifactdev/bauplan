@@ -67,7 +67,7 @@ export function AssignDialog({
   initialExtraction?: Extraction | null | undefined;
 }) {
   const { t } = useTranslation("paperless");
-  const { ws } = useWorkspace();
+  const { ws, projectId } = useWorkspace();
   const { create, update } = useMutations();
   const [loading, setLoading] = useState(false);
   const [ex, setEx] = useState<Extraction | null>(null);
@@ -92,11 +92,16 @@ export function AssignDialog({
       setTarget(initialExtraction ? targetFor(initialExtraction.doc_type) : "ablegen");
       return;
     }
+    if (!projectId) {
+      setLoading(false);
+      setError(tr("offline.no_active_project"));
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setEx(null);
     setError(null);
-    analyzeDocument({ data: { documentId } })
+    analyzeDocument({ data: { documentId, projectId } })
       .then((r) => {
         if (cancelled) return;
         logOcrResult(documentId, r);
@@ -112,7 +117,7 @@ export function AssignDialog({
     return () => {
       cancelled = true;
     };
-  }, [documentId, initialExtraction, localRequest]);
+  }, [documentId, initialExtraction, localRequest, projectId]);
 
   const initial = useMemo(() => {
     const trade = ws.trades.find((t) => t.name === ex?.trade);

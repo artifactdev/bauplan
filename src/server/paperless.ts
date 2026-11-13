@@ -171,6 +171,7 @@ export async function importDocument(
   userId: string,
   remoteId: number,
   autoRule?: PaperlessAutoImportRule,
+  requestedProjectId?: string,
 ): Promise<PaperlessImportResult> {
   const { config, client } = await connection(userId);
   if (
@@ -196,6 +197,8 @@ export async function importDocument(
   }
   const file = await client.original(remoteId);
   const repo = sqliteRepo();
+  const projectId = requestedProjectId ?? (await repo.getProjects())[0]?.id;
+  const workspace = await repo.getAll(projectId);
   const name = remote.title.trim() || remote.original_file_name || `paperless-${remoteId}`;
   const fileName = (remote.original_file_name || name).replace(/[/\\\p{Cc}]/gu, "_").slice(0, 240);
   const storagePath = await repo.putFile(fileName, file.mime, file.bytes);
@@ -225,6 +228,7 @@ export async function importDocument(
       },
       userId,
       autoRule,
+      projectId,
     );
     retained = !result.duplicate;
     documentId = result.documentId;
@@ -238,7 +242,6 @@ export async function importDocument(
   // Its explicit warning must never roll back a successfully imported original.
   let extraction: PaperlessImportResult["extraction"] = null;
   let extractionError: PaperlessImportResult["extractionError"] = null;
-  const workspace = await repo.getAll();
   try {
     extraction = extractFromText(remote.content ?? "", {
       trades: workspace.trades.map((trade) => trade.name),
@@ -290,10 +293,16 @@ export async function importDocument(
     }
   }
   if (extraction) extraction.tags = [...new Set([...extraction.tags, ...tags])];
-  await repo.update("documents", documentId, {
-    category: DOCUMENT_CATEGORIES[extraction?.doc_type ?? "sonstiges"],
-    tags: tags.length ? tags.join(", ") : null,
-  });
+  await repo.update(
+    "documents",
+    documentId,
+    {
+      category: DOCUMENT_CATEGORIES[extraction?.doc_type ?? "sonstiges"],
+      tags: tags.length ? tags.join(", ") : null,
+    },
+    undefined,
+    projectId,
+  );
   return {
     documentId,
     duplicate: false,

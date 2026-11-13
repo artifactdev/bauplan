@@ -1,6 +1,7 @@
 {
   "title": "Sync calendars (CalDAV)",
   "description": "Create, edit and delete appointments in Apple Calendar. Changes synchronize with Bauplan.",
+  "activeProject": "Active project: {{name}}",
   "deadlines": "Tasks and quote deadlines",
   "readonly": "Tasks and quote deadlines are read-only. Edit them in Bauplan.",
   "server": "Server address",

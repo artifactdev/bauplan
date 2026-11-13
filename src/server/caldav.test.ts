@@ -116,6 +116,65 @@ describe("CalDAV discovery and authentication", () => {
   });
 });
 
+describe("project-specific calendars", () => {
+  const projectEvents = "/api/caldav/projects/new-project/calendars/events/";
+
+  it("keeps the existing endpoint on the first project and isolates another project's calendar", async () => {
+    await repo.insert("projects", {
+      id: "legacy-project",
+      created_at: "2026-01-01T00:00:00.000Z",
+      name: "Existing project",
+      total_budget: 50000,
+    });
+    await repo.insert("projects", {
+      id: "new-project",
+      created_at: "2026-02-01T00:00:00.000Z",
+      name: "New project",
+      total_budget: 10000,
+    });
+    await repo.insert(
+      "events",
+      { id: "legacy-calendar-event", title: "Existing appointment", event_date: "2026-11-02" },
+      undefined,
+      "legacy-project",
+    );
+    await repo.insert(
+      "events",
+      { id: "new-calendar-event", title: "New appointment", event_date: "2026-11-03" },
+      undefined,
+      "new-project",
+    );
+
+    const legacyCalendar = await request(events, "PROPFIND", undefined, { depth: "1" });
+    const legacyBody = await legacyCalendar.text();
+    expect(legacyBody).toContain("<d:displayname>Existing project</d:displayname>");
+    expect(legacyBody).toContain(`${events}legacy-calendar-event.ics`);
+    expect(legacyBody).not.toContain("new-calendar-event.ics");
+
+    const newCalendar = await request(projectEvents, "PROPFIND", undefined, { depth: "1" });
+    const newBody = await newCalendar.text();
+    expect(newBody).toContain("<d:displayname>New project</d:displayname>");
+    expect(newBody).toContain(`${projectEvents}new-calendar-event.ics`);
+    expect(newBody).not.toContain("legacy-calendar-event.ics");
+    expect((await request(`${projectEvents}new-calendar-event.ics`, "GET")).status).toBe(200);
+    expect((await request(`${events}new-calendar-event.ics`, "GET")).status).toBe(404);
+    const feed = await (await import("./calendar-feed")).feedData();
+    expect(feed.events.map((event) => event.id)).toContain("legacy-calendar-event");
+    expect(feed.events.map((event) => event.id)).not.toContain("new-calendar-event");
+
+    const newAppointment = `${projectEvents}new-client-event.ics`;
+    expect(
+      (await request(newAppointment, "PUT", calendar(undefined, "new-project-uid"))).status,
+    ).toBe(201);
+    expect(
+      (await repo.getAll()).events.find((event) => event.id === "new-client-event"),
+    ).toMatchObject({
+      project_id: "new-project",
+    });
+    expect((await request(`${events}new-client-event.ics`, "GET")).status).toBe(404);
+  });
+});
+
 describe("bidirectional appointments", () => {
   it("creates through PUT and exposes the same event to the web app, GET and REPORT", async () => {
     const result = await request(`${events}client-event.ics`, "PUT", calendar(), {
@@ -157,6 +216,12 @@ describe("bidirectional appointments", () => {
     );
     expect((await request(path, "PUT", source)).status).toBe(201);
     const before = (await request(path, "GET")).headers.get("etag")!;
+    await repo.insert(
+      "trades",
+      { id: "trade", name: "Roofing", budget: 10000 },
+      undefined,
+      "legacy-project",
+    );
     await repo.update("events", "preserved", {
       title: "Web edit",
       kind: "arbeit",
