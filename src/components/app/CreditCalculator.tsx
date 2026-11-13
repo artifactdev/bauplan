@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { currentLocale, tr } from "@/i18n";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/calc";
 import { eur, fmtDate, todayISO } from "@/lib/format";
 import type { CreditTerms } from "@/lib/schema";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { CreditTimeline } from "@/components/app/CreditTimeline";
 import { EntityDialog } from "@/components/app/EntityDialog";
-import { Empty, PageHeader, Panel } from "@/components/app/ui-bits";
+import { Empty, MetricCard, PageHeader, Panel } from "@/components/app/ui-bits";
 import {
   Table,
   TableBody,
@@ -95,6 +96,7 @@ export function CreditCalculator() {
     defaultDraft(ws.projects[0]?.total_budget ?? 0, defaultPotId),
   );
   const [repaymentOpen, setRepaymentOpen] = useState(false);
+  const [editing, setEditing] = useState(!terms);
 
   useEffect(() => {
     setDraft(
@@ -159,6 +161,10 @@ export function CreditCalculator() {
       commitment: (Math.max(0, total - drawn) * Number(draft.commitment_rate || 0)) / 100,
     };
   }, [draft, payments]);
+  const drawn = Math.min(
+    Number(terms?.total_credit ?? 0),
+    payments.filter((payment) => payment.actual).reduce((sum, payment) => sum + payment.amount, 0),
+  );
   const undrawn = terms
     ? Number(terms.total_credit) - payments.reduce((sum, payment) => sum + payment.amount, 0)
     : 0;
@@ -228,47 +234,135 @@ export function CreditCalculator() {
       repayment_months: repaymentCount,
       day_basis: Number(draft.day_basis),
     };
-    if (terms) update.mutate({ table: "credit_terms", id: terms.id, patch: row });
-    else create.mutate({ table: "credit_terms", row });
+    const onSuccess = () => setEditing(false);
+    if (terms) update.mutate({ table: "credit_terms", id: terms.id, patch: row }, { onSuccess });
+    else create.mutate({ table: "credit_terms", row }, { onSuccess });
   };
 
   return (
     <>
       <PageHeader title={tr("shared.loan")} subtitle={tr("shared.keep_track_loan_terms")} />
-      <Panel title={tr("credit_calculator.loan_interest_costs")}>
-        <p className="mb-4 text-sm text-muted-foreground">
-          {tr("credit_calculator.bank_funded_invoices_expenses")}
-        </p>
+      {calculation && outlook && (
+        <div className="mb-5 grid gap-4">
+          {terms && !terms.assumed_full_draw_date && undrawn > 0 && (
+            <p className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+              {tr("credit_calculator.undrawn_warning", { amount: eur(undrawn) })}
+            </p>
+          )}
+          {outlook && (outlook.now || outlook.afterFirstInstallment) && (
+            <section>
+              <h2 className="text-base font-semibold">
+                {tr("credit_calculator.monthly_burden_title")}
+              </h2>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground sm:text-sm">
+                {tr("credit_calculator.monthly_burden_hint")}
+              </p>
+              <div
+                className={cn(
+                  "grid grid-cols-1 gap-3 sm:grid-cols-2",
+                  outlook.afterFirstInstallment?.commitment ? "lg:grid-cols-4" : "lg:grid-cols-3",
+                )}
+              >
+                <MetricCard
+                  compact
+                  label={tr("credit_calculator.drawn_label")}
+                  value={eur(drawn)}
+                  hint={tr("credit_calculator.drawn_hint", {
+                    total: eur(Number(terms?.total_credit ?? 0)),
+                    rest: eur(Math.max(0, Number(terms?.total_credit ?? 0) - drawn)),
+                  })}
+                />
+                {outlook.now && (
+                  <MetricCard
+                    compact
+                    label={tr("credit_calculator.burden_now")}
+                    value={eur(outlook.now.payment + outlook.now.commitment, true)}
+                    tone="primary"
+                  />
+                )}
+                {outlook.afterFirstInstallment && (
+                  <>
+                    <MetricCard
+                      compact
+                      label={tr("credit_calculator.burden_installment", {
+                        date: fmtDate(outlook.first),
+                      })}
+                      value={eur(outlook.afterFirstInstallment.payment, true)}
+                      tone="info"
+                    />
+                    {outlook.afterFirstInstallment.commitment > 0 && (
+                      <>
+                        <MetricCard
+                          compact
+                          label={tr("credit_calculator.burden_commitment_after")}
+                          value={eur(outlook.afterFirstInstallment.commitment, true)}
+                        />
+                        <MetricCard
+                          compact
+                          label={tr("credit_calculator.burden_total_after")}
+                          value={eur(
+                            outlook.afterFirstInstallment.payment +
+                              outlook.afterFirstInstallment.commitment,
+                            true,
+                          )}
+                        />
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+      <Panel
+        title={tr("credit_calculator.terms_title")}
+        action={
+          terms && !editing && ws.budget_pots.length > 0 ? (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Pencil className="h-4 w-4" /> {tr("shared.edit")}
+            </Button>
+          ) : undefined
+        }
+        className="mb-5"
+      >
         {!ws.budget_pots.length && (
           <Empty>{tr("credit_calculator.first_create_payment_source")}</Empty>
         )}
-        {!!ws.budget_pots.length && (
+        {!!ws.budget_pots.length && terms && !editing && (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-3 xl:grid-cols-6">
+            <TermsFact
+              label={tr("credit_calculator.fact_total")}
+              value={eur(Number(terms.total_credit))}
+            />
+            <TermsFact
+              label={tr("credit_calculator.fact_rate")}
+              value={`${fmtPercent(Number(terms.annual_rate))}`}
+            />
+            <TermsFact
+              label={tr("credit_calculator.fact_repayment")}
+              value={`${fmtPercent(Number(terms.repayment_rate ?? 0))}`}
+            />
+            <TermsFact
+              label={tr("credit_calculator.fact_free_until")}
+              value={fmtDate(terms.first_installment_date ?? terms.repayment_start)}
+            />
+            <TermsFact
+              label={tr("credit_calculator.fact_commitment")}
+              value={`${fmtPercent(Number(terms.commitment_rate))}`}
+            />
+            <TermsFact
+              label={tr("credit_calculator.loan_payment_source")}
+              value={ws.budget_pots.find((pot) => pot.id === terms.budget_pot_id)?.name ?? "–"}
+            />
+          </dl>
+        )}
+        {!!ws.budget_pots.length && (editing || !terms) && (
           <form className="grid gap-4" onSubmit={saveTerms}>
-            <div className="grid gap-1.5">
-              <Label htmlFor="credit-source">{tr("credit_calculator.loan_payment_source")}</Label>
-              <Select
-                value={draft.budget_pot_id}
-                onValueChange={(value) => setDraft((d) => ({ ...d, budget_pot_id: value }))}
-              >
-                <SelectTrigger id="credit-source">
-                  <SelectValue placeholder={tr("credit_calculator.choose_payment_source")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {ws.budget_pots.map((pot) => (
-                    <SelectItem key={pot.id} value={pot.id}>
-                      {pot.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              {tr("credit_calculator.form_main_hint")}
+            </p>
             <div>
-              <h3 className="mb-1 text-sm font-semibold">
-                {tr("credit_calculator.form_main_title")}
-              </h3>
-              <p className="mb-3 text-sm text-muted-foreground">
-                {tr("credit_calculator.form_main_hint")}
-              </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <FormField
                   id="credit-total_credit"
@@ -322,6 +416,29 @@ export function CreditCalculator() {
                   value={draft.commitment_rate}
                   onChange={(value) => setDraft((d) => ({ ...d, commitment_rate: value }))}
                 />
+                <div className="grid content-start gap-1.5">
+                  <Label htmlFor="credit-source">
+                    {tr("credit_calculator.loan_payment_source")}
+                  </Label>
+                  <Select
+                    value={draft.budget_pot_id}
+                    onValueChange={(value) => setDraft((d) => ({ ...d, budget_pot_id: value }))}
+                  >
+                    <SelectTrigger id="credit-source">
+                      <SelectValue placeholder={tr("credit_calculator.choose_payment_source")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ws.budget_pots.map((pot) => (
+                        <SelectItem key={pot.id} value={pot.id}>
+                          {pot.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {tr("credit_calculator.loan_payment_source_hint")}
+                  </p>
+                </div>
               </div>
             </div>
             {check && (
@@ -446,119 +563,56 @@ export function CreditCalculator() {
                 </div>
               </div>
             </details>
-            <p className="text-sm text-muted-foreground">
-              {tr("credit_calculator.partial_drawdowns_made_up")}
-            </p>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">
-                {tr("credit_calculator.contract_date_includes_that")}
-              </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {terms && (
+                <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+                  {tr("credit_calculator.cancel_edit")}
+                </Button>
+              )}
               <Button type="submit" disabled={saving}>
                 {tr("credit_calculator.save_loan_terms")}
               </Button>
             </div>
           </form>
         )}
+      </Panel>
 
-        {terms && !calculation && (
-          <p className="mt-4 text-sm text-warning">
-            {tr("credit_calculator.complete_loan_terms_calculate")}
-          </p>
-        )}
-        {calculation && (
-          <div className="mt-6 grid gap-5">
+      {terms && !calculation && (
+        <p className="mb-5 text-sm text-warning">
+          {tr("credit_calculator.complete_loan_terms_calculate")}
+        </p>
+      )}
+      {calculation && (
+        <Panel title={tr("credit_calculator.loan_interest_costs")}>
+          <div className="grid gap-5">
+            <p className="text-sm text-muted-foreground">
+              {tr("credit_calculator.bank_funded_invoices_expenses")}
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
-              <section className="rounded-xl border p-4">
-                <h3 className="mb-1 text-sm font-semibold">
-                  {tr("credit_calculator.actual_date")}
-                </h3>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  {tr("credit_calculator.actual_accrued_hint")}
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <CreditMetric
-                    label={tr("credit_calculator.actual_nominal_interest")}
-                    value={eur(calculation.actualInterest, true)}
-                  />
-                  <CreditMetric
-                    label={tr("credit_calculator.actual_commitment_interest_2")}
-                    value={eur(calculation.actualCommitment, true)}
-                  />
-                  <CreditMetric
-                    label={tr("credit_calculator.actual_total_interest")}
-                    value={eur(calculation.actualInterest + calculation.actualCommitment, true)}
-                  />
-                </div>
-              </section>
-              <section className="rounded-xl border border-primary/30 bg-accent/20 p-4">
-                <h3 className="mb-3 text-sm font-semibold">
-                  {tr("credit_calculator.forecast_group")}
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <CreditMetric
-                    label={tr("credit_calculator.forecast_nominal_interest")}
-                    value={eur(calculation.plannedInterest, true)}
-                  />
-                  <CreditMetric
-                    label={tr("credit_calculator.forecast_commitment_interest_2")}
-                    value={eur(calculation.plannedCommitment, true)}
-                  />
-                  <CreditMetric
-                    label={tr("credit_calculator.forecast_total_interest")}
-                    value={eur(calculation.plannedInterest + calculation.plannedCommitment, true)}
-                  />
-                  <CreditMetric
-                    label={tr("credit_calculator.balance_repayment_start")}
-                    value={eur(calculation.balanceAtRepaymentStart, true)}
-                  />
-                </div>
-              </section>
+              <InterestCard
+                title={tr("credit_calculator.actual_date")}
+                hint={tr("credit_calculator.actual_accrued_hint")}
+                total={calculation.actualInterest + calculation.actualCommitment}
+                rows={[
+                  [tr("credit_calculator.nominal_interest"), calculation.actualInterest],
+                  [tr("credit_calculator.commitment_interest"), calculation.actualCommitment],
+                ]}
+              />
+              <InterestCard
+                highlight
+                title={tr("credit_calculator.forecast_group")}
+                hint={tr("credit_calculator.forecast_total_hint")}
+                total={calculation.plannedInterest + calculation.plannedCommitment}
+                rows={[
+                  [tr("credit_calculator.nominal_interest"), calculation.plannedInterest],
+                  [tr("credit_calculator.commitment_interest"), calculation.plannedCommitment],
+                  [
+                    tr("credit_calculator.balance_repayment_start"),
+                    calculation.balanceAtRepaymentStart,
+                  ],
+                ]}
+              />
             </div>
-            {terms && !terms.assumed_full_draw_date && undrawn > 0 && (
-              <p className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
-                {tr("credit_calculator.undrawn_warning", { amount: eur(undrawn) })}
-              </p>
-            )}
-            {outlook && (outlook.now || outlook.afterFirstInstallment) && (
-              <section className="rounded-xl border p-4">
-                <h3 className="mb-1 text-sm font-semibold">
-                  {tr("credit_calculator.monthly_burden_title")}
-                </h3>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  {tr("credit_calculator.monthly_burden_hint")}
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {outlook.now && (
-                    <CreditMetric
-                      label={tr("credit_calculator.burden_now")}
-                      value={eur(outlook.now.payment + outlook.now.commitment, true)}
-                    />
-                  )}
-                  {outlook.afterFirstInstallment && (
-                    <>
-                      <CreditMetric
-                        label={tr("credit_calculator.burden_installment", {
-                          date: fmtDate(outlook.first),
-                        })}
-                        value={eur(outlook.afterFirstInstallment.payment, true)}
-                      />
-                      <CreditMetric
-                        label={tr("credit_calculator.burden_commitment_after")}
-                        value={eur(outlook.afterFirstInstallment.commitment, true)}
-                      />
-                      <CreditMetric
-                        label={tr("credit_calculator.burden_total_after")}
-                        value={eur(
-                          outlook.afterFirstInstallment.payment +
-                            outlook.afterFirstInstallment.commitment,
-                          true,
-                        )}
-                      />
-                    </>
-                  )}
-                </div>
-              </section>
-            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">{tr("credit_calculator.repayments")}</h3>
@@ -609,8 +663,8 @@ export function CreditCalculator() {
               <Empty>{tr("credit_calculator.no_monthly_values_interest")}</Empty>
             )}
           </div>
-        )}
-      </Panel>
+        </Panel>
+      )}
       <EntityDialog
         open={repaymentOpen}
         onOpenChange={setRepaymentOpen}
@@ -783,5 +837,54 @@ function CreditMetric({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 font-display text-xl font-semibold tabular">{value}</div>
     </div>
+  );
+}
+
+function TermsFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-display text-base font-semibold tabular">{value}</dd>
+    </div>
+  );
+}
+
+const fmtPercent = (value: number) =>
+  `${new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 3 }).format(value)} %`;
+
+function InterestCard({
+  title,
+  hint,
+  total,
+  rows,
+  highlight = false,
+}: {
+  title: string;
+  hint: string;
+  total: number;
+  rows: [string, number][];
+  highlight?: boolean;
+}) {
+  return (
+    <section className={cn("rounded-xl border p-4", highlight && "border-primary/30 bg-accent/20")}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <span className="text-xs text-muted-foreground">
+          {tr("credit_calculator.total_interest")}
+        </span>
+      </div>
+      <div className="mt-1 font-display text-2xl font-semibold tabular sm:text-3xl">
+        {eur(total, true)}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      <dl className="mt-3 divide-y border-t text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3 py-2">
+            <dt className="min-w-0 text-muted-foreground">{label}</dt>
+            <dd className="shrink-0 whitespace-nowrap font-medium tabular">{eur(value, true)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
