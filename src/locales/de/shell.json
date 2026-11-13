@@ -10,6 +10,8 @@
   "noActiveProject": "Wähle zuerst ein Projekt aus.",
   "switchProject": "Projekt wechseln",
   "newProject": "Neues Projekt",
+  "linkPreviews": "Link-Vorschauen",
+  "linkPreviewPrivacy": "Wenn aktiviert, wird beim Speichern einer Idee ohne eigenes Bild einmalig ein Screenshot abgerufen und lokal gespeichert. Die URL wird an thum.io, einen externen Anbieter, übermittelt. Gespeicherte Vorschauen werden bei deaktivierter Einstellung ausgeblendet. Gilt nur für das aktive Projekt.",
   "personal": "Persönliche Einstellungen",
   "calendar": "Kalender",
   "project": "Projekteinstellungen",

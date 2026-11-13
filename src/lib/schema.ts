@@ -136,7 +136,7 @@ export const SYNC_OPERATIONS_DDL = `CREATE TABLE IF NOT EXISTS app_sync_operatio
 )`;
 
 export const TABLES = {
-  projects: ["name", "address", "total_budget", "start_date", "end_date"],
+  projects: ["name", "address", "total_budget", "start_date", "end_date", "link_previews_enabled"],
   trades: ["project_id", "name", "budget", "color"],
   cost_items: ["project_id", "trade_id", "title", "description", "planned"],
   offers: [
@@ -223,7 +223,7 @@ export const TABLES = {
     "price",
     "favorite",
   ],
-  idea_images: ["project_id", "idea_id", "name", "storage_path", "mime_type", "size"],
+  idea_images: ["project_id", "idea_id", "name", "storage_path", "mime_type", "size", "source"],
   contacts: [
     "project_id",
     "name",
@@ -303,7 +303,12 @@ export const NUMERIC_COLS = new Set([
   "monthly_installment",
   "repayment_count",
 ]);
-export const BOOL_COLS = new Set(["paid", "favorite", "deducts_from_budget"]);
+export const BOOL_COLS = new Set([
+  "paid",
+  "favorite",
+  "deducts_from_budget",
+  "link_previews_enabled",
+]);
 
 type Base = { id: string; created_at?: string; project_id?: string | null };
 export type Project = Base & {
@@ -312,6 +317,7 @@ export type Project = Base & {
   total_budget: number;
   start_date: string | null;
   end_date: string | null;
+  link_previews_enabled?: boolean;
 };
 export type Trade = Base & { name: string; budget: number; color: string | null };
 export type CostItem = Base & {
@@ -470,6 +476,7 @@ export type IdeaImage = Base & {
   storage_path: string | null;
   mime_type: string | null;
   size: number | null;
+  source?: "upload" | "link_preview";
 };
 
 export type Contact = Base & {

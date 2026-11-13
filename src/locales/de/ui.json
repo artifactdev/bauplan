@@ -164,6 +164,7 @@
   "collections.previous_image": "Vorheriges Bild",
   "collections.remove_image": "Bild {{name}} entfernen",
   "collections.show_images": "Bilder ansehen ({{count}})",
+  "collections.link_preview_failed": "Die Idee wurde gespeichert, aber der Screenshot konnte nicht geladen werden.",
   "contacts.contact_details_tradespeople_companies": "Kontaktdaten von Handwerkern und Firmen samt Angeboten an einem Ort.",
   "contacts.contact_person": "Ansprechpartner",
   "contacts.contacts_bauplan": "Kontakte – Bauplan",

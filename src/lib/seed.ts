@@ -210,3 +210,164 @@ export function buildSeed(): Record<TableName, Row[]> {
 
   return out;
 }
+
+/** Generic, fully populated workspace used only for the explicit Demo project action. */
+export function buildDemoSeed(): Record<TableName, Row[]> {
+  const seed = buildSeed();
+  const id = () => crypto.randomUUID();
+  const companies = [
+    "Musterbetrieb Haustechnik",
+    "Beispiel-Fliesenbau",
+    "Demo Elektrotechnik",
+    "Musterbetrieb Boden",
+  ];
+
+  Object.assign(seed.projects[0]!, {
+    name: "Demo",
+    address: null,
+    link_previews_enabled: false,
+  });
+  seed.offers.forEach((offer, index) => {
+    offer["contractor"] = companies[index % companies.length]!;
+  });
+  seed.expenses.forEach((expense, index) => {
+    expense["vendor"] = ["Muster-Baumarkt", "Beispiel-Entsorgung", "Demo-Fachhandel"][index % 3]!;
+  });
+  const parkettTask = seed.tasks.find(
+    (task) => task["title"] === "Parkettangebote vergleichen und beauftragen",
+  );
+  if (parkettTask) parkettTask["notes"] = "Beispielbetrieb A vs. Beispielbetrieb B";
+
+  const contacts = companies.map((company, index) => ({
+    id: id(),
+    name: `Kontakt ${index + 1}`,
+    company,
+    trade_id: [null, seed.trades[0]?.["id"], seed.trades[1]?.["id"], seed.trades[2]?.["id"]][index],
+    phone: "0123 456789",
+    email: `kontakt${index + 1}@example.com`,
+    address: "Musterstraße 1, 12345 Musterstadt",
+    website: "https://example.com",
+    notes: "Fiktiver Beispieldatensatz",
+  }));
+  seed.contacts.push(...contacts);
+  seed.offers.forEach((offer, index) => {
+    offer["contact_id"] = contacts[index % contacts.length]!.id;
+  });
+
+  seed.expenses.push({
+    id: id(),
+    title: "Abschlagsrechnung Sanitär",
+    vendor: companies[0]!,
+    contact_id: contacts[0]!.id,
+    offer_id: null,
+    amount: 3200,
+    expense_date: iso(-12),
+    due_date: iso(2),
+    payment_date: null,
+    category: "Handwerker",
+    trade_id: seed.trades[0]?.["id"] ?? null,
+    cost_item_id: seed.cost_items[1]?.["id"] ?? null,
+    document_id: null,
+    status: "offen",
+    notes: "Fiktiver Beispieldatensatz",
+    budget_pot_id: null,
+  });
+
+  seed.ideas.push(
+    {
+      id: id(),
+      collection: "Bad",
+      title: "Helle Fliesen und bodengleiche Dusche",
+      url: "https://example.com/bad",
+      document_id: null,
+      notes: "Neutrale Gestaltung mit pflegeleichten Oberflächen.",
+      tags: "Bad, Fliesen, Dusche",
+      trade_id: seed.trades[0]?.["id"] ?? null,
+      room: "Badezimmer",
+      price: 6400,
+      favorite: true,
+    },
+    {
+      id: id(),
+      collection: "Wohnbereich",
+      title: "Eichenparkett im Wohnbereich",
+      url: "https://example.com/parkett",
+      document_id: null,
+      notes: "Musteridee für einen warmen, strapazierfähigen Boden.",
+      tags: "Boden, Holz",
+      trade_id: seed.trades[2]?.["id"] ?? null,
+      room: "Wohnzimmer",
+      price: 8700,
+      favorite: false,
+    },
+    {
+      id: id(),
+      collection: "Küche",
+      title: "Küchenfront in gedecktem Grün",
+      url: "https://example.com/kueche",
+      document_id: null,
+      notes: "Beispiel für eine ruhige, zeitlose Farbwahl.",
+      tags: "Küche, Farbe",
+      trade_id: seed.trades[3]?.["id"] ?? null,
+      room: "Küche",
+      price: 15000,
+      favorite: false,
+    },
+  );
+
+  const ownFunds = id();
+  const loan = id();
+  const grant = id();
+  seed.budget_pots.push(
+    { id: ownFunds, name: "Eigenmittel", deducts_from_budget: true, notes: "Beispiel" },
+    { id: loan, name: "Bankdarlehen", deducts_from_budget: true, notes: "Beispiel" },
+    { id: grant, name: "Fördermittel", deducts_from_budget: true, notes: "Beispiel" },
+  );
+  seed.funding_entries.push(
+    {
+      id: id(),
+      budget_pot_id: ownFunds,
+      amount: 25000,
+      received_date: iso(-45),
+      notes: "Fiktiver Beispieldatensatz",
+    },
+    {
+      id: id(),
+      budget_pot_id: grant,
+      amount: 5000,
+      received_date: iso(-10),
+      notes: "Fiktiver Beispieldatensatz",
+    },
+  );
+  seed.credit_terms.push({
+    id: id(),
+    budget_pot_id: loan,
+    total_credit: 30000,
+    annual_rate: 3.5,
+    interest_free_start: null,
+    interest_free_end: null,
+    repayment_start: iso(30),
+    commitment_rate: 0,
+    commitment_free_end: null,
+    repayment_months: 120,
+    day_basis: 30,
+    effective_rate: 3.5,
+    fixed_rate_end: iso(3650),
+    payout_rate: 100,
+    net_credit: 30000,
+    repayment_rate: 2,
+    monthly_installment: 297,
+    repayment_count: 120,
+    first_installment_date: iso(30),
+    commitment_start: iso(-30),
+    assumed_full_draw_date: iso(0),
+  });
+  seed.credit_repayments.push({
+    id: id(),
+    amount: 300,
+    repayment_date: iso(-5),
+    notes: "Fiktiver Beispieldatensatz",
+  });
+
+  return seed;
+}

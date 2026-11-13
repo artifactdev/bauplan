@@ -164,6 +164,7 @@
   "collections.previous_image": "Previous image",
   "collections.remove_image": "Remove image {{name}}",
   "collections.show_images": "View images ({{count}})",
+  "collections.link_preview_failed": "The idea was saved, but its screenshot could not be loaded.",
   "contacts.contact_details_tradespeople_companies": "Contact details of tradespeople and companies plus their quotes in one place.",
   "contacts.contact_person": "Contact person",
   "contacts.contacts_bauplan": "Contacts – Bauplan",

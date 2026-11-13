@@ -17,6 +17,7 @@ import { navigationSchema } from "./navigation";
 import { analysisViewsSchema } from "./analysis";
 import { MAX_BACKUP_BYTES, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 import { pushSubscriptionSchema } from "./push";
+import { ideaImages } from "./ideas";
 import {
   paperlessSettingsSchema,
   paperlessSearchSchema,
@@ -709,6 +710,60 @@ export const uploadDocument = createServerFn({ method: "POST" })
       storage_path: String(row["storage_path"] ?? ""),
       created_at: String(row["created_at"] ?? ""),
     };
+  });
+
+export const createIdeaLinkScreenshot = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        projectId: z.string().min(1),
+        ideaId: z.string().min(1),
+        url: z.string().min(1).max(2048),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const ws = await context.repo.getAll(data.projectId);
+    const project = ws.projects.find((item) => item.id === data.projectId);
+    if (!project) throw new Error("projects.row_not_in_project");
+    const idea = ws.ideas.find((item) => item.id === data.ideaId);
+    if (!idea) throw new Error("collections.idea_not_found");
+    if (
+      !project.link_previews_enabled ||
+      idea.url !== data.url ||
+      ideaImages(idea, ws.idea_images, ws.documents).length > 0
+    )
+      return { created: false };
+
+    const { fetchLinkScreenshot } = await import("@/server/link-preview");
+    const bytes = await fetchLinkScreenshot(data.url);
+    const storage_path = await context.repo.putFile(
+      "link-preview.png",
+      "image/png",
+      bytes,
+      collectionFolder(idea.collection),
+    );
+    try {
+      const created = await context.repo.attachIdeaPreview(data.projectId, idea.id, data.url, {
+        name: "link-preview.png",
+        storage_path,
+        mime_type: "image/png",
+        size: bytes.byteLength,
+      });
+      if (!created) await context.repo.deleteFile(storage_path);
+      return { created };
+    } catch (error) {
+      try {
+        await context.repo.deleteFile(storage_path);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Link screenshot failed and its temporary file could not be removed.",
+        );
+      }
+      throw error;
+    }
   });
 
 export const getFileUrl = createServerFn({ method: "POST" })

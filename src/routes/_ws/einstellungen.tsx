@@ -46,6 +46,7 @@ const ROLE_LABEL = { admin: "Admin", member: "Mitglied", pending: "Wartet" } as 
 function SettingsPage() {
   const { t } = useTranslation("shell");
   const { backend, auth } = Route.useRouteContext();
+  const { update } = useMutations();
   const isAdmin = auth.user?.role === "admin";
   const [tab, setTab] = useState("personal");
   const workspace = useWorkspace();
@@ -113,6 +114,28 @@ function SettingsPage() {
                   open={projectDialogOpen}
                   onOpenChange={setProjectDialogOpen}
                 />
+                <div className="mt-4 flex items-start justify-between gap-4 border-t pt-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="link-previews-enabled" className="font-medium">
+                      {t("linkPreviews")}
+                    </Label>
+                    <p className="max-w-prose text-sm text-muted-foreground">
+                      {t("linkPreviewPrivacy")}
+                    </p>
+                  </div>
+                  <Switch
+                    id="link-previews-enabled"
+                    checked={Boolean(activeProject.link_previews_enabled)}
+                    onCheckedChange={(enabled) =>
+                      update.mutate({
+                        table: "projects",
+                        id: activeProject.id,
+                        patch: { link_previews_enabled: enabled },
+                      })
+                    }
+                    aria-label={t("linkPreviews")}
+                  />
+                </div>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">{t("noActiveProject")}</p>

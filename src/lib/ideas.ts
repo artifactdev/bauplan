@@ -6,6 +6,7 @@ export type IdeaImageRef = {
   storage_path: string;
   /** "document" = legacy link via ideas.document_id to a document that is also used elsewhere. */
   source: "image" | "document";
+  linkPreview?: boolean;
 };
 
 /** Images of an idea: a legacy linked document first, then its own images by creation time. */
@@ -13,10 +14,15 @@ export function ideaImages(
   idea: Pick<Idea, "id" | "document_id">,
   images: readonly IdeaImage[],
   documents: readonly Doc[],
+  options: { includeLinkPreviews?: boolean } = {},
 ): IdeaImageRef[] {
   const legacy = idea.document_id ? documents.find((d) => d.id === idea.document_id) : undefined;
   const own = images
-    .filter((image) => image.idea_id === idea.id)
+    .filter(
+      (image) =>
+        image.idea_id === idea.id &&
+        (options.includeLinkPreviews !== false || image.source !== "link_preview"),
+    )
     .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
   const refs: IdeaImageRef[] = [];
   if (legacy?.storage_path)
@@ -33,6 +39,7 @@ export function ideaImages(
         name: image.name,
         storage_path: image.storage_path,
         source: "image",
+        linkPreview: image.source === "link_preview",
       });
   return refs;
 }

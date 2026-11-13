@@ -174,6 +174,20 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 13,
+    name: "project-link-preview-preference",
+    up(db) {
+      db.exec("UPDATE projects SET link_previews_enabled = 0 WHERE link_previews_enabled IS NULL");
+    },
+  },
+  {
+    version: 14,
+    name: "stored-idea-link-previews",
+    up(db) {
+      db.exec("UPDATE idea_images SET source = 'upload' WHERE source IS NULL");
+    },
+  },
 ];
 
 function toSqlValue(value: unknown): string | number | null {
@@ -184,12 +198,20 @@ function toSqlValue(value: unknown): string | number | null {
 }
 
 function synchronizeWorkspaceSchema(db: SqliteDb) {
-  const columnType = (column: string) =>
-    NUMERIC_COLS.has(column) ? "REAL" : BOOL_COLS.has(column) ? "INTEGER" : "TEXT";
+  const columnDefinition = (table: string, column: string) =>
+    table === "projects" && column === "link_previews_enabled"
+      ? "INTEGER NOT NULL DEFAULT 0"
+      : table === "idea_images" && column === "source"
+        ? "TEXT NOT NULL DEFAULT 'upload'"
+        : NUMERIC_COLS.has(column)
+          ? "REAL"
+          : BOOL_COLS.has(column)
+            ? "INTEGER"
+            : "TEXT";
   for (const table of TABLE_NAMES) {
     const columns = TABLES[table] as readonly string[];
     db.exec(
-      `CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, ${columns.map((column) => `${column} ${columnType(column)}`).join(", ")})`,
+      `CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, ${columns.map((column) => `${column} ${columnDefinition(table, column)}`).join(", ")})`,
     );
     const existing = new Set(
       db
@@ -199,7 +221,7 @@ function synchronizeWorkspaceSchema(db: SqliteDb) {
     );
     for (const column of columns) {
       if (!existing.has(column))
-        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${columnType(column)}`);
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${columnDefinition(table, column)}`);
     }
   }
 }

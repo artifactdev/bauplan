@@ -6,9 +6,26 @@ import { nitro } from "nitro/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import deUi from "./src/locales/de/ui.json";
 import { pdfjsAssets } from "./scripts/pdfjs-assets";
+import type { Plugin } from "vite";
 
 // Changes on every build so the precached HTML shell ("/") is refreshed with each deployment.
 const buildId = Date.now().toString(36);
+
+// Nitro's dev middleware treats <img> requests (sec-fetch-dest: image) and *.png URLs as Vite
+// assets unless a dedicated Nitro route matches. API routes live in TanStack's catch-all, so
+// uploaded images would 404 in dev only. Must run before the nitro() plugin's middleware.
+function apiRoutesAreNotAssets(): Plugin {
+  return {
+    name: "bauplan:api-routes-are-not-assets",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url?.startsWith("/api/")) req.headers["sec-fetch-dest"] = "document";
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig({
   optimizeDeps: {
@@ -17,6 +34,7 @@ export default defineConfig({
   // The document scanner runs OpenCV.js in a module worker.
   worker: { format: "es" },
   plugins: [
+    apiRoutesAreNotAssets(),
     pdfjsAssets(),
     tanstackStart({
       server: { entry: "server" },

@@ -77,6 +77,12 @@ export interface Repo {
     projectId?: string,
   ): Promise<void>;
   remove(table: TableName, id: string, projectId?: string): Promise<void>;
+  attachIdeaPreview(
+    projectId: string,
+    ideaId: string,
+    url: string,
+    image: { name: string; storage_path: string; mime_type: string; size: number },
+  ): Promise<boolean>;
   /** Stores a file in a folder relative to the uploads root, e.g. documentFolder(category). */
   putFile(name: string, mime: string, bytes: Uint8Array, folder?: string): Promise<string>;
   fileUrl(path: string): Promise<string>;
@@ -200,6 +206,64 @@ export type SqliteDb = {
     get(...p: unknown[]): Record<string, unknown> | undefined;
   };
 };
+
+export function attachIdeaPreviewInTransaction(
+  d: SqliteDb,
+  projectId: string,
+  ideaId: string,
+  url: string,
+  image: { name: string; storage_path: string; mime_type: string; size: number },
+) {
+  d.exec("BEGIN IMMEDIATE");
+  try {
+    const project = d
+      .prepare("SELECT link_previews_enabled FROM projects WHERE id = ?")
+      .get(projectId);
+    const idea = d
+      .prepare("SELECT url, collection, document_id FROM ideas WHERE id = ? AND project_id = ?")
+      .get(ideaId, projectId);
+    if (!project?.["link_previews_enabled"] || !idea || idea["url"] !== url) {
+      d.exec("COMMIT");
+      return false;
+    }
+    const existingImage = d
+      .prepare(
+        `SELECT id FROM idea_images WHERE idea_id = ? AND
+           (source = 'link_preview' OR storage_path IS NOT NULL)
+         UNION ALL
+         SELECT documents.id FROM ideas
+         JOIN documents ON documents.id = ideas.document_id
+         WHERE ideas.id = ? AND documents.storage_path IS NOT NULL LIMIT 1`,
+      )
+      .get(ideaId, ideaId);
+    if (existingImage) {
+      d.exec("COMMIT");
+      return false;
+    }
+
+    const row = {
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      idea_id: ideaId,
+      name: image.name,
+      storage_path: image.storage_path,
+      mime_type: image.mime_type,
+      size: image.size,
+      source: "link_preview",
+      created_at: new Date().toISOString(),
+    };
+    assertProjectReferences(d, "idea_images", row, projectId);
+    const keys = Object.keys(row);
+    d.prepare(
+      `INSERT INTO idea_images (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,
+    ).run(...keys.map((key) => toSql(row[key as keyof typeof row])));
+    d.exec("COMMIT");
+    return true;
+  } catch (error) {
+    d.exec("ROLLBACK");
+    throw error;
+  }
+}
 
 let dbPromise: Promise<SqliteDb> | null = null;
 
@@ -824,6 +888,9 @@ export function sqliteRepo(): Repo {
       )
         throw new Error("funding.source_in_use");
       d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+    },
+    async attachIdeaPreview(projectId, ideaId, url, image) {
+      return attachIdeaPreviewInTransaction(await db(), projectId, ideaId, url, image);
     },
     async putFile(name, _mime, bytes, folder = documentFolder(DEFAULT_DOCUMENT_FOLDER)) {
       await db();

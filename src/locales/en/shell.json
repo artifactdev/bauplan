@@ -10,6 +10,8 @@
   "noActiveProject": "Select a project first.",
   "switchProject": "Switch project",
   "newProject": "New project",
+  "linkPreviews": "Link previews",
+  "linkPreviewPrivacy": "When enabled, saving an idea without its own image fetches a screenshot once and stores it locally. The URL is sent to thum.io, an external provider. Stored previews are hidden when this setting is disabled. This applies only to the active project.",
   "personal": "Personal preferences",
   "calendar": "Calendar",
   "project": "Project settings",

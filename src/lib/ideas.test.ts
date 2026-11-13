@@ -34,4 +34,12 @@ describe("ideaImages", () => {
       "a",
     ]);
   });
+  it("can hide stored link previews without hiding uploaded images", () => {
+    const images = [image("upload"), image("preview", { source: "link_preview" })];
+    expect(
+      ideaImages({ id: "i", document_id: null }, images, [], { includeLinkPreviews: false }).map(
+        (ref) => ref.id,
+      ),
+    ).toEqual(["upload"]);
+  });
 });
