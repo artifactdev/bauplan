@@ -56,7 +56,8 @@ manually (`workflow_dispatch`) and monthly: it installs the dependencies and
 Chromium, seeds a fresh demo database, starts the app on port 3100, captures all
 screenshots, and commits the changed images to the default branch. A monthly run
 keeps the relative dates in the demo data (due dates, calendar entries) close to
-"today".
+"today". Because such a commit does not trigger other workflows, the job then
+starts the Pages deployment explicitly.
 
 ## Content
 
