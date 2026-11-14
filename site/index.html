@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bauplan – Renovierung im Griff</title>
+    <meta
+      name="description"
+      content="Bauplan ist die private, selbst gehostete App für deine Renovierung: Budget, Angebote, Ausgaben, Dokumente, Aufgaben und Termine an einem Ort."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f6fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171a28" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Bauplan – Renovierung im Griff" />
+    <meta
+      property="og:description"
+      content="Selbst gehostete App für Budget, Angebote, Belege, Dokumente, Aufgaben und Termine deiner Renovierung."
+    />
+    <meta property="og:image" content="./screenshots/overview.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#inhalt">Zum Inhalt springen</a>
+
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="#top" aria-label="Bauplan – zur Startseite">
+          <img src="./app-icon.svg" alt="" width="36" height="36" />
+          <span>Bauplan</span>
+        </a>
+        <nav class="site-nav" aria-label="Hauptnavigation">
+          <a href="#was-ist-bauplan">Überblick</a>
+          <a href="#funktionen">Funktionen</a>
+          <a href="#mobil">Mobil</a>
+          <a href="#selbst-hosten">Selbst hosten</a>
+        </nav>
+        <a class="button button-small" href="https://github.com/artifactdev/bauplan">
+          <svg viewBox="0 0 16 16" aria-hidden="true" width="16" height="16">
+            <path
+              fill="currentColor"
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <main id="inhalt">
+      <section class="hero" id="top">
+        <div class="wrap hero-inner">
+          <p class="eyebrow">Selbst gehostet · Open Source · Deutsch &amp; Englisch</p>
+          <h1>Renovierung im Griff.</h1>
+          <p class="lead">
+            Bauplan bündelt Budget, Angebote, Ausgaben, Belege, Dokumente, Aufgaben und Termine
+            deiner Renovierung an einem Ort. Läuft auf deinem eigenen Server, speichert in SQLite
+            und schickt deine Daten nicht in die Cloud.
+          </p>
+          <div class="hero-actions">
+            <a class="button" href="https://github.com/artifactdev/bauplan">
+              Projekt auf GitHub ansehen
+            </a>
+            <a class="button button-secondary" href="#selbst-hosten">Selbst hosten</a>
+          </div>
+          <ul class="badges" aria-label="Eigenschaften">
+            <li>GPL-3.0</li>
+            <li>Docker oder Node.js</li>
+            <li>Offline nutzbar</li>
+            <li>OCR lokal</li>
+            <li>iCal &amp; CalDAV</li>
+          </ul>
+
+          <figure class="hero-shot">
+            <img
+              src="./screenshots/overview.jpg"
+              width="2880"
+              height="1800"
+              alt="Übersicht von Bauplan mit Budgetkennzahlen, Kostenverteilung, Warnungen und nächsten Terminen"
+            />
+            <figcaption>Übersicht mit Budget, Kosten und nächsten Terminen</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="was-ist-bauplan">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Was ist Bauplan?</p>
+            <h2>Ein Werkzeug für das ganze Projekt, nicht nur für die Rechnung.</h2>
+            <p class="section-lead">
+              Bauplan ist eine private Anwendung für Hausbesitzer und Renovierende, die ihr Projekt
+              selbst steuern. Statt Tabellen, E-Mails und Papierbelegen gibt es einen gemeinsamen
+              Arbeitsbereich für alle Beteiligten – ohne Konto bei einem Drittanbieter.
+            </p>
+          </div>
+
+          <div class="columns">
+            <article class="card">
+              <h3>Für dich und alle Mitplanenden</h3>
+              <p>
+                Alle freigegebenen Personen arbeiten am selben Projekt. Rollen als Admin, Mitglied
+                oder ausstehend, Anmeldung per Passwort oder optionalem OIDC – ohne öffentliche
+                Registrierung.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Deine Daten bleiben bei dir</h3>
+              <p>
+                Eine SQLite-Datenbank, Dateien im eigenen Verzeichnis und vollständige Backups zum
+                Exportieren und Wiederherstellen. Keine Cloud, keine Telemetrie.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Für unterwegs gemacht</h3>
+              <p>
+                Als installierbare Web-App auf dem Homescreen, mit Offline-Bearbeitung und
+                Synchronisierung sowie Push-Erinnerungen für Aufgaben und Fristen.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-alt" id="funktionen">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Funktionen</p>
+            <h2>Was Bauplan kann</h2>
+            <p class="section-lead">
+              Jede Seite greift auf dieselben Daten zu: Ein Angebot wird zur Ausgabe, eine Ausgabe
+              zum Beleg, ein Beleg zum Dokument. So bleibt der Stand konsistent.
+            </p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <p class="eyebrow">Budget</p>
+              <h3>Plan, Zusage, Rechnung, Zahlung – sauber getrennt.</h3>
+              <p>
+                Gewerke und Kostenpositionen bilden die Struktur. Pro Position siehst du geplant,
+                beauftragt, abgerechnet, bezahlt und voraussichtlich – inklusive Abweichung.
+                Zusätzliche Geldeingänge wie Förderungen oder Darlehen erhöhen das Budget, ohne die
+                ursprüngliche Bankposition zu verfälschen.
+              </p>
+              <ul class="checklist">
+                <li>Gesamtbudget aus Bankbudget und zusätzlichen Geldeingängen</li>
+                <li>Erwartete Kosten zählen Angebote und Rechnungen nicht doppelt</li>
+                <li>Zahlungsquellen mit eigenem Budgetabzug</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/budget.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Budgetseite mit Gesamtbudget, Prognose, Kostenstufen und Tabelle der Kostenpositionen"
+              />
+            </figure>
+          </div>
+
+          <div class="feature feature-reverse">
+            <div class="feature-copy">
+              <p class="eyebrow">Angebote</p>
+              <h3>Angebote vergleichen, ohne Zettelwirtschaft.</h3>
+              <p>
+                Anfragen und Angebote laufen über denselben Datensatz: erst anfragen, dann Betrag
+                und Datum nachtragen. Bauplan markiert das günstigste Angebot je Position und zeigt
+                die Differenz der anderen.
+              </p>
+              <ul class="checklist">
+                <li>Status von angefragt bis angenommen oder abgelehnt</li>
+                <li>Karten nach Kostenposition oder Tabelle mit sortierbaren Spalten</li>
+                <li>Direkt mit Kontakt, Gewerk, Dokument und Ausgabe verknüpft</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/quotes.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Angebotsseite mit Karten, Status, günstigstem Angebot und Preisunterschieden"
+              />
+            </figure>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <p class="eyebrow">Ausgaben &amp; Belege</p>
+              <h3>Vom Kassenbon bis zur Abschlagsrechnung.</h3>
+              <p>
+                Eine Ausgabe kann mit oder ohne Beleg entstehen. Wird ein Beleg fotografiert oder
+                hochgeladen, erkennt Bauplan Betrag, Datum, Fälligkeit und Kontakt und füllt das
+                Formular vor. Teil-Erstattungen lassen sich als eigener Betrag abtrennen.
+              </p>
+              <ul class="checklist">
+                <li>Status offen, bezahlt, eingereicht, erstattet, abgelehnt</li>
+                <li>Überfällige Zahlungen aus dem Fälligkeitsdatum abgeleitet</li>
+                <li>Suche und Filter nach Gewerk, Kontakt, Quelle und Zeitraum</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/expenses.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Ausgabenseite mit Statuskarten, Filtern und Liste der Belege"
+              />
+            </figure>
+          </div>
+
+          <div class="feature feature-reverse">
+            <div class="feature-copy">
+              <p class="eyebrow">Dokumente</p>
+              <h3>PDFs ansehen, scannen und zuordnen – lokal.</h3>
+              <p>
+                Bilder und PDFs bis 100 MB lassen sich hochladen oder mit der Kamera erfassen. Der
+                Dokumentenscanner erkennt die Seitenränder, korrigiert die Perspektive und speichert
+                mehrere Seiten als ein PDF. Die Texterkennung läuft im eigenen Prozess.
+              </p>
+              <ul class="checklist">
+                <li>Integrierter PDF-Viewer ohne externen Dienst</li>
+                <li>Scan mit Kantenerkennung und automatischer Auslösung</li>
+                <li>Optionale Paperless-ngx-Anbindung pro Person</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/document-viewer.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="PDF-Vorschau in Bauplan mit mehrseitiger Anzeige und Zoomfunktionen"
+              />
+            </figure>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <p class="eyebrow">Aufgaben &amp; Kalender</p>
+              <h3>Wer macht was, und bis wann?</h3>
+              <p>
+                Aufgaben haben Gewerk, Phase, Priorität, Fristen, Notizen und Unteraufgaben. Im
+                Kalender erscheinen Termine, Aufgabenzeiträume und Angebotsfristen; ein Klick öffnet
+                den Originaldatensatz. Erinnerungen kommen per Push.
+              </p>
+              <ul class="checklist">
+                <li>Unteraufgaben mit eigenem Fortschritt</li>
+                <li>Zwei-Wege-Synchronisierung mit Apple Kalender (CalDAV)</li>
+                <li>iCal-Abo für weitere Kalender-Apps</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/calendar-week.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Wochenansicht des Kalenders mit Terminen, Aufgaben und mehrtägigen Einträgen"
+              />
+            </figure>
+          </div>
+
+          <div class="feature feature-reverse">
+            <div class="feature-copy">
+              <p class="eyebrow">Analyse</p>
+              <h3>Zahlen prüfen, bevor es teuer wird.</h3>
+              <p>
+                Die Analyse bewertet das Projekt in sechs Bereichen: Überblick, Budget, Ausgaben,
+                Angebote, Aufgaben und Kredit. Auffälligkeiten werden automatisch benannt, jede
+                Grafik hat eine Tabellenansicht und lässt sich als CSV exportieren.
+              </p>
+              <ul class="checklist">
+                <li>Budgetüberschreitung, überfällige Zahlungen, auslaufende Angebote</li>
+                <li>Zeitverlauf der Ausgaben und Kosten nach Gewerk</li>
+                <li>Gespeicherte Ansichten mit Filtern</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/analysis.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Analyse mit Kennzahlen, Budgetbalken und automatisch erkannten Auffälligkeiten"
+              />
+            </figure>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <p class="eyebrow">Ideen &amp; Kontakte</p>
+              <h3>Materialien sammeln, Handwerker im Blick.</h3>
+              <p>
+                In Sammlungen liegen Fliesen, Parkett oder Leuchten mit Bildern, Links, Preis und
+                Raum. Kontakte bündeln Telefon, E-Mail, Adresse und die verknüpften Angebote – und
+                lassen sich als vCard aufs Handy exportieren.
+              </p>
+              <ul class="checklist">
+                <li>Mehrere Bilder pro Idee mit Galerie</li>
+                <li>Favoriten, Tags und Suche</li>
+                <li>Kontakte mit Angebotsstatus und vCard-Export</li>
+              </ul>
+            </div>
+            <figure class="feature-shot">
+              <img
+                src="./screenshots/collections.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Sammlungen mit Materialbildern, Tags, Preisen und Favoriten"
+              />
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="mobil">
+        <div class="wrap mobile-layout">
+          <div class="mobile-copy">
+            <p class="eyebrow">Auf dem Bau, im Laden, auf dem Sofa</p>
+            <h2>Als App installierbar – auch ohne Netz.</h2>
+            <p>
+              Bauplan lässt sich aus dem Browser auf dem Homescreen installieren. Nach der Anmeldung
+              funktioniert der Arbeitsbereich offline: Änderungen werden lokal gespeichert und
+              synchronisiert, sobald wieder Verbindung besteht. Belegfotos lassen sich direkt in der
+              App aufnehmen.
+            </p>
+            <ul class="checklist">
+              <li>Eigene Navigation für kleine Bildschirme</li>
+              <li>Offline-Bearbeitung mit Konflikthinweis</li>
+              <li>Push-Erinnerungen für Fristen und zugewiesene Aufgaben</li>
+              <li>Erscheinungsbild hell, dunkel oder systemabhängig</li>
+            </ul>
+            <a
+              class="text-link"
+              href="https://github.com/artifactdev/bauplan/blob/main/docs/offline.md"
+              >Mehr zur Installation und Offline-Nutzung</a
+            >
+          </div>
+          <div class="phones">
+            <figure class="phone">
+              <img
+                src="./screenshots/mobile-overview.jpg"
+                width="780"
+                height="1688"
+                loading="lazy"
+                alt="Bauplan auf dem Smartphone: Übersicht mit Budgetkarten"
+              />
+              <figcaption>Übersicht</figcaption>
+            </figure>
+            <figure class="phone phone-raised">
+              <img
+                src="./screenshots/mobile-calendar.jpg"
+                width="780"
+                height="1688"
+                loading="lazy"
+                alt="Bauplan auf dem Smartphone: Kalender-Agenda mit überfälligen Aufgaben"
+              />
+              <figcaption>Kalender</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-alt" id="selbst-hosten">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Selbst hosten</p>
+            <h2>Ein Container, eine Datenbank, keine Cloud.</h2>
+            <p class="section-lead">
+              Bauplan läuft als Docker-Container oder direkt mit Node.js. Die Datenbank und
+              hochgeladene Dateien liegen in zwei Verzeichnissen, die du sicherst. Ein Reverse-Proxy
+              mit HTTPS genügt für den Zugriff von unterwegs.
+            </p>
+          </div>
+
+          <div class="hosting-grid">
+            <div class="code-card">
+              <div class="code-head">
+                <span>docker-compose.yml</span>
+                <span class="code-badge">ghcr.io/artifactdev/bauplan</span>
+              </div>
+              <pre><code>services:
+  app:
+    image: ghcr.io/artifactdev/bauplan:latest
+    ports: ["3000:3000"]
+    volumes:
+      - ./daten:/data
+      - ./dokumente:/uploads
+    environment:
+      UPLOADS_DIR: /uploads
+    restart: unless-stopped</code></pre>
+              <p class="code-note">
+                Danach <code>docker compose up -d</code> und <code>http://localhost:3000</code>
+                öffnen. Beim ersten Start legst du das Admin-Konto an.
+              </p>
+            </div>
+
+            <div class="hosting-facts">
+              <article class="fact">
+                <h3>Speicher</h3>
+                <p>SQLite-Datenbank plus Dateiverzeichnis – einfach zu sichern und umzuziehen.</p>
+              </article>
+              <article class="fact">
+                <h3>Texterkennung</h3>
+                <p>
+                  Tesseract.js läuft im App-Prozess. Sprachmodelle lädt ein Admin ausdrücklich
+                  herunter; es gibt keinen externen OCR-Dienst.
+                </p>
+              </article>
+              <article class="fact">
+                <h3>Anmeldung</h3>
+                <p>
+                  Lokale Konten mit PBKDF2 und httpOnly-Session-Cookie, optional OIDC für
+                  Single-Sign-on.
+                </p>
+              </article>
+              <article class="fact">
+                <h3>Backups</h3>
+                <p>
+                  Komplettes Backup aus Datenbank und Dokumenten im Admin-Bereich exportieren und
+                  wiederherstellen.
+                </p>
+              </article>
+            </div>
+          </div>
+
+          <div class="tech">
+            <h3>Gebaut mit</h3>
+            <ul class="tech-list">
+              <li>TanStack Start</li>
+              <li>React</li>
+              <li>TypeScript</li>
+              <li>Tailwind CSS</li>
+              <li>i18next</li>
+              <li>SQLite</li>
+              <li>Tesseract.js</li>
+              <li>PDF.js</li>
+              <li>OpenCV.js</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section cta">
+        <div class="wrap cta-inner">
+          <div>
+            <h2>Bauplan ausprobieren</h2>
+            <p>
+              Der Quellcode, die Dokumentation und die Release-Images sind auf GitHub. Für die
+              Einrichtung gibt es eine Kurzanleitung und ausführliche Dokumentation.
+            </p>
+          </div>
+          <div class="cta-actions">
+            <a class="button" href="https://github.com/artifactdev/bauplan">Zum Repository</a>
+            <a
+              class="button button-secondary"
+              href="https://github.com/artifactdev/bauplan/blob/main/SELFHOSTING.md"
+            >
+              Installationsanleitung
+            </a>
+            <a
+              class="button button-secondary"
+              href="https://github.com/artifactdev/bauplan/tree/main/docs"
+            >
+              Dokumentation
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section gallery">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Weitere Ansichten</p>
+            <h2>Ein Blick in die App</h2>
+          </div>
+          <div class="gallery-grid">
+            <figure>
+              <img
+                src="./screenshots/documents.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Dokumente als Karten mit Kategorie, Gewerk und Aktionen"
+              />
+              <figcaption>Dokumente</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/tasks-subtasks.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Aufgabenliste mit Unteraufgaben und Fortschritt"
+              />
+              <figcaption>Aufgaben mit Unteraufgaben</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/calendar.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Monatsansicht des Kalenders mit farbigen Einträgen"
+              />
+              <figcaption>Kalender</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/loan.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Kreditrechner mit Zins- und Tilgungsplan"
+              />
+              <figcaption>Kredit</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/contacts.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Kontakte mit Firma, Gewerk und verknüpften Angeboten"
+              />
+              <figcaption>Kontakte</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/settings.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Einstellungen mit Darstellung, Konto und Sprache"
+              />
+              <figcaption>Einstellungen</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/overview-dark.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Übersicht im dunklen Erscheinungsbild"
+              />
+              <figcaption>Dunkles Erscheinungsbild</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="./screenshots/login.jpg"
+                width="2880"
+                height="1800"
+                loading="lazy"
+                alt="Anmeldeseite von Bauplan"
+              />
+              <figcaption>Anmeldung</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div class="footer-brand">
+          <img src="./app-icon.svg" alt="" width="28" height="28" />
+          <span>Bauplan</span>
+        </div>
+        <nav aria-label="Fußzeile">
+          <a href="https://github.com/artifactdev/bauplan">GitHub</a>
+          <a href="https://github.com/artifactdev/bauplan/tree/main/docs">Dokumentation</a>
+          <a href="https://github.com/artifactdev/bauplan/blob/main/SELFHOSTING.md">Selfhosting</a>
+          <a href="https://github.com/artifactdev/bauplan/blob/main/LICENSE.md">GPL-3.0</a>
+          <a href="https://github.com/artifactdev/bauplan/issues">Fehler melden</a>
+        </nav>
+        <p class="footer-note">
+          Alle Screenshots zeigen ein Beispielprojekt mit fiktiven Daten. Bauplan ist ein privates
+          Open-Source-Projekt und kein Angebot eines Anbieters.
+        </p>
+      </div>
+    </footer>
+
+    <dialog class="lightbox" id="lightbox" aria-label="Screenshot in voller Größe">
+      <button class="lightbox-close" type="button" aria-label="Schließen">×</button>
+      <img alt="" />
+      <p class="lightbox-caption"></p>
+    </dialog>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

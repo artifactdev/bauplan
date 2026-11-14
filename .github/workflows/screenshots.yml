@@ -1,0 +1,82 @@
+name: Refresh website screenshots
+
+on:
+  workflow_dispatch:
+  schedule:
+    # The demo data is relative to "today", so refresh the images once a month.
+    - cron: "0 4 1 * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    env:
+      DATA_DIR: ${{ github.workspace }}/.demo/data
+      UPLOADS_DIR: ${{ github.workspace }}/.demo/uploads
+      BASE_URL: http://localhost:3100
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Seed demo data
+        run: npm run demo:seed
+
+      - name: Start the app
+        run: |
+          npm run dev -- --port 3100 --strictPort > /tmp/bauplan.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:3100/auth > /dev/null; then
+              echo "App is ready."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::The app did not start in time."
+          tail -n 100 /tmp/bauplan.log
+          exit 1
+
+      - name: Capture screenshots
+        run: npm run site:screenshots
+
+      - name: Commit updated screenshots
+        run: |
+          if [ -z "$(git status --porcelain site/screenshots)" ]; then
+            echo "Screenshots are unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/screenshots
+          git commit -m "chore(site): refresh screenshots [skip ci]"
+          branch="${{ github.event.repository.default_branch }}"
+          for attempt in 1 2 3; do
+            # Rebase onto the latest state; on conflicts keep the freshly captured images.
+            git fetch origin "$branch"
+            if ! git rebase -X theirs "origin/$branch"; then
+              git rebase --abort || true
+              sleep 5
+              continue
+            fi
+            git push origin "HEAD:$branch" && exit 0
+            sleep 5
+          done
+          echo "::error::Could not push the refreshed screenshots to $branch."
+          exit 1
