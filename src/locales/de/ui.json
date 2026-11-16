@@ -1,4 +1,10 @@
 {
+  "dependencies.invalid": "Die Voraussetzungen sind ungültig (Wartezeit: 0 bis 36500 ganze Kalendertage).",
+  "dependencies.cycle": "Voraussetzungen dürfen keinen Kreislauf bilden.",
+  "dependencies.unavailable": "Eine Voraussetzung fehlt, gehört zu einem anderen Projekt oder ist kein Arbeitstermin.",
+  "dependencies.consent": "Zum Löschen müssen die betroffenen Voraussetzungen ausdrücklich bestätigt werden.",
+  "dependencies.changed": "Die betroffenen Voraussetzungen haben sich geändert. Bitte aktualisieren und das Löschen erneut bestätigen.",
+  "dependencies.kind_in_use": "Dieser Arbeitstermin wird vorausgesetzt. Entferne erst die Verknüpfungen, bevor du den Typ änderst.",
   "task-checklist.title": "Unteraufgaben",
   "task-checklist.created": "Unteraufgabe erfolgreich erstellt.",
   "task-checklist.add_subtask": "Unteraufgabe hinzufügen",

@@ -33,6 +33,8 @@ npm run site:screenshots  # captures all images into site/screenshots/
 "Sanierung Doppelhaushälfte" are reused, missing demo content is added. The data
 lives in `.demo/` (git-ignored) and is based on `createDemoProjectData()` from
 `src/server/demo-project.ts`.
+The seed script runs directly as native Node ESM; it does not depend on a
+package-internal TypeScript runner path.
 
 The capture script (`scripts/screenshots.mjs`) uses Playwright/Chromium,
 desktop at 1440×900 and mobile at 390×844, both at 2× and German UI. Useful
@@ -48,6 +50,15 @@ environment variables:
 ```sh
 SHOTS=budget,expenses npm run site:screenshots
 ```
+
+The construction examples include mixed Work/task prerequisites, explicit Work
+completion, a planned drying period, benign parallel trades and an intentionally
+early task. Additional fictional renovation phases span several weeks and are
+added without modifying existing records. `calendar-timeline` captures the desktop Bauablauf view with the
+preparation links selected; `mobile-calendar-timeline` captures its touch layout.
+Both are referenced in the website gallery. Refresh `calendar`, `calendar-week`,
+`mobile-calendar`, `tasks` and `tasks-subtasks` when changing planning data or the
+calendar toolbar.
 
 ### In CI
 

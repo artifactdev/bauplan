@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Pencil } from "lucide-react";
 import { tr } from "@/i18n";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
@@ -19,6 +20,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OFFER_STATUS, PRIORITY, TASK_STATUS } from "./ui-bits";
+import { PrerequisiteList } from "./TaskPrerequisites";
+import { incomingDependencies } from "@/lib/task-dependencies";
+import { dependencyDeletion } from "@/lib/dependency-deletion";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export type CalendarSource = CalendarItem["source"];
 
@@ -32,10 +37,19 @@ export function CalendarDetails({
   onEdit: (source: CalendarSource) => void;
 }) {
   const { ws } = useWorkspace();
+  const { t } = useTranslation("construction");
   const { update, remove } = useMutations();
   const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
   const task = source?.type === "task" ? ws.tasks.find((row) => row.id === source.id) : undefined;
+  const work =
+    source?.type === "event"
+      ? ws.events.find((row) => row.id === source.id && row.kind === "arbeit")
+      : undefined;
+  const dependents =
+    source && source.type !== "offer"
+      ? incomingDependencies(ws.tasks, { source: source.type, id: source.id })
+      : [];
   const assignees = useTaskAssignees();
   const fields: { label: string; value: ReactNode }[] = [];
   let title = "";
@@ -134,6 +148,44 @@ export function CalendarDetails({
               </div>
             )}
           </dl>
+          {task && <PrerequisiteList task={task} onOpen={onEdit} />}
+          {work && (
+            <div className="flex flex-col gap-2">
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <Checkbox
+                  checked={!!work.work_completed}
+                  disabled={update.isPending}
+                  onCheckedChange={(value) =>
+                    update.mutate({
+                      table: "events",
+                      id: work.id,
+                      patch: { work_completed: value === true },
+                    })
+                  }
+                />
+                {t("workCompleted")}
+              </label>
+              <p className="text-xs text-muted-foreground">{t("completionHint")}</p>
+            </div>
+          )}
+          {dependents.length > 0 && (
+            <section>
+              <h3 className="text-sm font-medium">{t("dependents")}</h3>
+              <ul>
+                {dependents.map((link) => (
+                  <li key={link.id}>
+                    <Button
+                      variant="link"
+                      className="h-auto min-h-11 whitespace-normal p-0 text-left"
+                      onClick={() => onEdit({ type: "task", id: link.id })}
+                    >
+                      {ws.tasks.find((task) => task.id === link.id)?.title}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {task && (
             <TaskChecklist
               key={task.id}
@@ -165,11 +217,22 @@ export function CalendarDetails({
                 variant="destructive"
                 disabled={deleting || update.isPending}
                 onClick={() => {
-                  if (deletingRef.current || !confirm(tr("tasks.delete_task"))) return;
+                  const deletion = dependencyDeletion(
+                    ws,
+                    { source: "task", id: task.id },
+                    tr("tasks.delete_task"),
+                  );
+                  if (deletingRef.current || !confirm(deletion.confirmation)) return;
                   deletingRef.current = true;
                   setDeleting(true);
                   remove.mutate(
-                    { table: "tasks", id: task.id },
+                    {
+                      table: "tasks",
+                      id: task.id,
+                      ...(deletion.dependencyConsent
+                        ? { dependencyConsent: deletion.dependencyConsent }
+                        : {}),
+                    },
                     {
                       onSuccess: onClose,
                       onSettled: () => {
@@ -184,7 +247,7 @@ export function CalendarDetails({
               </Button>
             )}
             <Button
-              disabled={deleting}
+              disabled={deleting || (!!work && update.isPending)}
               onClick={() => source && !deletingRef.current && onEdit(source)}
             >
               <Pencil data-icon="inline-start" />

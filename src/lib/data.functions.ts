@@ -1,6 +1,7 @@
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
+import { dependencyConsentSchema } from "./task-dependencies";
 import { cleanRow, TABLE_NAMES, type TableName } from "./schema";
 import { collectionFolder, documentFolder } from "./storage-paths";
 import type { Repo } from "@/server/repo";
@@ -527,6 +528,7 @@ export const deleteRow = createServerFn({ method: "POST" })
         table: tableSchema,
         id: z.string(),
         projectId: z.string().min(1).optional(),
+        dependencyConsent: dependencyConsentSchema.optional(),
       })
       .parse(d),
   )
@@ -534,7 +536,7 @@ export const deleteRow = createServerFn({ method: "POST" })
     if (data.table !== "projects" && !data.projectId)
       throw new Error("projects.selection_required");
     const owned = await ownedFiles(context.repo, data.table, data.id, data.projectId);
-    await context.repo.remove(data.table, data.id, data.projectId);
+    await context.repo.remove(data.table, data.id, data.projectId, data.dependencyConsent);
     await removeOwnedFiles(context.repo, owned);
     return { ok: true };
   });
@@ -585,6 +587,7 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
               row: z.record(z.unknown()).nullable(),
               syncGeneration: z.string().nullable(),
               projectId: z.string().min(1).nullable(),
+              dependencyConsent: dependencyConsentSchema.optional(),
             }),
           )
           .max(50),

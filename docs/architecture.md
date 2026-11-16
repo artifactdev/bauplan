@@ -43,6 +43,22 @@ The single source of truth for workspace tables and columns. Before the producti
 | idea_images | Images attached to ideas (kept separate from documents) |
 | contacts | Contractor/company contacts |
 
+Task prerequisites live in `tasks.dependencies` as validated JSON records
+`{ source: "task" | "event", id, lag_days }`; event sources must be Work entries
+in the same project. `src/lib/task-dependencies.ts` owns parsing, graph validation,
+planned sequencing/readiness checks and typed reference cleanup. Task links must be
+acyclic; Work events are leaf sources. `events.work_completed` is an explicit
+boolean marker, independent of calendar dates. Missing legacy columns mean no
+prerequisites and incomplete Work.
+
+Deletion consent contains the affected task IDs and their dependency snapshots.
+Repository deletion verifies this snapshot and removes incoming links in the same
+transaction/savepoint as the source record. Offline deletion carries the same
+consent and updates cached references; changed links become synchronization
+conflicts requiring renewed confirmation. Restore validates the complete graph.
+The CalDAV write path preserves Work metadata and rejects external deletion of
+referenced Work, since calendar clients cannot confirm removal of task prerequisites.
+
 ### File storage
 
 Uploaded files live below `UPLOADS_DIR` (default `DATA_DIR/uploads`) in readable folders, built by `src/lib/storage-paths.ts`:

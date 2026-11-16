@@ -10,6 +10,7 @@ import {
   type Workspace,
   type CalEvent,
   type Project,
+  type Task,
 } from "@/lib/schema";
 import { TABLES } from "@/lib/schema";
 import type { PushJob, PushSubscriptionData } from "@/lib/push";
@@ -30,6 +31,13 @@ import {
 import { DEFAULT_DOCUMENT_FOLDER, documentFolder, isSafeStoragePath } from "@/lib/storage-paths";
 import { validateFundingEntry } from "@/lib/funding";
 import { parseTaskChecklist, validateTaskDates } from "@/lib/tasks";
+import {
+  incomingDependencies,
+  sameConsent,
+  validateDependencyGraph,
+  withoutDependency,
+  type DependencyConsent,
+} from "@/lib/task-dependencies";
 import {
   parseNavigation,
   navigationSchema,
@@ -76,7 +84,12 @@ export interface Repo {
     actorId?: string,
     projectId?: string,
   ): Promise<void>;
-  remove(table: TableName, id: string, projectId?: string): Promise<void>;
+  remove(
+    table: TableName,
+    id: string,
+    projectId?: string,
+    dependencyConsent?: DependencyConsent,
+  ): Promise<void>;
   attachIdeaPreview(
     projectId: string,
     ideaId: string,
@@ -130,7 +143,28 @@ export type SyncChange = {
   rowId: string;
   base: Record<string, unknown> | null;
   row: Record<string, unknown> | null;
+  dependencyConsent?: DependencyConsent | undefined;
 };
+
+function dependencyTasks(d: SqliteDb, projectId?: string) {
+  const rows = projectId
+    ? d.prepare("SELECT * FROM tasks WHERE project_id = ?").all(projectId)
+    : d.prepare("SELECT * FROM tasks").all();
+  return rows.map((row) => normalize(row) as Task);
+}
+
+function assertTaskDependencies(d: SqliteDb, task: Record<string, unknown>) {
+  validateDependencyGraph(
+    [
+      ...d
+        .prepare("SELECT * FROM tasks")
+        .all()
+        .filter((row) => row["id"] !== task["id"]),
+      task,
+    ],
+    d.prepare("SELECT * FROM events").all(),
+  );
+}
 
 const PROJECT_REFERENCES: Partial<Record<TableName, { column: string; table: TableName }[]>> = {
   cost_items: [{ column: "trade_id", table: "trades" }],
@@ -329,6 +363,13 @@ export function sqliteRepo(): Repo {
         checkConditions(current ? calendarEtag(current) : null, conditions);
         if (!value) {
           if (!current) throw new DavError(404, "Appointment not found.");
+          if (
+            incomingDependencies(dependencyTasks(d, current.project_id ?? undefined), {
+              source: "event",
+              id,
+            }).length
+          )
+            throw new DavError(409, "This work is a prerequisite. Confirm deletion in Bauplan.");
           if (projectId)
             d.prepare("DELETE FROM events WHERE id = ? AND project_id = ?").run(id, projectId);
           else d.prepare("DELETE FROM events WHERE id = ?").run(id);
@@ -361,6 +402,7 @@ export function sqliteRepo(): Repo {
           id,
           kind: current?.kind || "termin",
           trade_id: current?.trade_id || null,
+          work_completed: current?.work_completed ?? false,
           created_at: current?.created_at || new Date().toISOString(),
           project_id:
             projectId ??
@@ -478,12 +520,41 @@ export function sqliteRepo(): Repo {
                 .get(change.rowId, effectiveProjectId)
             : d.prepare(`SELECT * FROM ${change.table} WHERE id = ?`).get(change.rowId);
         const current = raw ? serializeRow(normalize(raw)) : null;
-        if (!sameRecord(current, change.base)) {
+        const base = change.base
+          ? {
+              ...change.base,
+              ...(change.table === "tasks"
+                ? { dependencies: change.base["dependencies"] ?? null }
+                : {}),
+              ...(change.table === "events"
+                ? { work_completed: change.base["work_completed"] ?? null }
+                : {}),
+            }
+          : null;
+        if (!sameRecord(current, base)) {
           d.exec("ROLLBACK");
           return { applied: false, current };
         }
         if (change.action === "delete") {
-          await this.remove(change.table, change.rowId, effectiveProjectId);
+          if (change.table === "tasks" || change.table === "events") {
+            const incoming = incomingDependencies(dependencyTasks(d, effectiveProjectId), {
+              source: change.table === "tasks" ? "task" : "event",
+              id: change.rowId,
+            });
+            if (
+              (incoming.length || change.dependencyConsent !== undefined) &&
+              !sameConsent(incoming, change.dependencyConsent)
+            ) {
+              d.exec("ROLLBACK");
+              return { applied: false, current };
+            }
+          }
+          await this.remove(
+            change.table,
+            change.rowId,
+            effectiveProjectId,
+            change.dependencyConsent,
+          );
         } else if (change.action === "create") {
           if (!change.row) throw new Error("Sync create requires a row");
           await this.insert(
@@ -624,6 +695,7 @@ export function sqliteRepo(): Repo {
       };
     },
     async restoreBackup(database, files, requireNoUsers = false, preserveUploads = false) {
+      validateDependencyGraph(database.tables.tasks, database.tables.events);
       const d = await db();
       const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
       const path = await nodeImport<typeof import("node:path")>("node:" + "path");
@@ -797,19 +869,19 @@ export function sqliteRepo(): Repo {
         created_at: row["created_at"] ?? new Date().toISOString(),
       };
       const keys = Object.keys(full);
-      if (table === "tasks" && actorId) d.exec("SAVEPOINT task_notification");
+      if (table === "tasks") d.exec("SAVEPOINT task_notification");
       try {
+        if (table === "tasks") assertTaskDependencies(d, full);
         d.prepare(
           `INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`,
         ).run(...keys.map((k) => toSql((full as Record<string, unknown>)[k])));
         if (table === "tasks" && actorId) {
           queueAssignment(d, null, full, actorId);
-          d.exec("RELEASE task_notification");
         }
+        if (table === "tasks") d.exec("RELEASE task_notification");
         return full;
       } catch (error) {
-        if (table === "tasks" && actorId)
-          d.exec("ROLLBACK TO task_notification; RELEASE task_notification");
+        if (table === "tasks") d.exec("ROLLBACK TO task_notification; RELEASE task_notification");
         throw error;
       }
     },
@@ -828,8 +900,6 @@ export function sqliteRepo(): Repo {
         assertProjectReferences(d, table, { ...existing, ...patch }, projectId);
       }
       if (table === "tasks") {
-        const existing = d.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
-        validateTaskDates({ ...existing, ...patch });
         if ("checklist" in patch) parseTaskChecklist(patch["checklist"]);
       }
       if (table === "funding_entries") {
@@ -846,23 +916,33 @@ export function sqliteRepo(): Repo {
         throw new Error("funding.source_in_use");
       const keys = Object.keys(patch);
       if (!keys.length) return;
-      if (table === "tasks" && actorId) d.exec("SAVEPOINT task_notification");
+      const dependencyMutation = table === "tasks" || (table === "events" && "kind" in patch);
+      if (dependencyMutation) d.exec("SAVEPOINT dependency_update");
       try {
         const previous =
-          table === "tasks" && actorId
-            ? d.prepare("SELECT * FROM tasks WHERE id = ?").get(id)
-            : undefined;
+          table === "tasks" ? d.prepare("SELECT * FROM tasks WHERE id = ?").get(id) : undefined;
+        if (table === "tasks") {
+          if (!previous) throw new Error("projects.row_not_in_project");
+          validateTaskDates({ ...previous, ...patch });
+          if ("dependencies" in patch) assertTaskDependencies(d, { ...previous, ...patch });
+        }
+        if (
+          table === "events" &&
+          "kind" in patch &&
+          patch["kind"] !== "arbeit" &&
+          incomingDependencies(dependencyTasks(d, projectId), { source: "event", id }).length
+        )
+          throw new Error("dependencies.kind_in_use");
         d.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(
           ...keys.map((k) => toSql(patch[k])),
           id,
         );
         if (table === "tasks" && actorId) {
           if (previous) queueAssignment(d, previous, { ...previous, ...patch }, actorId);
-          d.exec("RELEASE task_notification");
         }
+        if (dependencyMutation) d.exec("RELEASE dependency_update");
       } catch (error) {
-        if (table === "tasks" && actorId)
-          d.exec("ROLLBACK TO task_notification; RELEASE task_notification");
+        if (dependencyMutation) d.exec("ROLLBACK TO dependency_update; RELEASE dependency_update");
         throw error;
       }
       const scope =
@@ -875,7 +955,7 @@ export function sqliteRepo(): Repo {
               : null;
       if (scope) organizeUploads(d, await uploadsEnv(), scope);
     },
-    async remove(table, id, projectId) {
+    async remove(table, id, projectId, dependencyConsent) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       if (table !== "projects" && projectId) {
@@ -887,7 +967,27 @@ export function sqliteRepo(): Repo {
         d.prepare("SELECT id FROM funding_entries WHERE budget_pot_id = ? LIMIT 1").get(id)
       )
         throw new Error("funding.source_in_use");
-      d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+      d.exec("SAVEPOINT dependency_delete");
+      try {
+        if (table === "tasks" || table === "events") {
+          const source = { source: table === "tasks" ? ("task" as const) : ("event" as const), id };
+          const incoming = incomingDependencies(dependencyTasks(d, projectId), source);
+          if (incoming.length && dependencyConsent === undefined)
+            throw new Error("dependencies.consent");
+          if (dependencyConsent !== undefined && !sameConsent(incoming, dependencyConsent))
+            throw new Error("dependencies.changed");
+          for (const task of incoming)
+            d.prepare("UPDATE tasks SET dependencies = ? WHERE id = ?").run(
+              withoutDependency(task.dependencies, source),
+              task.id,
+            );
+        }
+        d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+        d.exec("RELEASE dependency_delete");
+      } catch (error) {
+        d.exec("ROLLBACK TO dependency_delete; RELEASE dependency_delete");
+        throw error;
+      }
     },
     async attachIdeaPreview(projectId, ideaId, url, image) {
       return attachIdeaPreviewInTransaction(await db(), projectId, ideaId, url, image);

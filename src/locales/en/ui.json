@@ -1,4 +1,10 @@
 {
+  "dependencies.invalid": "Invalid prerequisites (waiting period: 0 to 36500 whole calendar days).",
+  "dependencies.cycle": "Prerequisites must not form a cycle.",
+  "dependencies.unavailable": "A prerequisite is missing, belongs to another project, or is not a work event.",
+  "dependencies.consent": "Explicitly confirm removing the affected prerequisites before deleting.",
+  "dependencies.changed": "The affected prerequisites have changed. Refresh and confirm deletion again.",
+  "dependencies.kind_in_use": "This work event is a prerequisite. Remove its links before changing the event type.",
   "task-checklist.title": "Subtasks",
   "task-checklist.created": "Subtask created successfully.",
   "task-checklist.add_subtask": "Add subtask",

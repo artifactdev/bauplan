@@ -1,4 +1,5 @@
 import { parseTaskChecklist } from "./tasks";
+import { parseDependencies } from "./task-dependencies";
 
 // Shared data model; SQLite creates and updates these tables at startup.
 
@@ -196,6 +197,7 @@ export const TABLES = {
     "cost_item_id",
     "document_id",
     "checklist",
+    "dependencies",
   ],
   events: [
     "project_id",
@@ -209,6 +211,7 @@ export const TABLES = {
     "notes",
     "caldav_uid",
     "caldav_data",
+    "work_completed",
   ],
   ideas: [
     "project_id",
@@ -308,6 +311,7 @@ export const BOOL_COLS = new Set([
   "favorite",
   "deducts_from_budget",
   "link_previews_enabled",
+  "work_completed",
 ]);
 
 type Base = { id: string; created_at?: string; project_id?: string | null };
@@ -380,6 +384,7 @@ export type Task = Base & {
   cost_item_id: string | null;
   document_id: string | null;
   checklist?: string | null;
+  dependencies?: string | null;
 };
 export type CalEvent = Base & {
   title: string;
@@ -388,6 +393,7 @@ export type CalEvent = Base & {
   end_date: string | null;
   end_time: string | null;
   kind: "termin" | "frist" | "arbeit";
+  work_completed?: boolean | null;
   trade_id: string | null;
   notes: string | null;
   caldav_uid?: string | null;
@@ -539,6 +545,8 @@ export function cleanRow(table: TableName, row: Record<string, unknown>) {
     if (BOOL_COLS.has(col)) v = Boolean(v);
     if (table === "tasks" && col === "checklist")
       v = v === null ? null : JSON.stringify(parseTaskChecklist(v));
+    if (table === "tasks" && col === "dependencies")
+      v = v === null ? null : JSON.stringify(parseDependencies(v));
     out[col] = v;
   }
   return out;

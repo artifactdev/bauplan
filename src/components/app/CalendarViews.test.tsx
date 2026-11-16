@@ -64,7 +64,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("calendar views", () => {
-  it("keeps all five icon tabs named and provides a compact-month count with day drilldown", () => {
+  it("keeps all six icon tabs named and provides a compact-month count with day drilldown", () => {
     mount();
     expect(screen.getAllByRole("tab").map((tab) => tab.getAttribute("aria-label"))).toEqual([
       "Agenda",
@@ -72,6 +72,7 @@ describe("calendar views", () => {
       "Week",
       "Month",
       "Year",
+      "Construction timeline",
     ]);
     for (const name of ["Day", "Week", "Month", "Year", "Agenda"]) {
       expect(screen.getByRole("tab", { name }).querySelector("svg")).not.toBeNull();
@@ -148,6 +149,19 @@ describe("calendar views", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Wednesday, 10 February 2027" })[0]!);
     expect(screen.getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "10 February 2027" })).toBeVisible();
+  });
+  it("moves the construction timeline one week at a time at either zoom level", () => {
+    mount();
+    selectView("Construction timeline");
+    expect(screen.getByRole("heading", { name: "26 Oct – 22 Nov 2026" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Next period" }));
+    expect(screen.getByRole("heading", { name: "2 Nov – 29 Nov 2026" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Construction timeline range"), {
+      target: { value: "12" },
+    });
+    expect(screen.getByRole("heading", { name: "2 Nov – 24 Jan 2027" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Previous period" }));
+    expect(screen.getByRole("heading", { name: "26 Oct – 17 Jan 2027" })).toBeVisible();
   });
   it("opens all entries through a crowded month's more button", () => {
     mount(

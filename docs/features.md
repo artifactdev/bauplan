@@ -77,6 +77,9 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 
 ## Tasks
 
+- **Prerequisites:** a task can require other tasks and calendar entries of type **Work**, with an optional waiting period of 0–36,500 whole calendar days per prerequisite. Only tasks own prerequisites; checklist entries and ordinary appointments/deadlines are not prerequisite sources. Cycles and cross-project links are rejected. Planned early starts, missing dates and unfinished preparations are shown separately without blocking date edits or automatically rescheduling work. Waiting periods apply to planned dates, not actual drying/completion times.
+- Deleting a prerequisite task or Work entry explicitly lists the tasks that will lose that link. Confirmed removal is atomic and preserves their other prerequisites; changed links require fresh confirmation, including offline synchronization.
+
 - Task details stay within the dynamic viewport height, including on mobile. Only the title stays fixed; notes, subtask lists and the Close/Edit actions scroll together to maximize the available content space.
 
 - **Push notifications:** assigning a task to another approved user sends a notification with its current title to their opted-in devices after the server saves it, including offline sync. Open tasks remind the assignee; open quote/payment deadlines and timed calendar appointments remind all opted-in members, including the corresponding record title. Titles may be visible on the lock screen. Tapping opens the matching area (Tasks, Quotes, Expenses or Calendar) and its record. Device activation and a test button are in personal Settings. See [push setup and reminder rules](operations.md#push-notifications).
@@ -90,6 +93,9 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Tasks with both dates appear on every day from start through due date in the calendar and as multi-day entries in iCal and the read-only CalDAV calendar. A start-only or due-only task appears on that single day; undated tasks do not appear in the calendar. Completed tasks remain excluded from calendar subscriptions. Overdue status and push deadline reminders still depend on the due date, not the start.
 
 ## Calendar
+
+- **Construction timeline:** an additional **Bauablauf** view groups task ranges and **Work** entries by trade across 4 or 12 weeks, with Today/previous/next navigation in one-week steps, trade filtering, optional completed activities, a current-day marker and local horizontal scrolling. Hover or focus an activity to reveal its full title. Overlaps are visible but are not automatically conflicts. Select an activity's link button to highlight direct prerequisites/dependents and inspect warnings, even for sources outside the current range/filter. Undated tasks remain accessible below the timeline; single-ended tasks remain one-day markers, not invented durations.
+- **Work completion:** Work entries can explicitly be marked completed in their editor/details. An elapsed planned end does not imply completion. These entries can directly precede tasks without duplicating them as tasks. A referenced Work entry cannot change to another event type until its prerequisite links are removed. Ordinary calendar appointments retain their behavior.
 
 - Clicking an entry opens its original record in a modal without leaving the calendar: tasks open the task editor, offer decision deadlines open the quote editor, and appointments open the appointment editor. This works in both month and list views; saving updates the original record rather than creating a separate calendar copy.
 - Existing appointments can also be deleted from their editor after confirmation, including when opened from the month view. The editor closes only after deletion succeeds.
@@ -106,7 +112,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Validation: end not before start.
 - Day, week, month, year and agenda views, with Today/previous/next navigation, localized dates,
   colored entry types, and a year overview that opens individual days. Agenda is the mobile default;
-  desktop starts in month view. The picker order is Agenda, Day, Week, Month, Year.
+  desktop starts in month view.   The picker order is Agenda, Day, Week, Month, Year, Construction timeline.
   The month fits without horizontal scrolling. Day/week geometry follows the reference:
   96 px per hour, two clickable 48 px half-hour slots, a 72 px time gutter, and a separate
   header above the scrolling hourly grid. Day has an 800 px scroll viewport and week 736 px.
@@ -116,7 +122,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   Week columns fit the available width rather than forcing a horizontally scrolling minimum.
   Below 640 px a warning recommends day view. From 768 px day view adds the reference's
   288 px sidebar, with a month navigator and currently running appointments.
-  The toolbar keeps all five view icons in one row and labels the active view, with 32 px
+  The toolbar keeps all six view icons in one row and labels the active view, with 32 px
   inactive controls and a 120 px active control (fitted down only on the smallest screens).
   Layouts respond
   to the calendar's actual available width, including beside the desktop sidebar. Year tiles

@@ -30,6 +30,13 @@ project only.
 
 ### Supported scope
 
+Work events retain their Bauplan type, trade and explicit completion marker when
+edited through CalDAV. Completion and task prerequisites are managed in Bauplan,
+not inferred from calendar dates or exported as additional events. Deleting Work
+that a task requires is rejected by CalDAV: use Bauplan to review and explicitly
+confirm removing the affected prerequisite links. Unreferenced event deletion
+and existing task/quote subscription ranges remain unchanged.
+
 - Single timed, all-day and multi-day appointments, titles and notes.
 - UTC, floating times, IANA timezones and embedded `VTIMEZONE` definitions. Bauplan's date/time
   fields use `CALDAV_TIMEZONE` (default **Europe/Berlin**), independently of the server OS timezone.

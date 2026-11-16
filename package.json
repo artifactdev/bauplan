@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "node scripts/demo.mjs",
-    "demo:seed": "tsx scripts/demo-seed.mjs",
+    "demo:seed": "node scripts/demo-seed.mjs",
     "site:screenshots": "node scripts/screenshots.mjs"
   },
   "overrides": {

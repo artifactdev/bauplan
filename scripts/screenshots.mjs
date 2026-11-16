@@ -112,6 +112,19 @@ try {
     await shot(page, "tasks-subtasks");
   }
   await visit(page, "/kalender", "calendar");
+  if (!only.length || only.includes("calendar-timeline")) {
+    await page.goto(`${BASE_URL}/kalender`);
+    await settle(page);
+    await page.getByRole("tab", { name: "Bauablauf" }).click();
+    await page
+      .getByRole("button", { name: "Verknüpfungen anzeigen: Demo: Leitungsverläufe fotografieren" })
+      .click();
+    await page.getByRole("region", { name: "Bauablauf" }).evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await settle(page, 800);
+    await shot(page, "calendar-timeline");
+  }
   if (!only.length || only.includes("calendar-week")) {
     await page.goto(`${BASE_URL}/kalender`);
     await settle(page);
@@ -157,6 +170,13 @@ try {
     await phone.goto(`${BASE_URL}/kalender`);
     await settle(phone, 1200);
     await shot(phone, "mobile-calendar");
+  }
+  if (!only.length || only.includes("mobile-calendar-timeline")) {
+    await phone.goto(`${BASE_URL}/kalender`);
+    await settle(phone);
+    await phone.getByRole("tab", { name: "Bauablauf" }).click();
+    await settle(phone, 800);
+    await shot(phone, "mobile-calendar-timeline");
   }
   await mobile.close();
 

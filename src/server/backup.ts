@@ -7,6 +7,7 @@ import { analysisViewsSchema } from "@/lib/analysis";
 import { legacyInvoiceExpense } from "@/lib/expenses";
 import { validateFundingEntry } from "@/lib/funding";
 import { parseTaskChecklist } from "@/lib/tasks";
+import { validateDependencyGraph } from "@/lib/task-dependencies";
 import { z } from "zod";
 import { paperlessExportMetadataSchema } from "@/lib/paperless";
 import { normalizePaperlessUrl } from "./paperless-client";
@@ -101,13 +102,17 @@ function validateDatabase(value: unknown): BackupDatabase {
       table !== "projects" ? columns.filter((column) => column !== "project_id") : columns;
     const requiredWithLegacyColumns =
       table === "tasks"
-        ? required.filter((column) => !["assignee_id", "checklist"].includes(column))
+        ? required.filter(
+            (column) => !["assignee_id", "checklist", "dependencies"].includes(column),
+          )
         : table === "offers"
           ? required.filter((column) => column !== "valid_until")
           : table === "expenses"
             ? required.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
             : table === "events"
-              ? required.filter((column) => !["caldav_uid", "caldav_data"].includes(column))
+              ? required.filter(
+                  (column) => !["caldav_uid", "caldav_data", "work_completed"].includes(column),
+                )
               : table === "credit_terms"
                 ? required.filter((column) => column !== "assumed_full_draw_date")
                 : required;
@@ -126,6 +131,7 @@ function validateDatabase(value: unknown): BackupDatabase {
             ...row,
             assignee_id: row["assignee_id"] ?? null,
             checklist: row["checklist"] ?? null,
+            dependencies: row["dependencies"] ?? null,
           }))
         : table === "offers"
           ? rows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
@@ -146,6 +152,7 @@ function validateDatabase(value: unknown): BackupDatabase {
                     ...row,
                     caldav_uid: row["caldav_uid"] ?? null,
                     caldav_data: row["caldav_data"] ?? null,
+                    work_completed: row["work_completed"] ?? false,
                   }))
                 : rows;
     for (const row of normalizedRows) {
@@ -185,6 +192,7 @@ function validateDatabase(value: unknown): BackupDatabase {
       if (table === "projects") continue;
       for (const row of normalizedTables[table]) row["project_id"] ??= defaultProject["id"];
     }
+  validateDependencyGraph(normalizedTables.tasks, normalizedTables.events);
   const expenseIds = new Set(normalizedTables.expenses.map((row) => row["id"]));
   for (const invoice of normalizedTables.invoices) {
     const expense = legacyInvoiceExpense(invoice);

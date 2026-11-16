@@ -8,6 +8,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { createServer } from "vite";
+import { addTimelineDemo } from "./timeline-demo.mjs";
 
 const root = process.cwd();
 process.env.DATA_DIR ??= path.join(root, ".demo", "data");
@@ -408,6 +409,70 @@ for (const event of demoEvents) {
     projectId,
   );
 }
+
+const planningWs = await repo.getAll(projectId);
+async function planningTrade(name, color) {
+  const existing = planningWs.trades.find((trade) => trade.name === name);
+  if (existing) return existing.id;
+  return (await repo.insert("trades", { name, color, budget: 0 }, undefined, projectId))["id"];
+}
+const electricalTrade = await planningTrade("Elektro", "#215caa");
+const drywallTrade = await planningTrade("Trockenbau", "#7046b8");
+const paintingTrade = await planningTrade("Maler", "#166747");
+async function planningRow(table, values) {
+  const existing = planningWs[table].find((row) => row.title === values.title);
+  if (existing) {
+    await repo.update(table, existing.id, values, undefined, projectId);
+    return existing.id;
+  }
+  return (await repo.insert(table, values, undefined, projectId))["id"];
+}
+const electricalWork = await planningRow("events", {
+  title: "Elektro: Leitungen verlegen",
+  kind: "arbeit",
+  trade_id: electricalTrade,
+  event_date: iso(0),
+  end_date: iso(3),
+  start_time: null,
+  end_time: null,
+  work_completed: false,
+  notes: "Vor dem Schließen der Wände gemeinsam prüfen.",
+});
+await planningRow("events", {
+  title: "Elektro: Baustrom prüfen",
+  kind: "arbeit",
+  trade_id: electricalTrade,
+  event_date: iso(-2),
+  end_date: iso(-1),
+  start_time: null,
+  end_time: null,
+  work_completed: true,
+  notes: "Vorarbeit abgeschlossen.",
+});
+const closingTask = await planningRow("tasks", {
+  title: "Wände schließen",
+  trade_id: drywallTrade,
+  phase: "Rohinstallation",
+  priority: "hoch",
+  status: "offen",
+  start_date: iso(2),
+  due_date: iso(6),
+  dependencies: JSON.stringify([{ source: "event", id: electricalWork, lag_days: 0 }]),
+  notes: "Absichtlich zu früh geplant: Elektroarbeiten erst fertigstellen.",
+});
+await planningRow("tasks", {
+  title: "Wände streichen",
+  trade_id: paintingTrade,
+  phase: "Innenausbau",
+  priority: "mittel",
+  status: "offen",
+  start_date: iso(10),
+  due_date: iso(14),
+  dependencies: JSON.stringify([{ source: "task", id: closingTask, lag_days: 3 }]),
+  notes: "Drei Kalendertage geplante Trocknung nach dem Schließen der Wände.",
+});
+
+await addTimelineDemo(repo, projectId);
 
 const projects = await repo.getProjects();
 const project = projects.find((entry) => entry.id === projectId);

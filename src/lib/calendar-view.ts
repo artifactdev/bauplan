@@ -1,6 +1,6 @@
 import { addDays, format, startOfMonth, startOfWeek } from "date-fns";
 
-export type CalendarView = "day" | "week" | "month" | "year" | "agenda";
+export type CalendarView = "day" | "week" | "month" | "year" | "agenda" | "construction";
 export type CalendarItem = {
   id: string;
   title: string;

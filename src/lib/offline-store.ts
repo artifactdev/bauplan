@@ -1,5 +1,6 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { TableName, Workspace } from "./schema";
+import { withoutDependency, type DependencyConsent } from "./task-dependencies";
 
 const DB_NAME = "bauplan-offline";
 const DB_VERSION = 2;
@@ -19,6 +20,7 @@ export type OfflineChange = {
   projectId?: string | null;
   syncGeneration?: string | undefined;
   conflict?: Record<string, unknown> | null;
+  dependencyConsent?: DependencyConsent | undefined;
 };
 
 export type PendingUpload = {
@@ -297,6 +299,18 @@ export function applyChange(workspace: Workspace, change: OfflineChange): Worksp
   const index = rows.findIndex((item) => item["id"] === change.rowId);
   if (change.action === "delete") {
     if (index !== -1) rows.splice(index, 1);
+    if (change.table === "tasks" || change.table === "events") {
+      const source = {
+        source: change.table === "tasks" ? ("task" as const) : ("event" as const),
+        id: change.rowId,
+      };
+      copy.tasks = copy.tasks.map((task) => ({
+        ...task,
+        ...(task.dependencies
+          ? { dependencies: withoutDependency(task.dependencies, source) }
+          : {}),
+      }));
+    }
   } else if (index === -1 && change.row) {
     rows.push(change.row);
   } else if (index !== -1 && change.row) {

@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScanBar } from "./ScanBar";
 import { TagsInput } from "./TagsInput";
 import { TaskChecklist } from "./TaskChecklist";
+import { TaskPrerequisites } from "./TaskPrerequisites";
 import type { ScanTarget } from "@/lib/scan-map";
 import { ChevronDown, ChevronUp, Loader2, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -41,7 +42,17 @@ export type Field = {
   name: string;
   label: string;
   type?:
-    "text" | "number" | "date" | "time" | "textarea" | "select" | "checkbox" | "tags" | "checklist";
+    | "text"
+    | "number"
+    | "date"
+    | "time"
+    | "textarea"
+    | "select"
+    | "checkbox"
+    | "tags"
+    | "checklist"
+    | "dependencies";
+  taskId?: string | undefined;
   options?: { value: string; label: string }[];
   required?: boolean;
   /** Free text with suggestions (datalist); for "tags" fields the existing tags to pick from. */
@@ -207,6 +218,17 @@ export function EntityDialog({
       f.type === "select" ? (f.addLabel ?? QUICK_ADD[f.name]?.label) : undefined;
     const id = `f-${f.name}`;
     const span = f.full || f.type === "textarea" ? "sm:col-span-2" : "";
+    if (f.type === "dependencies")
+      return (
+        <div key={f.name} className="sm:col-span-2">
+          <TaskPrerequisites
+            value={typeof v === "string" ? v : null}
+            taskId={f.taskId}
+            onChange={(value) => set(f.name, value)}
+            disabled={busy}
+          />
+        </div>
+      );
     if (f.type === "checklist")
       return (
         <div key={f.name} className="sm:col-span-2">

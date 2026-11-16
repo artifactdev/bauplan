@@ -1,5 +1,13 @@
 # Installable app and offline use
 
+Task prerequisites and explicit Work completion are included in workspace
+snapshots and queued changes. Deleting a prerequisite lists the affected tasks
+and removes their links locally after confirmation. The server verifies the
+confirmed dependency snapshots during replay; newly added or changed links are
+a conflict, not silently removed. Keeping a local deletion asks for renewed
+confirmation against the current server links. Prerequisite warnings use planned
+dates and the currently available snapshot; they are not live contractor status.
+
 Bauplan is a Progressive Web App (PWA). On a supported browser, use **Install app** or **Add to Home Screen** in the browser menu. On iPhone or iPad, open the site in Safari, choose **Share**, then **Add to Home Screen**. The app must be served over HTTPS, except when testing on localhost.
 
 On Android and other browsers that support Web App Manifest shortcuts, long-press the installed app icon to open a new appointment, create a task, scan a receipt, or record an expense. iOS home-screen web apps may not expose these shortcuts.

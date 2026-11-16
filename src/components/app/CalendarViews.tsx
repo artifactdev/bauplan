@@ -10,6 +10,7 @@ import {
   List,
   ChevronLeft,
   ChevronRight,
+  GanttChart,
 } from "lucide-react";
 import { currentLocale, tr } from "@/i18n";
 import {
@@ -29,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Empty } from "./ui-bits";
+import { ConstructionTimeline } from "./ConstructionTimeline";
+import type { Workspace } from "@/lib/schema";
 
 const kinds = {
   termin: { label: "shared.appointment", dot: "bg-info", surface: "bg-info-subtle text-info" },
@@ -44,7 +47,7 @@ const kinds = {
     surface: "bg-warning-subtle text-warning-foreground",
   },
 };
-const views: CalendarView[] = ["agenda", "day", "week", "month", "year"];
+const views: CalendarView[] = ["agenda", "day", "week", "month", "year", "construction"];
 const hourHeight = 96;
 const pixelsPerMinute = hourHeight / 60;
 const viewIcons = {
@@ -53,6 +56,7 @@ const viewIcons = {
   month: CalendarDays,
   year: Grid2X2,
   agenda: CalendarRange,
+  construction: GanttChart,
 };
 
 export function CalendarViews({
@@ -61,15 +65,24 @@ export function CalendarViews({
   onSelect,
   onOpen,
   onCreate,
+  planning,
+  onOpenRecord,
+  onCreateTask,
+  onCreateWork,
 }: {
   items: CalendarItem[];
   selected: string;
   onSelect: (date: string) => void;
   onOpen: (item: CalendarItem) => void;
   onCreate: (date: string, time?: string) => void;
+  planning?: Pick<Workspace, "tasks" | "events" | "trades">;
+  onOpenRecord?: (source: CalendarItem["source"]) => void;
+  onCreateTask?: () => void;
+  onCreateWork?: () => void;
 }) {
   const { t } = useTranslation("calendar-view");
   const locale = currentLocale();
+  const [weeks, setWeeks] = useState<4 | 12>(4);
   const [view, setView] = useState<CalendarView>(() =>
     typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
       ? "agenda"
@@ -88,23 +101,27 @@ export function CalendarViews({
     fmt(addDays(startOfWeek(date, { weekStartsOn: 1 }), index), { weekday: "short" }),
   );
   const title =
-    view === "year"
-      ? String(date.getFullYear())
-      : view === "day"
-        ? fmt(date, { day: "numeric", month: "long", year: "numeric" })
-        : view === "week"
-          ? `${fmt(startOfWeek(date, { weekStartsOn: 1 }), { day: "numeric", month: "short" })} – ${fmt(addDays(startOfWeek(date, { weekStartsOn: 1 }), 6), { day: "numeric", month: "short", year: "numeric" })}`
-          : fmt(date, { month: "long", year: "numeric" });
+    view === "construction"
+      ? `${fmt(startOfWeek(date, { weekStartsOn: 1 }), { day: "numeric", month: "short" })} – ${fmt(addDays(startOfWeek(date, { weekStartsOn: 1 }), weeks * 7 - 1), { day: "numeric", month: "short", year: "numeric" })}`
+      : view === "year"
+        ? String(date.getFullYear())
+        : view === "day"
+          ? fmt(date, { day: "numeric", month: "long", year: "numeric" })
+          : view === "week"
+            ? `${fmt(startOfWeek(date, { weekStartsOn: 1 }), { day: "numeric", month: "short" })} – ${fmt(addDays(startOfWeek(date, { weekStartsOn: 1 }), 6), { day: "numeric", month: "short", year: "numeric" })}`
+            : fmt(date, { month: "long", year: "numeric" });
   const move = (direction: number) =>
     onSelect(
       dateKey(
-        view === "year"
-          ? addYears(date, direction)
-          : view === "day"
-            ? addDays(date, direction)
-            : view === "week"
-              ? addDays(date, direction * 7)
-              : addMonths(date, direction),
+        view === "construction"
+          ? addDays(date, direction * 7)
+          : view === "year"
+            ? addYears(date, direction)
+            : view === "day"
+              ? addDays(date, direction)
+              : view === "week"
+                ? addDays(date, direction * 7)
+                : addMonths(date, direction),
       ),
     );
   const openDay = (day: string) => {
@@ -625,17 +642,43 @@ export function CalendarViews({
                 <TabsTrigger
                   key={value}
                   value={value}
-                  aria-label={t(value)}
-                  title={t(value)}
+                  aria-label={
+                    value === "construction" ? t("title", { ns: "construction" }) : t(value)
+                  }
+                  title={value === "construction" ? t("title", { ns: "construction" }) : t(value)}
                   className="calendar-view-tab"
                 >
                   <Icon aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="calendar-view-label">{t(value)}</span>
+                  <span className="calendar-view-label">
+                    {value === "construction" ? t("title", { ns: "construction" }) : t(value)}
+                  </span>
                 </TabsTrigger>
               );
             })}
           </TabsList>
         </div>
+        <TabsContent value="construction" className="mt-0">
+          {view === "construction" && (
+            <ConstructionTimeline
+              items={items}
+              planning={planning ?? { tasks: [], events: [], trades: [] }}
+              selected={selected}
+              weeks={weeks}
+              onWeeksChange={setWeeks}
+              onOpen={
+                onOpenRecord ??
+                ((source) => {
+                  const item = items.find(
+                    (item) => item.source.type === source.type && item.id === source.id,
+                  );
+                  if (item) onOpen(item);
+                })
+              }
+              onCreateTask={onCreateTask}
+              onCreateWork={onCreateWork}
+            />
+          )}
+        </TabsContent>
         <TabsContent value="month" className="mt-0">
           {monthGrid(date)}
         </TabsContent>

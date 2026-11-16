@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Camera, ScanLine } from "lucide-react";
 import { MAX_UPLOAD_MB } from "@/lib/limits";
+import { dependencyDeletion } from "@/lib/dependency-deletion";
 
 type P = {
   open: boolean;
@@ -24,6 +25,7 @@ type P = {
 export function taskFields(
   ws: ReturnType<typeof useWorkspace>["ws"],
   assignees: { id: string; label: string }[] = [],
+  editId?: string,
 ): Field[] {
   return [
     { name: "title", label: tr("shared.title"), required: true, full: true },
@@ -76,6 +78,7 @@ export function taskFields(
       type: "select",
       options: ws.documents.map((d) => ({ value: d.id, label: d.name })),
     },
+    { name: "dependencies", label: "", type: "dependencies", full: true, taskId: editId },
     { name: "notes", label: tr("shared.notes"), type: "textarea" },
     { name: "checklist", label: tr("task-checklist.title"), type: "checklist", full: true },
   ];
@@ -85,19 +88,29 @@ export function QuickTask({ open, onOpenChange, initial, editId }: P) {
   const { ws } = useWorkspace();
   const { create, update, remove } = useMutations();
   const assignees = useTaskAssignees(open);
+  const deletion = editId
+    ? dependencyDeletion(ws, { source: "task", id: editId }, tr("tasks.delete_task"))
+    : null;
   return (
     <EntityDialog
       open={open}
       onOpenChange={onOpenChange}
       title={editId ? tr("quick_actions.edit_task") : tr("quick_actions.new_task")}
       scan={editId ? undefined : "task"}
-      fields={taskFields(ws, assignees.data)}
+      fields={taskFields(ws, assignees.data, editId)}
       initial={initial ?? { priority: "mittel", status: "offen" }}
       deleteAction={
         editId
           ? {
-              confirmation: tr("tasks.delete_task"),
-              onDelete: () => remove.mutateAsync({ table: "tasks", id: editId }),
+              confirmation: deletion!.confirmation,
+              onDelete: () =>
+                remove.mutateAsync({
+                  table: "tasks",
+                  id: editId,
+                  ...(deletion?.dependencyConsent
+                    ? { dependencyConsent: deletion.dependencyConsent }
+                    : {}),
+                }),
             }
           : undefined
       }

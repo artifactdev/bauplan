@@ -2,7 +2,7 @@ import { tr } from "@/i18n";
 import { usePushTarget } from "@/hooks/use-push-target";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { fmtDate, todayISO } from "@/lib/format";
 import { tradeName, tradeOptions } from "@/lib/options";
@@ -18,6 +18,8 @@ import { taskRange } from "@/lib/tasks";
 import { CalendarViews } from "@/components/app/CalendarViews";
 import type { CalendarItem } from "@/lib/calendar-view";
 import { CalendarDetails, type CalendarSource } from "@/components/app/CalendarDetails";
+import { dependencyDeletion } from "@/lib/dependency-deletion";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/_ws/kalender")({
   head: () => ({
@@ -32,6 +34,7 @@ export const Route = createFileRoute("/_ws/kalender")({
 });
 
 function CalendarPage() {
+  const { t } = useTranslation("construction");
   const { ws } = useWorkspace();
   const { create, update, remove } = useMutations();
   const today = todayISO();
@@ -42,7 +45,12 @@ function CalendarPage() {
       ? { initial: { kind: "termin", event_date: today } }
       : null,
   );
-  const [taskDlg, setTaskDlg] = useState<{ id: string; initial: Record<string, unknown> } | null>(
+  const [eventKind, setEventKind] = useState<string | null>(null);
+  const openEvent = (initial: Record<string, unknown>, id?: string) => {
+    setEventKind(null);
+    setDlg({ ...(id ? { id } : {}), initial });
+  };
+  const [taskDlg, setTaskDlg] = useState<{ id?: string; initial: Record<string, unknown> } | null>(
     null,
   );
   const [offerDlg, setOfferDlg] = useState<{ id: string; initial: Record<string, unknown> } | null>(
@@ -66,6 +74,7 @@ function CalendarPage() {
           start_time: e.start_time,
           end_time: e.end_time,
           kind: e.kind,
+          done: e.kind === "arbeit" && !!e.work_completed,
           trade_id: e.trade_id,
           tradeLabel: e.trade_id ? tradeName(ws, e.trade_id) : null,
           source: { type: "event" as const, id: e.id },
@@ -112,7 +121,7 @@ function CalendarPage() {
 
   const editEvent = (id: string) => {
     const e = ws.events.find((x) => x.id === id);
-    if (e) setDlg({ id, initial: { ...e } });
+    if (e) openEvent({ ...e }, id);
   };
   const editSource = ({ type, id }: CalendarSource) => {
     setDetail(null);
@@ -125,16 +134,17 @@ function CalendarPage() {
       if (offer) setOfferDlg({ id, initial: { ...offer } });
     }
   };
+  const eventId = dlg?.id;
+  const eventDeletion = eventId
+    ? dependencyDeletion(ws, { source: "event", id: eventId }, tr("calendar.delete_appointment"))
+    : null;
 
   return (
     <>
       <PageHeader
         title={tr("shared.calendar")}
         actions={
-          <Button
-            size="sm"
-            onClick={() => setDlg({ initial: { kind: "termin", event_date: today } })}
-          >
+          <Button size="sm" onClick={() => openEvent({ kind: "termin", event_date: today })}>
             <Plus className="h-4 w-4" /> {tr("shared.appointment")}
           </Button>
         }
@@ -144,8 +154,14 @@ function CalendarPage() {
         selected={selected}
         onSelect={setSelected}
         onOpen={(item) => setDetail(item.source)}
+        planning={ws}
+        onOpenRecord={setDetail}
+        onCreateTask={() =>
+          setTaskDlg({ initial: { priority: "mittel", status: "offen", start_date: selected } })
+        }
+        onCreateWork={() => openEvent({ kind: "arbeit", event_date: selected })}
         onCreate={(date, time) =>
-          setDlg({ initial: { kind: "termin", event_date: date, start_time: time ?? null } })
+          openEvent({ kind: "termin", event_date: date, start_time: time ?? null })
         }
       />
       {detail && (
@@ -191,24 +207,37 @@ function CalendarPage() {
             type: "select",
             options: tradeOptions(ws),
           },
+          ...((eventKind ?? dlg?.initial?.["kind"]) === "arbeit"
+            ? [
+                {
+                  name: "work_completed",
+                  label: t("workCompleted"),
+                  type: "checkbox" as const,
+                  full: true,
+                },
+              ]
+            : []),
           { name: "notes", label: tr("shared.notes"), type: "textarea" },
         ]}
+        onFieldChange={(name, value) => {
+          if (name === "kind") setEventKind(String(value));
+          return {};
+        }}
         initial={dlg?.initial}
-        extra={
-          dlg?.id ? (
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (dlg.id && confirm(tr("calendar.delete_appointment")))
-                  remove.mutate({ table: "events", id: dlg.id }, { onSuccess: () => setDlg(null) });
-              }}
-            >
-              <Trash2 data-icon="inline-start" />
-              {tr("shared.delete")}
-            </Button>
-          ) : undefined
+        deleteAction={
+          eventId && eventDeletion
+            ? {
+                confirmation: eventDeletion.confirmation,
+                onDelete: () =>
+                  remove.mutateAsync({
+                    table: "events",
+                    id: eventId,
+                    ...(eventDeletion.dependencyConsent
+                      ? { dependencyConsent: eventDeletion.dependencyConsent }
+                      : {}),
+                  }),
+              }
+            : undefined
         }
         onSubmit={(v) => {
           const rawErr = rangeError(v as { event_date: string });

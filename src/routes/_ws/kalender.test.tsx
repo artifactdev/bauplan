@@ -69,7 +69,7 @@ vi.mock("@/hooks/use-workspace", () => ({
   useMutations: () => ({
     update: { mutateAsync: mocks.update },
     create: { mutateAsync: mocks.create },
-    remove: { mutate: mocks.remove },
+    remove: { mutate: mocks.remove, mutateAsync: mocks.remove },
   }),
 }));
 vi.mock("@/hooks/use-task-assignees", () => ({
@@ -153,16 +153,13 @@ describe("calendar source dialogs", () => {
   });
   it("deletes an appointment from its modal after confirmation and closes on success", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    mocks.remove.mockImplementation((_values, options) => options?.onSuccess());
+    mocks.remove.mockResolvedValue({ ok: true });
     renderCalendar();
     fireEvent.click(screen.getByRole("button", { name: /Site visit/ }));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(window.confirm).toHaveBeenCalled();
-    expect(mocks.remove).toHaveBeenCalledWith(
-      { table: "events", id: "same-id" },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
+    expect(mocks.remove).toHaveBeenCalledWith({ table: "events", id: "same-id" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 

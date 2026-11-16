@@ -19,7 +19,7 @@ mkdirSync(env.UPLOADS_DIR, { recursive: true });
 
 const seed = spawnSync(
   process.execPath,
-  ["node_modules/tsx/dist/cli.mjs", "scripts/demo-seed.mjs"],
+  ["scripts/demo-seed.mjs"],
   {
     stdio: "inherit",
     env,

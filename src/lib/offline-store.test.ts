@@ -36,6 +36,43 @@ const emptyWorkspace: Workspace = {
 };
 
 describe("account-scoped offline storage", () => {
+  it("removes only matching work prerequisites from the snapshot without mutating the original", () => {
+    const dependencies = JSON.stringify([
+      { source: "event", id: "work", lag_days: 2 },
+      { source: "task", id: "work", lag_days: 0 },
+    ]);
+    const task = {
+      id: "successor",
+      title: "Close walls",
+      status: "offen" as const,
+      priority: "mittel" as const,
+      assignee_id: null,
+      trade_id: null,
+      phase: null,
+      due_date: null,
+      cost_item_id: null,
+      document_id: null,
+      notes: null,
+      dependencies,
+    };
+    const deletion: OfflineChange = {
+      id: "delete-work",
+      userId: "dependency-account",
+      sequence: 0,
+      table: "events",
+      action: "delete",
+      rowId: "work",
+      base: null,
+      row: null,
+      dependencyConsent: [{ id: task.id, dependencies }],
+    };
+    const snapshot = { ...emptyWorkspace, tasks: [task] };
+    const next = applyChange(snapshot, deletion);
+    expect(JSON.parse(next.tasks[0]!.dependencies!)).toEqual([
+      { source: "task", id: "work", lag_days: 0 },
+    ]);
+    expect(snapshot.tasks[0]!.dependencies).toBe(dependencies);
+  });
   it("keeps snapshots and queued data separate, and clears only the signed-out account", async () => {
     await createVersionOneDatabase();
     setOfflineAccount({ id: "account-a", email: "a@example.test", name: "A", role: "member" });

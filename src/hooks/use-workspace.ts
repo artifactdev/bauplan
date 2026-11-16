@@ -36,6 +36,13 @@ import {
 } from "@/lib/schema";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 import { validateTaskDates } from "@/lib/tasks";
+import i18n from "@/i18n";
+import {
+  incomingDependencies,
+  sameConsent,
+  validateDependencyGraph,
+  type DependencyConsent,
+} from "@/lib/task-dependencies";
 import { setActiveProjectId, useActiveProjectId } from "./use-project-selection";
 
 const EMPTY: Workspace = {
@@ -183,6 +190,7 @@ export function useMutations() {
       const next = project
         ? { ...EMPTY, projects: [...current.projects, project] }
         : applyChange(current, change);
+      if (v.table === "tasks") validateDependencyGraph(next.tasks, next.events);
       await persistChange(account.id, next, change, snapshotProjectId);
       if (project) {
         qc.setQueryData<Project[]>(["projects", account.id], next.projects);
@@ -238,6 +246,8 @@ export function useMutations() {
         syncGeneration: account.syncGeneration,
       };
       const next = applyChange(current, change);
+      if (v.table === "tasks" || v.table === "events")
+        validateDependencyGraph(next.tasks, next.events);
       await persistChange(account.id, next, change, activeProjectId ?? v.id);
       qc.setQueryData(key, next);
       return { ok: true, queued: true };
@@ -252,7 +262,11 @@ export function useMutations() {
 
   const remove = useMutation({
     networkMode: "always",
-    mutationFn: async (v: { table: TableName; id: string }) => {
+    mutationFn: async (v: {
+      table: TableName;
+      id: string;
+      dependencyConsent?: DependencyConsent;
+    }) => {
       if (v.table !== "projects" && !activeProjectId)
         throw new Error(tr("offline.no_active_project"));
       if (navigator.onLine)
@@ -265,6 +279,17 @@ export function useMutations() {
       const account = requireAccount(userId);
       const current = await readCachedWorkspace(qc, key, account.id);
       const base = findRow(current, v.table, v.id);
+      if (v.table === "tasks" || v.table === "events") {
+        const incoming = incomingDependencies(current.tasks, {
+          source: v.table === "tasks" ? "task" : "event",
+          id: v.id,
+        });
+        if (
+          (incoming.length || v.dependencyConsent !== undefined) &&
+          !sameConsent(incoming, v.dependencyConsent)
+        )
+          throw new Error("dependencies.changed");
+      }
       const change: OfflineChange = {
         id: crypto.randomUUID(),
         userId: account.id,
@@ -276,6 +301,7 @@ export function useMutations() {
         base,
         row: null,
         syncGeneration: account.syncGeneration,
+        dependencyConsent: v.dependencyConsent,
       };
       const next = applyChange(current, change);
       await persistChange(account.id, next, change, activeProjectId ?? v.id);
@@ -447,6 +473,7 @@ export function useOfflineSync(userId: string) {
                 row: change.row,
                 projectId: change.projectId ?? null,
                 syncGeneration: change.syncGeneration ?? null,
+                dependencyConsent: change.dependencyConsent,
               },
             ],
           },
@@ -521,6 +548,7 @@ export function useOfflineSync(userId: string) {
                 row: change.row,
                 projectId: change.projectId ?? null,
                 syncGeneration: change.syncGeneration ?? null,
+                dependencyConsent: change.dependencyConsent,
               },
             ],
           },
@@ -576,6 +604,29 @@ export function useOfflineSync(userId: string) {
       conflict.projectId ?? (conflict.table === "projects" ? conflict.rowId : activeProjectId);
     if (!snapshotProjectId) throw new Error(tr("offline.no_active_project"));
     if (keepLocal) {
+      let dependencyConsent = conflict.dependencyConsent;
+      if (
+        conflict.action === "delete" &&
+        (conflict.table === "tasks" || conflict.table === "events")
+      ) {
+        const workspace = await getWorkspace({ data: { projectId: snapshotProjectId } });
+        dependencyConsent = incomingDependencies(workspace.tasks, {
+          source: conflict.table === "tasks" ? "task" : "event",
+          id: conflict.rowId,
+        });
+        if (
+          dependencyConsent.length &&
+          !confirm(
+            i18n.t("deleteLinks", {
+              ns: "construction",
+              names: dependencyConsent
+                .map((link) => workspace.tasks.find((task) => task.id === link.id)?.title)
+                .join(", "),
+            }),
+          )
+        )
+          return;
+      }
       const { conflict: _conflict, ...rebased } = conflict;
       if (conflict.action === "delete" && conflict.conflict === null) {
         await store.removeChange(conflict.id);
@@ -590,6 +641,7 @@ export function useOfflineSync(userId: string) {
           ...rebased,
           action,
           base: conflict.conflict ?? null,
+          dependencyConsent,
         });
       }
     } else {
