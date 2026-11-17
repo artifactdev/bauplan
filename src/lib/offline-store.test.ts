@@ -38,6 +38,70 @@ const emptyWorkspace: Workspace = {
 };
 
 describe("account-scoped offline storage", () => {
+  it("cleans independently linked subtasks after checklist edits and task deletion offline", () => {
+    const task = {
+      id: "parent",
+      title: "Installation",
+      status: "offen" as const,
+      priority: "mittel" as const,
+      assignee_id: null,
+      trade_id: null,
+      phase: null,
+      due_date: null,
+      notes: null,
+      cost_item_id: null,
+      document_id: null,
+      checklist: JSON.stringify([
+        { id: "remove", title: "Remove", done: true },
+        { id: "keep", title: "Keep", done: false },
+      ]),
+    };
+    const snapshot: Workspace = {
+      ...emptyWorkspace,
+      tasks: [task],
+      diary_entries: [
+        {
+          id: "report",
+          title: "Work",
+          entry_date: "2026-11-17",
+          work_done: null,
+          progress: null,
+          issues: null,
+          weather_snapshot: null,
+          task_ids: null,
+          event_ids: null,
+          trade_ids: null,
+          subtask_links: JSON.stringify([
+            { task_id: "parent", subtask_id: "remove" },
+            { task_id: "parent", subtask_id: "keep" },
+          ]),
+        },
+      ],
+    };
+    const edit: OfflineChange = {
+      id: "edit",
+      userId: "account",
+      sequence: 0,
+      table: "tasks",
+      action: "update",
+      rowId: "parent",
+      base: task,
+      row: { ...task, checklist: JSON.stringify([{ id: "keep", title: "Keep", done: false }]) },
+    };
+    const next = applyChange(snapshot, edit);
+    expect(JSON.parse(next.diary_entries[0]!.subtask_links!)).toEqual([
+      { task_id: "parent", subtask_id: "keep" },
+    ]);
+    expect(JSON.parse(snapshot.diary_entries[0]!.subtask_links!)).toHaveLength(2);
+    expect(
+      applyChange(next, {
+        ...edit,
+        id: "delete",
+        action: "delete",
+        row: null,
+      }).diary_entries[0]!.subtask_links,
+    ).toBe("[]");
+  });
   it("cleans financial diary links offline without removing same-ID links from other categories", () => {
     const snapshot: Workspace = {
       ...emptyWorkspace,

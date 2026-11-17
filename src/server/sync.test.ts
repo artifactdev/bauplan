@@ -254,7 +254,78 @@ describe("offline row synchronization", () => {
     );
     expect(updated).toMatchObject({ offer_ids: "[]", payment_ids: "[]" });
   });
-  it("accepts queued diary edits from before financial link columns existed", async () => {
+  it("validates paired subtask references and removes deleted subtasks without affecting retained links", async () => {
+    const checklist = JSON.stringify([
+      { id: "shared", title: "Measure room", done: false },
+      { id: "keep", title: "Photograph routes", done: false },
+    ]);
+    for (const suffix of ["a", "b"]) {
+      await repo.insert("projects", { id: `subtasks-${suffix}`, name: suffix });
+      await repo.insert(
+        "tasks",
+        {
+          id: `subtask-parent-${suffix}`,
+          title: "Open parent",
+          status: "offen",
+          checklist,
+        },
+        undefined,
+        `subtasks-${suffix}`,
+      );
+    }
+    const links = [
+      { task_id: "subtask-parent-a", subtask_id: "shared" },
+      { task_id: "subtask-parent-a", subtask_id: "keep" },
+    ];
+    await repo.insert(
+      "diary_entries",
+      {
+        id: "subtask-report",
+        title: "Work report",
+        entry_date: "2026-11-17",
+        subtask_links: JSON.stringify(links),
+      },
+      undefined,
+      "subtasks-a",
+    );
+    for (const [link, error] of [
+      [
+        { task_id: "subtask-parent-b", subtask_id: "shared" },
+        "projects.related_record_not_in_project",
+      ],
+      [{ task_id: "subtask-parent-a", subtask_id: "missing" }, "diary.invalid_links"],
+    ] as const) {
+      await expect(
+        repo.update(
+          "diary_entries",
+          "subtask-report",
+          {
+            subtask_links: JSON.stringify([link]),
+          },
+          undefined,
+          "subtasks-a",
+        ),
+      ).rejects.toThrow(error);
+    }
+    await repo.update(
+      "tasks",
+      "subtask-parent-a",
+      {
+        checklist: JSON.stringify([{ id: "keep", title: "Photograph routes", done: true }]),
+      },
+      undefined,
+      "subtasks-a",
+    );
+    let workspace = await repo.getAll("subtasks-a");
+    expect(JSON.parse(workspace.diary_entries[0]!.subtask_links!)).toEqual([links[1]]);
+    expect(JSON.parse(workspace.tasks[0]!.checklist!)[0].completed_on).toMatch(
+      /^\d{4}-\d{2}-\d{2}$/,
+    );
+    await repo.remove("tasks", "subtask-parent-a", "subtasks-a");
+    workspace = await repo.getAll("subtasks-a");
+    expect(workspace.diary_entries[0]!.subtask_links).toBe("[]");
+  });
+  it("accepts queued diary edits from before optional diary link columns existed", async () => {
     await repo.insert("projects", { id: "legacy-diary-project", name: "Legacy diary" });
     await repo.insert(
       "diary_entries",
@@ -269,6 +340,7 @@ describe("offline row synchronization", () => {
     const base = { ...(await repo.getAll("legacy-diary-project")).diary_entries[0]! };
     delete base.offer_ids;
     delete base.payment_ids;
+    delete base.subtask_links;
     const result = await repo.applySyncChange(
       "account-1",
       {

@@ -59,6 +59,67 @@ describe("task completion history", () => {
 });
 
 describe("task checklists", () => {
+  it("dates individual completions, preserves their offline day and clears dates when reopened", () => {
+    const now = new Date("2026-11-17T10:00:00Z");
+    const previous = {
+      status: "offen",
+      checklist: JSON.stringify([{ id: "step", title: "Measure room", done: false }]),
+    };
+    const patch = {
+      checklist: JSON.stringify([
+        {
+          id: "step",
+          title: "Measure room",
+          done: true,
+          completed_at: "2026-11-16T23:30:00Z",
+          completed_on: "2026-11-17",
+        },
+      ]),
+    };
+    const completed = taskCompletionPatch(patch, previous, now);
+    expect(parseTaskChecklist(completed["checklist"])[0]).toMatchObject({
+      done: true,
+      completed_at: "2026-11-16T23:30:00Z",
+      completed_on: "2026-11-17",
+    });
+    expect(
+      taskCompletionPatch(patch, { ...previous, ...completed }, new Date("2026-12-01")),
+    ).toEqual(completed);
+    const reopened = taskCompletionPatch(
+      { checklist: previous.checklist },
+      { ...previous, ...completed },
+      now,
+    );
+    expect(parseTaskChecklist(reopened["checklist"])[0]).toMatchObject({
+      done: false,
+      completed_at: null,
+      completed_on: null,
+    });
+    const again = taskCompletionPatch(
+      { checklist: JSON.stringify([{ id: "step", title: "Measure room", done: true }]) },
+      { ...previous, ...reopened },
+      now,
+    );
+    expect(parseTaskChecklist(again["checklist"])[0]?.completed_at).toBe(now.toISOString());
+  });
+  it("does not backdate legacy completed subtasks when editing their parent or importing them", () => {
+    const checklist = JSON.stringify([{ id: "old", title: "Old completion", done: true }]);
+    for (const previous of [undefined, { checklist }]) {
+      const patch = taskCompletionPatch({ checklist }, previous, new Date(), true);
+      expect(parseTaskChecklist(patch["checklist"])[0]).toMatchObject({
+        done: true,
+        completed_at: null,
+        completed_on: null,
+      });
+    }
+    expect(() =>
+      parseTaskChecklist(
+        JSON.stringify([
+          { id: "bad", title: "Invalid day", done: true, completed_on: "2026-02-30" },
+        ]),
+      ),
+    ).toThrow("task-checklist.invalid");
+  });
   it("supports older tasks with no checklist and normalizes new lists", () => {
     for (const value of [undefined, null, ""]) expect(parseTaskChecklist(value)).toEqual([]);
     const checklist = JSON.stringify([{ id: "one", title: "  Measure room  ", done: false }]);

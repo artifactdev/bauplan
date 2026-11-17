@@ -3,7 +3,7 @@ import fontkit from "@pdf-lib/fontkit";
 import i18n from "@/i18n";
 import { getFileUrl } from "./data.functions";
 import { getOfflineAccount, listUploads } from "./offline-store";
-import { diaryConditionKey, parseDiaryIds, parseDiaryWeather } from "./diary";
+import { diaryConditionKey, linkedDiarySubtasks, parseDiaryIds, parseDiaryWeather } from "./diary";
 import type { DiaryEntry, DiaryMedia, Project, Workspace } from "./schema";
 
 declare const __PDFJS_ASSET_BASE__: string;
@@ -186,6 +186,12 @@ export async function createDiaryPdf(input: PdfInput) {
       input.workspace.tasks
         .filter((task) => taskIds.has(task.id))
         .map((task) => `• ${task.title}`)
+        .join("\n"),
+    );
+    section(
+      t("diary.subtasks"),
+      linkedDiarySubtasks(entry, input.workspace.tasks)
+        .map((item) => `• ${item.taskTitle}: ${item.title}`)
         .join("\n"),
     );
     section(

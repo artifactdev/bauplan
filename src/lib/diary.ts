@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_DIARY_MEDIA_BYTES } from "./limits";
 import { normalizeLegacyExpense } from "./expenses";
+import { parseTaskChecklist } from "./tasks";
 import type { DiaryEntry, Task, Workspace } from "./schema";
 
 export const DIARY_MEDIA_MIME_TYPES = new Set([
@@ -25,7 +26,79 @@ export const DIARY_LINK_TABLES = {
   offer_ids: "offers",
   payment_ids: "expenses",
 } as const;
-export type DiarySuggestions = { task_ids: string[]; offer_ids: string[]; payment_ids: string[] };
+const subtaskLinkSchema = z.object({
+  task_id: z.string().min(1).max(200),
+  subtask_id: z.string().min(1).max(200),
+});
+export type DiarySubtaskLink = z.infer<typeof subtaskLinkSchema>;
+export type DiarySuggestions = {
+  task_ids: string[];
+  subtask_links: DiarySubtaskLink[];
+  offer_ids: string[];
+  payment_ids: string[];
+};
+
+export function diarySubtaskKey(link: DiarySubtaskLink) {
+  return JSON.stringify([link.task_id, link.subtask_id]);
+}
+
+export function parseDiarySubtaskLinks(value: unknown): DiarySubtaskLink[] {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      throw new Error("diary.invalid_links");
+    }
+  }
+  if (Array.isArray(parsed) && parsed.length > MAX_DIARY_LINKS)
+    throw new Error("diary.too_many_links");
+  const result = z
+    .array(subtaskLinkSchema)
+    .refine((links) => new Set(links.map(diarySubtaskKey)).size === links.length)
+    .safeParse(parsed ?? []);
+  if (!result.success) throw new Error("diary.invalid_links");
+  return result.data;
+}
+
+export function diarySubtasks(tasks: Task[]) {
+  return tasks.flatMap((task) =>
+    parseTaskChecklist(task.checklist).map((item) => {
+      const link = { task_id: task.id, subtask_id: item.id };
+      return {
+        ...item,
+        id: diarySubtaskKey(link),
+        link,
+        taskTitle: task.title,
+        tradeId: task.trade_id,
+      };
+    }),
+  );
+}
+
+export function linkedDiarySubtasks(entry: DiaryEntry, tasks: Task[]) {
+  const links = parseDiarySubtaskLinks(entry.subtask_links);
+  if (!links.length) return [];
+  const keys = new Set(links.map(diarySubtaskKey));
+  const parents = new Set(links.map((link) => link.task_id));
+  return diarySubtasks(tasks.filter((task) => parents.has(task.id))).filter((item) =>
+    keys.has(item.id),
+  );
+}
+
+export function withoutDiarySubtasks<T extends { subtask_links?: unknown }>(
+  entry: T,
+  taskId: string,
+  remainingIds: ReadonlySet<string> = new Set(),
+): T {
+  const links = parseDiarySubtaskLinks(entry.subtask_links);
+  const retained = links.filter(
+    (link) => link.task_id !== taskId || remainingIds.has(link.subtask_id),
+  );
+  return retained.length === links.length
+    ? entry
+    : { ...entry, subtask_links: JSON.stringify(retained) };
+}
 
 export const diaryWeatherLocationSchema = z.object({
   latitude: z.number().finite().min(-90).max(90),
@@ -116,6 +189,7 @@ export function validateDiaryEntry(row: Record<string, unknown>) {
   }
 
   for (const column of Object.keys(DIARY_LINK_TABLES)) parseDiaryIds(row[column]);
+  parseDiarySubtaskLinks(row["subtask_links"]);
   const weather = parseDiaryWeather(row["weather_snapshot"]);
   if (weather && weather.date !== date) throw new Error("diary.invalid_weather");
 }
@@ -130,6 +204,9 @@ export function diaryDaySuggestions(
 ): DiarySuggestions {
   return {
     task_ids: completedDiaryTasks(ws.tasks, date).map((task) => task.id),
+    subtask_links: diarySubtasks(ws.tasks)
+      .filter((item) => item.done && item.completed_on === date)
+      .map((item) => item.link),
     offer_ids: ws.offers.filter((offer) => offer.offer_date === date).map((offer) => offer.id),
     payment_ids: ws.expenses
       .filter(
@@ -140,8 +217,18 @@ export function diaryDaySuggestions(
   };
 }
 
-export function refreshDiarySuggestions(selected: string[], previous: string[], next: string[]) {
-  return [...new Set([...selected.filter((id) => !previous.includes(id)), ...next])];
+export function refreshDiarySuggestions<T extends string | DiarySubtaskLink>(
+  selected: T[],
+  previous: T[],
+  next: T[],
+) {
+  const key = (item: T) => (typeof item === "string" ? item : diarySubtaskKey(item));
+  const old = new Set(previous.map(key));
+  return [
+    ...new Map(
+      [...selected.filter((item) => !old.has(key(item))), ...next].map((item) => [key(item), item]),
+    ).values(),
+  ];
 }
 
 export type DiaryFilters = { search: string; from: string; to: string; tradeId: string };
@@ -185,6 +272,7 @@ export function diaryEntryTrades(
   return new Set([
     ...parseDiaryIds(entry.trade_ids),
     ...ws.tasks.flatMap((task) => (taskIds.has(task.id) && task.trade_id ? [task.trade_id] : [])),
+    ...linkedDiarySubtasks(entry, ws.tasks).flatMap((item) => (item.tradeId ? [item.tradeId] : [])),
     ...ws.events.flatMap((event) =>
       eventIds.has(event.id) && event.trade_id ? [event.trade_id] : [],
     ),
@@ -222,6 +310,7 @@ export function filterDiaryEntries(
         entry.progress,
         entry.issues,
         ...ws.tasks.filter((task) => tasks.has(task.id)).map((task) => task.title),
+        ...linkedDiarySubtasks(entry, ws.tasks).flatMap((item) => [item.title, item.taskTitle]),
         ...ws.events.filter((event) => events.has(event.id)).map((event) => event.title),
         ...ws.offers
           .filter((offer) => offers.has(offer.id))

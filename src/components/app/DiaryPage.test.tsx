@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   offers: [] as Offer[],
   expenses: [] as Expense[],
   pdf: vi.fn(),
+  gallery: vi.fn(),
 }));
 vi.mock("@/hooks/use-workspace", () => ({
   useWorkspace: () => ({
@@ -43,7 +44,15 @@ vi.mock("@/lib/data.functions", () => ({ getDiaryWeather: vi.fn() }));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
-vi.mock("@/components/app/doc-open", () => ({ useFileUrl: () => null }));
+vi.mock("@/components/app/doc-open", () => ({
+  useFileUrl: (path: string | null) => (path ? `blob:${path}` : null),
+}));
+vi.mock("./ImageGallery", () => ({
+  ImageGallery: (props: unknown) => {
+    mocks.gallery(props);
+    return null;
+  },
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/diary-pdf", () => ({ downloadDiaryPdf: mocks.pdf }));
 
@@ -164,6 +173,102 @@ async function continueToMedia() {
 }
 
 describe("diary entry wizard", () => {
+  it("preselects subtasks of open parents by their own day and preserves manually selected legacy items", async () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const today = now.toISOString().slice(0, 10);
+    mocks.tasks = [
+      {
+        ...task("Open parent", null),
+        checklist: JSON.stringify([
+          { id: "today", title: "Routes measured", done: true, completed_on: today },
+          { id: "other", title: "Earlier work", done: true, completed_on: "2020-01-01" },
+          { id: "legacy", title: "Undated work", done: true },
+        ]),
+      },
+    ];
+    render(<DiaryPage />);
+    openReport();
+    fireEvent.click(screen.getByText("Subtasks", { selector: "summary" }));
+    expect(screen.getByRole("checkbox", { name: /Open parent: Routes measured/ })).toHaveAttribute(
+      "data-state",
+      "checked",
+    );
+    const legacy = screen.getByRole("checkbox", { name: /Open parent: Undated work/ });
+    expect(legacy).toHaveAttribute("data-state", "unchecked");
+    fireEvent.click(legacy);
+    fireEvent.change(screen.getByLabelText("Date", { exact: true }), {
+      target: { value: "2020-01-01" },
+    });
+    expect(screen.getByRole("checkbox", { name: /Open parent: Routes measured/ })).toHaveAttribute(
+      "data-state",
+      "unchecked",
+    );
+    expect(screen.getByRole("checkbox", { name: /Open parent: Earlier work/ })).toHaveAttribute(
+      "data-state",
+      "checked",
+    );
+    expect(legacy).toHaveAttribute("data-state", "checked");
+    await continueToMedia();
+    const row = mocks.create.mock.calls[0]![0].row;
+    expect(row.task_ids).toEqual([]);
+    expect(row.subtask_links).toEqual([
+      { task_id: "Open parent", subtask_id: "legacy" },
+      { task_id: "Open parent", subtask_id: "other" },
+    ]);
+  });
+
+  it("opens the clicked photo in the shared gallery with only photos from the same diary entry", () => {
+    mocks.entries = [report("Existing report", "2026-11-17")];
+    mocks.media = [
+      {
+        id: "a",
+        diary_entry_id: "Existing report",
+        name: "First.jpg",
+        storage_path: "first.jpg",
+        mime_type: "image/jpeg",
+        size: 12,
+      },
+      {
+        id: "video",
+        diary_entry_id: "Existing report",
+        name: "Clip.webm",
+        storage_path: "clip.webm",
+        mime_type: "video/webm",
+        size: 12,
+      },
+      {
+        id: "b",
+        diary_entry_id: "Existing report",
+        name: "Second.jpg",
+        storage_path: "second.jpg",
+        mime_type: "image/jpeg",
+        size: 12,
+      },
+      {
+        id: "other",
+        diary_entry_id: "Another report",
+        name: "Other.jpg",
+        storage_path: "other.jpg",
+        mime_type: "image/jpeg",
+        size: 12,
+      },
+    ];
+    render(<DiaryPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Existing report" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open full-size photo: Second.jpg" }));
+    expect(mocks.gallery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "Existing report",
+        startIndex: 1,
+        open: true,
+        images: [
+          { id: "a", path: "first.jpg", name: "First.jpg" },
+          { id: "b", path: "second.jpg", name: "Second.jpg" },
+        ],
+      }),
+    );
+  });
   it("preselects dated offers and paid expenses, preserves manual links and refreshes only automatic links on date changes", async () => {
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -196,22 +301,39 @@ describe("diary entry wizard", () => {
     });
   });
 
-  it("only adds daily financial suggestions to an existing report on explicit request", async () => {
+  it("only adds daily subtask and financial suggestions to an existing report on explicit request", async () => {
     mocks.offers = [offer("Quote", "2026-11-17")];
     mocks.expenses = [payment("Payment", "2026-11-17")];
     mocks.entries = [report("Existing report", "2026-11-17")];
+    mocks.tasks = [
+      {
+        ...task("Open parent", null),
+        checklist: JSON.stringify([
+          { id: "step", title: "Measured routes", done: true, completed_on: "2026-11-17" },
+        ]),
+      },
+    ];
     render(<DiaryPage />);
     entryAction("Edit entry");
     fireEvent.click(screen.getByText("Offers", { selector: "summary" }));
     expect(screen.getByRole("checkbox", { name: /Quote/ })).not.toBeChecked();
+    fireEvent.click(screen.getByText("Subtasks", { selector: "summary" }));
+    expect(
+      screen.getByRole("checkbox", { name: /Open parent: Measured routes/ }),
+    ).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Add daily suggestions" }));
     expect(screen.getByRole("checkbox", { name: /Quote/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Open parent: Measured routes/ })).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(mocks.update).toHaveBeenCalledWith({
         table: "diary_entries",
         id: "Existing report",
-        patch: expect.objectContaining({ offer_ids: ["Quote"], payment_ids: ["Payment"] }),
+        patch: expect.objectContaining({
+          offer_ids: ["Quote"],
+          payment_ids: ["Payment"],
+          subtask_links: [{ task_id: "Open parent", subtask_id: "step" }],
+        }),
       }),
     );
   });
@@ -395,7 +517,8 @@ describe("diary entry wizard", () => {
     expect(screen.getByRole("dialog", { name: "Edit entry" })).toContainElement(
       screen.getByLabelText("Title"),
     );
-    expect(screen.getByLabelText("Date")).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Edit entry" })).toHaveFocus();
+    expect(screen.getByLabelText("Date")).not.toHaveFocus();
     expect(screen.getByLabelText("Title")).toHaveValue("Existing report");
     expect(screen.getByLabelText("Photos and videos")).toBeEnabled();
     expect(screen.queryByText("Write report")).not.toBeInTheDocument();

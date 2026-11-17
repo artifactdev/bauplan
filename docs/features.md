@@ -91,6 +91,9 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 
 - Title, trade, phase, priority, status, optional start and due dates, notes. The due date cannot be before the start.
 - **Subtasks:** use **Add subtask** on a task row to add entries directly, even when the checklist is empty or collapsed. Expanded lists and task details (including calendar task details) also support adding entries with Enter or **Add**, without opening the task editor. In the editor, the checklist appears last, after Notes, and also supports removing entries. Progress is shown independently of the parent task's status; completing the checklist does not automatically complete the task. Checklists are stored with the task and included in offline sync and backups.
+  Checking a subtask records its own completion timestamp and local day, including offline.
+  Editing a completed item preserves that day; reopening clears it. Existing checked items
+  without a recorded date remain undated rather than being backdated.
 - Task rows show a compact open/total subtask count that expands or collapses that task's directly checkable checklist. **Show subtasks** expands all checklists; turning it off collapses all and resets individual expansion choices. Neither action changes checklist completion. Unsaved subtask drafts survive collapse and changes of filter or grouping while the task page remains open.
 - **Add subtask** temporarily opens a collapsed checklist. After successful creation, a confirmation toast appears and its previous individual/global expansion state is restored. Failed saves keep the checklist and draft open without showing a success message.
 - Task groups use quiet, flat surfaces and divided rows. Each row has a completion rail and a content area. On mobile, the title uses the full content width; the lower toolbar keeps metadata on the left and groups the horizontal subtask count and Add action on the right. Long metadata wraps rather than pushing controls out of view. On desktop, those same actions sit beside the title, with metadata beneath. Rows omit status labels and dates; only high priority shows a red exclamation icon immediately after the title, with an accessible priority description. Medium and low priority have no icon. Late, incomplete tasks retain an **Overdue** marker. Full dates, status, and priority labels remain in details; overdue due dates are also explicitly marked there. Completion, title, subtask expansion, and Add retain 44-pixel touch targets; filters share available width instead of forcing horizontal overflow. Notes and linked documents appear as presence indicators; open task details for their full content.
@@ -158,6 +161,8 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   keeps the confirmation open for retry; cancelling does not change any data.
   Escape or the close button dismisses the editor; clicking the backdrop does not.
   Dismissal is blocked while saving or uploading, and focus returns to the opening action.
+  Editing initially focuses the dialog heading, not the date input, so mobile date
+  pickers and keyboards do not open automatically.
 - New entries use two steps: save the report, then optionally attach photos and videos.
   The report remains saved if the media step is closed or skipped. Returning to the report
   saves changes to the same entry before continuing; existing entries expose report and media
@@ -180,6 +185,12 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   are deliberately not backdated. Each link category allows up to 100 selections. If
   daily suggestions exceed that limit, a visible notice asks you to reduce the selection
   before saving; suggestions are never silently discarded.
+- Subtasks are independently selectable with their parent task shown for context.
+  New reports preselect subtasks completed on the report day even when their parent remains
+  open. Undated legacy completions remain manually selectable. Existing reports gain these
+  links only when explicitly selected or when adding daily suggestions. The parent task is
+  not selected implicitly. Search, inherited trade filtering and PDF include linked subtasks.
+  Removing a subtask or its parent removes the corresponding diary links, including offline.
 - New reports also preselect offers whose **offer date** matches the report date and
   paid expenses whose explicit **payment date** matches. The offer date is labelled
   “Offer dated”, not inferred as receipt time. Undated payments and unpaid expenses are
@@ -200,6 +211,10 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   in the browser using bundled fonts; no external PDF service is used.
 - Attach photos and videos up to 1 GiB per file. Media is stored separately from documents,
   streamed from local storage, and video requests support byte ranges.
+  Click a photo in a report or its editor to open the large image gallery. Previous/next
+  controls, arrow keys and swiping navigate only that report's photos, starting at the clicked
+  image; videos stay inline. Closing restores focus to the photo button. Pending local
+  photos also work offline; previously uploaded originals still need a connection.
 - The project settings allow an explicit address search to select and save weather coordinates.
   Reports can fetch daily forecast or archived weather for their date; without
   a configured location no weather request is made. Weather is saved as a snapshot in the report.

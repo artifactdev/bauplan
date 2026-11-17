@@ -62,11 +62,17 @@ While offline, the previously cached workspace can be viewed and edited. Creates
 
 Task completion records the device's actual timestamp and local calendar day before
 queueing, so synchronization on a later day does not change diary suggestions.
-Legacy completed tasks without a date remain undated. Diary PDF generation uses the
+Subtasks also retain their own completion timestamp and local day, independently of
+the parent task. Legacy completed tasks and subtasks without a date remain undated.
+Paired task/subtask diary links are queued and validated against the same project's
+checklist on replay. Removing a checklist item or its task removes its diary links
+locally and on the server. Diary PDF generation uses the
 current local workspace, including queued reports and pending photos, but its local
 font assets must have been loaded online first. Previously uploaded photos require
 a connection; unavailable or unsupported photos are marked in the PDF and reported
 after download rather than silently omitted. Videos are listed by filename.
+The diary image gallery can show and navigate queued local photos while offline;
+previously uploaded photos still require access to their originals.
 
 Diary offer/payment links are included in offline snapshots and queued edits. On
 replay, ordinary document uploads and their financial records synchronize before a

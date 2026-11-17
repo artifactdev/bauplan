@@ -240,6 +240,11 @@ const MIGRATIONS: readonly Migration[] = [
     name: "diary-financial-links",
     up() {},
   },
+  {
+    version: 19,
+    name: "diary-subtask-links",
+    up() {},
+  },
 ];
 
 function toSqlValue(value: unknown): string | number | null {

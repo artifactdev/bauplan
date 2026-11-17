@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createServer } from "vite";
 import { addTimelineDemo } from "./timeline-demo.mjs";
-import { addDiaryArchiveDemo } from "./diary-demo.mjs";
+import { addDiaryArchiveDemo, addDiarySubtaskDemo } from "./diary-demo.mjs";
 
 const root = process.cwd();
 process.env.DATA_DIR ??= path.join(root, ".demo", "data");
@@ -174,7 +174,7 @@ function materialImage(kind) {
   return canvas.toBuffer("image/png");
 }
 
-function diaryPhoto() {
+function diaryPhoto(detail = false) {
   const width = 960;
   const height = 640;
   const canvas = createCanvas(width, height);
@@ -211,7 +211,17 @@ function diaryPhoto() {
   ctx.fillRect(115, 335, 720, 4);
   ctx.fillStyle = "#4a443d";
   ctx.font = "24px sans-serif";
-  ctx.fillText("Rohinstallation · Erdgeschoss", 112, 575);
+  ctx.fillText(detail ? "Dosenpositionen · Küche" : "Rohinstallation · Erdgeschoss", 112, 575);
+  if (detail) {
+    ctx.fillStyle = "#ece6da";
+    ctx.fillRect(165, 285, 190, 85);
+    ctx.fillStyle = "#4a443d";
+    for (const x of [190, 250, 310]) {
+      ctx.beginPath();
+      ctx.arc(x, 327, 16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   return canvas.toBuffer("image/png");
 }
 
@@ -709,15 +719,23 @@ await planningRow("tasks", {
 });
 
 await addTimelineDemo(repo, projectId);
+await addDiarySubtaskDemo(repo, projectId);
 
 const diaryWorkspace = await repo.getAll(projectId);
-const diaryEntry = diaryWorkspace.diary_entries[0];
+const diaryEntry = diaryWorkspace.diary_entries.find(
+  (entry) => entry.title === "Rohinstallation dokumentiert",
+);
 if (diaryEntry) {
   const media = [
     {
       name: "Leitungsverlauf-EG.png",
       mime: "image/png",
       bytes: diaryPhoto(),
+    },
+    {
+      name: "Dosenpositionen-Kueche.png",
+      mime: "image/png",
+      bytes: diaryPhoto(true),
     },
     {
       name: "Baustellenrundgang-Rohinstallation.webm",

@@ -1,6 +1,11 @@
 import { parseTaskChecklist } from "./tasks";
 import { parseDependencies } from "./task-dependencies";
-import { DIARY_LINK_TABLES, serializeDiaryIds, serializeDiaryWeather } from "./diary";
+import {
+  DIARY_LINK_TABLES,
+  parseDiarySubtaskLinks,
+  serializeDiaryIds,
+  serializeDiaryWeather,
+} from "./diary";
 
 // Shared data model; SQLite creates and updates these tables at startup.
 
@@ -235,6 +240,7 @@ export const TABLES = {
     "progress",
     "issues",
     "task_ids",
+    "subtask_links",
     "event_ids",
     "trade_ids",
     "offer_ids",
@@ -444,6 +450,7 @@ export type DiaryEntry = Base & {
   progress: string | null;
   issues: string | null;
   task_ids: string | null;
+  subtask_links?: string | null;
   event_ids: string | null;
   trade_ids: string | null;
   offer_ids?: string | null;
@@ -618,6 +625,8 @@ export function cleanRow(table: TableName, row: Record<string, unknown>) {
     if (table === "tasks" && col === "dependencies")
       v = v === null ? null : JSON.stringify(parseDependencies(v));
     if (table === "diary_entries" && col in DIARY_LINK_TABLES) v = serializeDiaryIds(v);
+    if (table === "diary_entries" && col === "subtask_links")
+      v = JSON.stringify(parseDiarySubtaskLinks(v));
     if (table === "diary_entries" && col === "weather_snapshot") v = serializeDiaryWeather(v);
     out[col] = v;
   }

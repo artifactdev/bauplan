@@ -1,7 +1,8 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { TableName, Workspace } from "./schema";
 import { withoutDependency, type DependencyConsent } from "./task-dependencies";
-import { DIARY_LINK_TABLES, parseDiaryIds } from "./diary";
+import { DIARY_LINK_TABLES, parseDiaryIds, withoutDiarySubtasks } from "./diary";
+import { parseTaskChecklist } from "./tasks";
 
 const DB_NAME = "bauplan-offline";
 const DB_VERSION = 2;
@@ -331,6 +332,19 @@ export function applyChange(workspace: Workspace, change: OfflineChange): Worksp
     rows.push(change.row);
   } else if (index !== -1 && change.row) {
     rows[index] = change.row;
+  }
+  if (
+    change.table === "tasks" &&
+    (change.action === "delete" || (change.row && "checklist" in change.row))
+  ) {
+    const remaining = new Set(
+      change.action === "delete"
+        ? []
+        : parseTaskChecklist(change.row?.["checklist"]).map((item) => item.id),
+    );
+    copy.diary_entries = (copy.diary_entries ?? []).map((entry) =>
+      withoutDiarySubtasks(entry, change.rowId, remaining),
+    );
   }
   return copy;
 }

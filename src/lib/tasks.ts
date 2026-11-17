@@ -2,7 +2,23 @@ import type { Task } from "./schema";
 import { z } from "zod";
 
 const checklistSchema = z
-  .array(z.object({ id: z.string().min(1), title: z.string().trim().min(1), done: z.boolean() }))
+  .array(
+    z.object({
+      id: z.string().min(1),
+      title: z.string().trim().min(1),
+      done: z.boolean(),
+      completed_at: z.string().datetime({ offset: true }).nullable().optional(),
+      completed_on: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .refine((date) => {
+          const time = Date.parse(`${date}T00:00:00Z`);
+          return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === date;
+        })
+        .nullable()
+        .optional(),
+    }),
+  )
   .refine((items) => new Set(items.map((item) => item.id)).size === items.length);
 
 export type TaskChecklistItem = z.infer<typeof checklistSchema>[number];
@@ -48,6 +64,36 @@ export function taskCompletionPatch(
   now = new Date(),
   preserveUnknown = false,
 ): Record<string, unknown> {
+  if ("checklist" in patch && patch["checklist"] != null) {
+    const previousItems = new Map(
+      parseTaskChecklist(previous?.["checklist"]).map((item) => [item.id, item]),
+    );
+    const local = new Date(now);
+    local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+    patch = {
+      ...patch,
+      checklist: JSON.stringify(
+        parseTaskChecklist(patch["checklist"]).map((item) => {
+          const before = previousItems.get(item.id);
+          if (!item.done) return { ...item, completed_at: null, completed_on: null };
+          if (before?.done)
+            return {
+              ...item,
+              completed_at: before.completed_at ?? null,
+              completed_on: before.completed_on ?? null,
+            };
+          // Legacy completed checklist items have no recoverable completion day.
+          if (!before && preserveUnknown && !item.completed_at && !item.completed_on)
+            return { ...item, completed_at: null, completed_on: null };
+          return {
+            ...item,
+            completed_at: item.completed_at ?? now.toISOString(),
+            completed_on: item.completed_on ?? local.toISOString().slice(0, 10),
+          };
+        }),
+      ),
+    };
+  }
   if (!("status" in patch) && !("completed_at" in patch) && !("completed_on" in patch))
     return patch;
   const status = patch["status"] ?? previous?.["status"];

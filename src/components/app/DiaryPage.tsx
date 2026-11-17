@@ -55,6 +55,11 @@ import { tr } from "@/i18n";
 import { getDiaryWeather } from "@/lib/data.functions";
 import {
   parseDiaryIds,
+  parseDiarySubtaskLinks,
+  diarySubtaskKey,
+  diarySubtasks,
+  linkedDiarySubtasks,
+  type DiarySubtaskLink,
   parseDiaryWeather,
   validateDiaryEntry,
   diaryDaySuggestions,
@@ -74,6 +79,7 @@ import { cn } from "@/lib/utils";
 import { eur, fmtDate } from "@/lib/format";
 import { normalizeLegacyExpense } from "@/lib/expenses";
 import { DiaryTimelineNav } from "./DiaryTimelineNav";
+import { ImageGallery } from "./ImageGallery";
 import { groupDiaryEntries, nearestDiaryEntry } from "@/lib/diary";
 
 const DIARY_BATCH_SIZE = 40;
@@ -86,12 +92,18 @@ type Draft = {
   progress: string;
   issues: string;
   task_ids: string[];
+  subtask_links: DiarySubtaskLink[];
   event_ids: string[];
   trade_ids: string[];
   offer_ids: string[];
   payment_ids: string[];
 };
-const EMPTY_AUTO_LINKS: DiarySuggestions = { task_ids: [], offer_ids: [], payment_ids: [] };
+const EMPTY_AUTO_LINKS: DiarySuggestions = {
+  task_ids: [],
+  subtask_links: [],
+  offer_ids: [],
+  payment_ids: [],
+};
 
 const localDate = () => {
   const date = new Date();
@@ -108,6 +120,7 @@ function emptyDraft(): Draft {
     progress: "",
     issues: "",
     task_ids: [],
+    subtask_links: [],
     event_ids: [],
     trade_ids: [],
     offer_ids: [],
@@ -124,6 +137,7 @@ function draftFromEntry(entry: DiaryEntry): Draft {
     progress: entry.progress ?? "",
     issues: entry.issues ?? "",
     task_ids: parseDiaryIds(entry.task_ids),
+    subtask_links: parseDiarySubtaskLinks(entry.subtask_links),
     event_ids: parseDiaryIds(entry.event_ids),
     trade_ids: parseDiaryIds(entry.trade_ids),
     offer_ids: parseDiaryIds(entry.offer_ids),
@@ -167,10 +181,12 @@ function WeatherSummary({ weather }: { weather: DiaryWeather }) {
 
 function DiaryMediaItem({
   media,
+  onOpen,
   onRemove,
   removing,
 }: {
   media: DiaryMedia;
+  onOpen: () => void;
   onRemove: () => void;
   removing: boolean;
 }) {
@@ -181,12 +197,20 @@ function DiaryMediaItem({
   return (
     <li className="min-w-0 overflow-hidden rounded-lg border">
       {src && isImage && (
-        <img
-          src={src}
-          alt={media.name}
-          className="aspect-[4/3] w-full object-cover"
-          loading="lazy"
-        />
+        <Button
+          type="button"
+          variant="ghost"
+          className="block h-auto w-full cursor-zoom-in rounded-none p-0"
+          aria-label={tr("diary.open_photo", { name: media.name })}
+          onClick={onOpen}
+        >
+          <img
+            src={src}
+            alt={media.name}
+            className="aspect-[4/3] w-full object-cover"
+            loading="lazy"
+          />
+        </Button>
       )}
       {src && isVideo && (
         <video
@@ -252,12 +276,18 @@ export function DiaryPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
+  const [gallery, setGallery] = useState<{
+    entryId: string;
+    mediaId: string;
+    title: string;
+  } | null>(null);
+  const photoTrigger = useRef<HTMLElement | null>(null);
   const [range, setRange] = useState({ scope: "", start: 0, count: DIARY_BATCH_SIZE });
   const [activeMonth, setActiveMonth] = useState("");
   const [scrollTarget, setScrollTarget] = useState<{ id: string; focus: boolean } | null>(null);
   const chronicle = useRef<HTMLDivElement>(null);
   const loadMore = useRef<HTMLDivElement>(null);
-  const editor = useRef<HTMLDivElement>(null);
+  const editorHeading = useRef<HTMLHeadingElement>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const editorTrigger = useRef<HTMLButtonElement | null>(null);
   const deleteTrigger = useRef<HTMLElement | null>(null);
@@ -271,6 +301,7 @@ export function DiaryPage() {
     setDraft(emptyDraft());
     setAutoLinks(EMPTY_AUTO_LINKS);
     setDeletion(null);
+    setGallery(null);
     setFilters(EMPTY_DIARY_FILTERS);
     setFiltersOpen(false);
     setExpandedIds([]);
@@ -278,7 +309,7 @@ export function DiaryPage() {
 
   useEffect(() => {
     if (formOpen && wizardStep) stepHeading.current?.focus();
-    else if (formOpen) editor.current?.querySelector<HTMLInputElement>("input")?.focus();
+    else if (formOpen) editorHeading.current?.focus();
   }, [formOpen, wizardStep, editingId]);
 
   const entries = useMemo(() => filterDiaryEntries(ws, filters), [ws, filters]);
@@ -313,11 +344,31 @@ export function DiaryPage() {
       new Date(`${month}-01T00:00:00`),
     );
   const suggestions = diaryDaySuggestions(ws, draft.entry_date);
+  const subtasks = diarySubtasks(ws.tasks);
   const suggestionCount =
-    suggestions.task_ids.length + suggestions.offer_ids.length + suggestions.payment_ids.length;
-  const tooManyLinks = Object.keys(DIARY_LINK_TABLES).some(
-    (key) => draft[key as keyof typeof DIARY_LINK_TABLES].length > MAX_DIARY_LINKS,
+    suggestions.task_ids.length +
+    suggestions.subtask_links.length +
+    suggestions.offer_ids.length +
+    suggestions.payment_ids.length;
+  const tooManyLinks =
+    draft.subtask_links.length > MAX_DIARY_LINKS ||
+    Object.keys(DIARY_LINK_TABLES).some(
+      (key) => draft[key as keyof typeof DIARY_LINK_TABLES].length > MAX_DIARY_LINKS,
+    );
+  const subtaskLabel = (item: (typeof subtasks)[number]) =>
+    tr("diary.subtask_label", { task: item.taskTitle, title: item.title });
+  const galleryImages = ws.diary_media.flatMap((media) =>
+    gallery?.entryId === media.diary_entry_id &&
+    media.mime_type?.startsWith("image/") &&
+    media.storage_path
+      ? [{ id: media.id, path: media.storage_path, name: media.name }]
+      : [],
   );
+  const openPhoto = (media: DiaryMedia, title: string) => {
+    photoTrigger.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setGallery({ entryId: media.diary_entry_id, mediaId: media.id, title });
+  };
 
   const jumpToEntry = (entry: DiaryEntry, focus = false) => {
     const index = entries.findIndex((item) => item.id === entry.id);
@@ -509,6 +560,13 @@ export function DiaryPage() {
       task_ids: !editingId
         ? refreshDiarySuggestions(current.task_ids, autoLinks.task_ids, suggested.task_ids)
         : current.task_ids,
+      subtask_links: !editingId
+        ? refreshDiarySuggestions(
+            current.subtask_links,
+            autoLinks.subtask_links,
+            suggested.subtask_links,
+          )
+        : current.subtask_links,
       offer_ids: !editingId
         ? refreshDiarySuggestions(current.offer_ids, autoLinks.offer_ids, suggested.offer_ids)
         : current.offer_ids,
@@ -597,7 +655,6 @@ export function DiaryPage() {
             }}
           >
             <DialogContent
-              ref={editor}
               className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
               closeLabel={tr("diary.close_form")}
               closeDisabled={busy}
@@ -605,7 +662,7 @@ export function DiaryPage() {
               onOpenAutoFocus={(event) => {
                 event.preventDefault();
                 if (wizardStep) stepHeading.current?.focus();
-                else editor.current?.querySelector<HTMLInputElement>("input")?.focus();
+                else editorHeading.current?.focus();
               }}
               onCloseAutoFocus={(event) => {
                 event.preventDefault();
@@ -613,7 +670,7 @@ export function DiaryPage() {
               }}
             >
               <DialogHeader className="shrink-0 border-b px-5 py-5 pr-12 text-left">
-                <DialogTitle>
+                <DialogTitle ref={editorHeading} tabIndex={-1}>
                   {wizardStep ? tr("diary.new_entry") : tr("diary.edit_entry")}
                 </DialogTitle>
                 <DialogDescription>{tr("diary.editor_help")}</DialogDescription>
@@ -714,6 +771,7 @@ export function DiaryPage() {
                           <p>
                             {tr("diary.day_suggestions", {
                               tasks: suggestions.task_ids.length,
+                              subtasks: suggestions.subtask_links.length,
                               offers: suggestions.offer_ids.length,
                               payments: suggestions.payment_ids.length,
                             })}
@@ -733,6 +791,11 @@ export function DiaryPage() {
                                   task_ids: [
                                     ...new Set([...current.task_ids, ...suggestions.task_ids]),
                                   ],
+                                  subtask_links: refreshDiarySuggestions(
+                                    current.subtask_links,
+                                    [],
+                                    suggestions.subtask_links,
+                                  ),
                                   offer_ids: [
                                     ...new Set([...current.offer_ids, ...suggestions.offer_ids]),
                                   ],
@@ -766,6 +829,27 @@ export function DiaryPage() {
                             suggested: suggestions.task_ids.includes(item.id),
                           }))}
                           onChange={(values) => changeIds("task_ids", values)}
+                        />
+                        <RecordPicker
+                          id="diary-subtask-links"
+                          label={tr("diary.subtasks")}
+                          description={tr("diary.subtasks_help")}
+                          values={draft.subtask_links.map(diarySubtaskKey)}
+                          rows={subtasks.map((item) => ({
+                            id: item.id,
+                            label: subtaskLabel(item),
+                            suggested: suggestions.subtask_links.some(
+                              (link) => diarySubtaskKey(link) === item.id,
+                            ),
+                          }))}
+                          onChange={(values) =>
+                            setDraft((current) => ({
+                              ...current,
+                              subtask_links: subtasks
+                                .filter((item) => values.includes(item.id))
+                                .map((item) => item.link),
+                            }))
+                          }
                         />
                         <RecordPicker
                           id="diary-offer-links"
@@ -884,6 +968,7 @@ export function DiaryPage() {
                             <DiaryMediaItem
                               key={media.id}
                               media={media}
+                              onOpen={() => openPhoto(media, draft.title)}
                               removing={busy}
                               onRemove={() => requestMediaDelete(media)}
                             />
@@ -938,8 +1023,7 @@ export function DiaryPage() {
               onCloseAutoFocus={(event) => {
                 event.preventDefault();
                 if (deleteTrigger.current?.isConnected) deleteTrigger.current.focus();
-                else if (formOpen)
-                  editor.current?.querySelector<HTMLInputElement>("input")?.focus();
+                else if (formOpen) editorHeading.current?.focus();
                 else document.getElementById("diary-new-entry")?.focus();
               }}
             >
@@ -1133,6 +1217,7 @@ export function DiaryPage() {
                     {reports.map((entry) => {
                       const weather = parseDiaryWeather(entry.weather_snapshot);
                       const taskIds = parseDiaryIds(entry.task_ids);
+                      const selectedSubtasks = linkedDiarySubtasks(entry, ws.tasks);
                       const eventIds = parseDiaryIds(entry.event_ids);
                       const tradeIds = parseDiaryIds(entry.trade_ids);
                       const offerIds = parseDiaryIds(entry.offer_ids);
@@ -1338,6 +1423,7 @@ export function DiaryPage() {
                                   </section>
                                 )}
                                 {(taskIds.length > 0 ||
+                                  selectedSubtasks.length > 0 ||
                                   eventIds.length > 0 ||
                                   tradeIds.length > 0) && (
                                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -1349,6 +1435,14 @@ export function DiaryPage() {
                                         </span>
                                       ) : null;
                                     })}
+                                    {selectedSubtasks.map((item) => (
+                                      <span
+                                        key={item.id}
+                                        className="rounded-full bg-muted px-2 py-1"
+                                      >
+                                        {subtaskLabel(item)}
+                                      </span>
+                                    ))}
                                     {eventIds.map((id) => {
                                       const event = ws.events.find((item) => item.id === id);
                                       return event ? (
@@ -1373,6 +1467,7 @@ export function DiaryPage() {
                                       <DiaryMediaItem
                                         key={item.id}
                                         media={item}
+                                        onOpen={() => openPhoto(item, entry.title)}
                                         removing={busy}
                                         onRemove={() => requestMediaDelete(item)}
                                       />
@@ -1434,6 +1529,25 @@ export function DiaryPage() {
           />
         )}
       </div>
+      {gallery && galleryImages.length > 0 && (
+        <ImageGallery
+          key={gallery.mediaId}
+          images={galleryImages}
+          title={gallery.title}
+          startIndex={Math.max(
+            0,
+            galleryImages.findIndex((image) => image.id === gallery.mediaId),
+          )}
+          open
+          onOpenChange={(open) => {
+            if (!open) setGallery(null);
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            photoTrigger.current?.focus();
+          }}
+        />
+      )}
     </TooltipProvider>
   );
 }
@@ -1441,12 +1555,14 @@ export function DiaryPage() {
 function RecordPicker({
   id,
   label,
+  description,
   values,
   rows,
   onChange,
 }: {
   id: string;
   label: string;
+  description?: string;
   values: string[];
   rows: { id: string; label: string; suggested?: boolean }[];
   onChange: (values: string[]) => void;
@@ -1460,6 +1576,7 @@ function RecordPicker({
       <summary className="cursor-pointer rounded-sm text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {label} <span className="ml-1 text-muted-foreground">({values.length})</span>
       </summary>
+      {description && <p className="mt-2 text-xs text-muted-foreground">{description}</p>}
       {values.length >= MAX_DIARY_LINKS && (
         <p className="mt-2 text-xs text-muted-foreground">{tr("diary.too_many_links")}</p>
       )}

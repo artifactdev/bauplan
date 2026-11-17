@@ -139,6 +139,35 @@ try {
     await settle(page);
     await shot(page, "diary-details");
   }
+  if (!only.length || only.includes("diary-subtasks")) {
+    await page.goto(`${BASE_URL}/tagebuch`);
+    await settle(page);
+    await page.getByRole("button", { name: "Neuer Eintrag", exact: true }).click();
+    await page.getByLabel("Titel", { exact: true }).fill("Tagesfortschritt mit Unteraufgaben");
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Unteraufgaben/ })
+      .click();
+    await page.locator("#diary-subtask-links-search").fill("Demo: Elektro-Rohinstallation prüfen");
+    await page
+      .locator("details")
+      .filter({ has: page.locator("#diary-subtask-links-search") })
+      .evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await settle(page);
+    await shot(page, "diary-subtasks");
+    await page.getByRole("button", { name: "Formular schließen", exact: true }).click();
+  }
+  if (!only.length || only.includes("diary-photos")) {
+    await page.goto(`${BASE_URL}/tagebuch`);
+    await settle(page);
+    await page.getByRole("button", { name: "Rohinstallation dokumentiert", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Bild groß anzeigen: Dosenpositionen-Kueche.png" })
+      .click();
+    await settle(page);
+    await shot(page, "diary-photos");
+    await page.keyboard.press("Escape");
+  }
   if (!only.length || only.includes("diary-wizard")) {
     await page.goto(`${BASE_URL}/tagebuch`);
     await settle(page);

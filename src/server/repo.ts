@@ -42,7 +42,9 @@ import {
   DIARY_LINK_TABLES,
   DIARY_MEDIA_MIME_TYPES,
   parseDiaryIds,
+  parseDiarySubtaskLinks,
   validateDiaryEntry,
+  withoutDiarySubtasks,
 } from "@/lib/diary";
 import { MAX_DIARY_MEDIA_BYTES } from "@/lib/limits";
 import {
@@ -301,7 +303,39 @@ function assertProjectReferences(
         if (related?.["project_id"] !== projectId)
           throw new Error("projects.related_record_not_in_project");
       }
+      for (const link of parseDiarySubtaskLinks(row["subtask_links"])) {
+        const task = db
+          .prepare("SELECT project_id, checklist FROM tasks WHERE id = ?")
+          .get(link.task_id);
+        if (task?.["project_id"] !== projectId)
+          throw new Error("projects.related_record_not_in_project");
+        if (!parseTaskChecklist(task["checklist"]).some((item) => item.id === link.subtask_id))
+          throw new Error("diary.invalid_links");
+      }
     }
+  }
+}
+
+function pruneDiarySubtasks(
+  db: SqliteDb,
+  taskId: string,
+  remainingIds: ReadonlySet<string>,
+  projectId?: string,
+) {
+  const entries = projectId
+    ? db.prepare("SELECT id, subtask_links FROM diary_entries WHERE project_id = ?").all(projectId)
+    : db.prepare("SELECT id, subtask_links FROM diary_entries").all();
+  for (const entry of entries) {
+    const updated = withoutDiarySubtasks(
+      { subtask_links: entry["subtask_links"] },
+      taskId,
+      remainingIds,
+    );
+    if (updated.subtask_links !== entry["subtask_links"])
+      db.prepare("UPDATE diary_entries SET subtask_links = ? WHERE id = ?").run(
+        updated.subtask_links,
+        entry["id"],
+      );
   }
 }
 
@@ -621,6 +655,7 @@ export function sqliteRepo(): Repo {
                 ? {
                     offer_ids: change.base["offer_ids"] ?? null,
                     payment_ids: change.base["payment_ids"] ?? null,
+                    subtask_links: change.base["subtask_links"] ?? null,
                   }
                 : {}),
             }
@@ -1133,6 +1168,11 @@ export function sqliteRepo(): Repo {
           ...keys.map((k) => toSql(patch[k])),
           id,
         );
+        if (table === "tasks" && "checklist" in patch && previous) {
+          const remaining = new Set(parseTaskChecklist(patch["checklist"]).map((item) => item.id));
+          if (parseTaskChecklist(previous["checklist"]).some((item) => !remaining.has(item.id)))
+            pruneDiarySubtasks(d, id, remaining, projectId);
+        }
         if (table === "tasks" && actorId) {
           if (previous) queueAssignment(d, previous, { ...previous, ...patch }, actorId);
         }
@@ -1209,6 +1249,7 @@ export function sqliteRepo(): Repo {
             );
           }
         }
+        if (table === "tasks") pruneDiarySubtasks(d, id, new Set(), projectId);
         if (table === "diary_entries")
           d.prepare("DELETE FROM diary_media WHERE diary_entry_id = ?").run(id);
         d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);

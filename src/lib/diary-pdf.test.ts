@@ -80,6 +80,45 @@ async function extract(bytes: Uint8Array) {
 }
 
 describe("diary PDF reports", () => {
+  it("prints selected subtasks with their parent context even when the parent is not linked", async () => {
+    const { project, workspace, entry } = fixture();
+    workspace.tasks = [
+      {
+        id: "parent",
+        title: "Open installation",
+        status: "offen",
+        priority: "mittel",
+        assignee_id: null,
+        trade_id: null,
+        phase: null,
+        due_date: null,
+        notes: null,
+        cost_item_id: null,
+        document_id: null,
+        checklist: JSON.stringify([
+          { id: "selected", title: "Measured cable routes", done: true },
+          { id: "other", title: "Unselected work", done: false },
+        ]),
+      },
+    ];
+    const { bytes } = await createDiaryPdf({
+      project,
+      workspace,
+      entries: [
+        {
+          ...entry,
+          subtask_links: JSON.stringify([{ task_id: "parent", subtask_id: "selected" }]),
+        },
+      ],
+      language: "en",
+      fonts,
+      photo: vi.fn(),
+    });
+    const text = (await extract(bytes)).join(" ");
+    expect(text).toContain("Subtasks");
+    expect(text).toContain("Open installation: Measured cable routes");
+    expect(text).not.toContain("Unselected work");
+  });
   it("includes selected offers and payments with their business dates, suppliers and amounts", async () => {
     const { project, workspace, entry } = fixture();
     workspace.offers = [

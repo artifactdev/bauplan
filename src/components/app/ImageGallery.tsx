@@ -44,12 +44,14 @@ export function ImageGallery({
   startIndex,
   open,
   onOpenChange,
+  onCloseAutoFocus,
 }: {
   images: GalleryImage[];
   title: string;
   startIndex: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const [api, setApi] = useState<CarouselApi>();
   const [index, setIndex] = useState(startIndex);
@@ -65,7 +67,10 @@ export function ImageGallery({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[min(64rem,calc(100vw-1rem))] gap-3 p-3 sm:p-4">
+      <DialogContent
+        className="max-w-[min(64rem,calc(100vw-1rem))] gap-3 p-3 sm:p-4"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogTitle className="pr-8 text-base">{title}</DialogTitle>
         <DialogDescription className="text-xs">
           {tr("collections.image_position", { index: index + 1, count: images.length })}
