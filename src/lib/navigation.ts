@@ -12,7 +12,8 @@ const PRE_CREDIT_NAV_PATHS = [
   "/kontakte",
 ] as const;
 const PRE_ANALYSIS_NAV_PATHS = [...PRE_CREDIT_NAV_PATHS, "/kredit"] as const;
-export const NAV_PATHS = [...PRE_ANALYSIS_NAV_PATHS, "/analyse"] as const;
+const PRE_DIARY_NAV_PATHS = [...PRE_ANALYSIS_NAV_PATHS, "/analyse"] as const;
+export const NAV_PATHS = [...PRE_DIARY_NAV_PATHS, "/tagebuch"] as const;
 export const navigationSchema = z
   .object({
     order: z.array(z.enum(NAV_PATHS)).length(NAV_PATHS.length),
@@ -34,7 +35,11 @@ export const DEFAULT_NAVIGATION: NavigationPreferences = {
 };
 
 /** Navigation schemas from before a page was introduced; the missing pages are appended. */
-const LEGACY_NAVIGATION = [PRE_ANALYSIS_NAV_PATHS, PRE_CREDIT_NAV_PATHS] as const;
+const LEGACY_NAVIGATION = [
+  PRE_DIARY_NAV_PATHS,
+  PRE_ANALYSIS_NAV_PATHS,
+  PRE_CREDIT_NAV_PATHS,
+] as const;
 
 /** Adds newly introduced pages to existing, otherwise valid navigation preferences. */
 export function parseNavigation(value: unknown): NavigationPreferences {

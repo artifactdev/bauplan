@@ -12,6 +12,7 @@ import {
   syncWorkspaceChanges,
   updateRow,
   uploadDocument,
+  uploadDiaryMedia,
 } from "@/lib/data.functions";
 import {
   applyChange,
@@ -34,8 +35,9 @@ import {
   type TableName,
   type Workspace,
 } from "@/lib/schema";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
-import { validateTaskDates } from "@/lib/tasks";
+import { MAX_DIARY_MEDIA_BYTES, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
+import { DIARY_MEDIA_MIME_TYPES } from "@/lib/diary";
+import { taskCompletionPatch, validateTaskDates } from "@/lib/tasks";
 import { expenseDocumentLinks, expenseTransition, normalizeLegacyExpense } from "@/lib/expenses";
 import i18n from "@/i18n";
 import {
@@ -55,6 +57,8 @@ const EMPTY: Workspace = {
   documents: [],
   tasks: [],
   events: [],
+  diary_entries: [],
+  diary_media: [],
   expenses: [],
   ideas: [],
   idea_images: [],
@@ -150,6 +154,7 @@ export function useMutations() {
   const create = useMutation({
     networkMode: "always",
     mutationFn: async (v: { table: TableName; row: Record<string, unknown> }) => {
+      if (v.table === "tasks") v = { ...v, row: taskCompletionPatch(v.row) };
       if (v.table === "tasks") validateTaskDates(v.row);
       if (v.table !== "projects" && !activeProjectId)
         throw new Error(tr("offline.no_active_project"));
@@ -225,18 +230,25 @@ export function useMutations() {
     mutationFn: async (v: { table: TableName; id: string; patch: Record<string, unknown> }) => {
       if (v.table !== "projects" && !activeProjectId)
         throw new Error(tr("offline.no_active_project"));
-      if (navigator.onLine)
+      if (navigator.onLine) {
+        const previous = qc.getQueryData<Workspace>(key)?.tasks.find((task) => task.id === v.id);
         return updateRow({
           data: {
             ...v,
+            ...(v.table === "tasks" ? { patch: taskCompletionPatch(v.patch, previous) } : {}),
             ...(v.table === "projects" ? {} : { projectId: activeProjectId }),
           },
         });
+      }
       const account = requireAccount(userId);
       const current = await readCachedWorkspace(qc, key, account.id);
       const base = findRow(current, v.table, v.id);
       const patch =
-        v.table === "expenses" ? expenseTransition(v.patch, base, current.budget_pots) : v.patch;
+        v.table === "expenses"
+          ? expenseTransition(v.patch, base, current.budget_pots)
+          : v.table === "tasks"
+            ? taskCompletionPatch(v.patch, base)
+            : v.patch;
       const row = { ...base, ...cleanRow(v.table, patch) };
       if (v.table === "tasks") validateTaskDates(row);
       const change: OfflineChange = {
@@ -383,7 +395,79 @@ export function useMutations() {
     onError,
   });
 
-  return { create, update, remove, upload };
+  const diaryMediaUpload = useMutation({
+    networkMode: "always",
+    mutationFn: async (v: { file: File; diaryEntryId: string }) => {
+      if (!v.file.size || v.file.size > MAX_DIARY_MEDIA_BYTES)
+        throw new Error("diary.media_too_large");
+      if (!DIARY_MEDIA_MIME_TYPES.has(v.file.type.toLowerCase()))
+        throw new Error("diary.media_type_not_allowed");
+      if (!activeProjectId) throw new Error(tr("offline.no_active_project"));
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      const meta = completeRow("diary_media", {
+        id,
+        created_at: createdAt,
+        project_id: activeProjectId,
+        diary_entry_id: v.diaryEntryId,
+        name: v.file.name,
+        storage_path: `offline:${id}`,
+        mime_type: v.file.type.toLowerCase(),
+        size: v.file.size,
+      });
+      if (navigator.onLine) {
+        const form = new FormData();
+        form.append("file", v.file);
+        form.append(
+          "meta",
+          JSON.stringify({ id, diary_entry_id: v.diaryEntryId, created_at: createdAt }),
+        );
+        form.append("projectId", activeProjectId);
+        const account = getOfflineAccount();
+        if (account && account.id === userId && account.syncGeneration)
+          form.append("syncGeneration", account.syncGeneration);
+        return uploadDiaryMedia({ data: form });
+      }
+      const account = requireAccount(userId);
+      const current = await readCachedWorkspace(qc, key, account.id);
+      if (!current.diary_entries.some((entry) => entry.id === v.diaryEntryId))
+        throw new Error("diary.entry_not_found");
+      const next = applyChange(current, {
+        id,
+        userId: account.id,
+        sequence: 0,
+        table: "diary_media",
+        action: "create",
+        rowId: id,
+        projectId: activeProjectId,
+        base: null,
+        row: meta,
+        syncGeneration: account.syncGeneration,
+      });
+      try {
+        await persistUpload(account.id, next, {
+          id,
+          userId: account.id,
+          file: v.file,
+          name: v.file.name,
+          mime: v.file.type.toLowerCase(),
+          meta,
+          projectId: activeProjectId,
+          syncGeneration: account.syncGeneration,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "QuotaExceededError")
+          throw new Error("diary.offline_storage_full");
+        throw error;
+      }
+      qc.setQueryData(key, next);
+      return { id, queued: true };
+    },
+    onSuccess: done,
+    onError,
+  });
+
+  return { create, update, remove, upload, diaryMediaUpload };
 }
 
 function requireAccount(userId: string | undefined) {
@@ -426,6 +510,11 @@ function toProject(row: Record<string, unknown>): Project {
     total_budget: Number(row["total_budget"] ?? 0),
     start_date: typeof row["start_date"] === "string" ? row["start_date"] : null,
     end_date: typeof row["end_date"] === "string" ? row["end_date"] : null,
+    weather_latitude: typeof row["weather_latitude"] === "number" ? row["weather_latitude"] : null,
+    weather_longitude:
+      typeof row["weather_longitude"] === "number" ? row["weather_longitude"] : null,
+    weather_location_name:
+      typeof row["weather_location_name"] === "string" ? row["weather_location_name"] : null,
   };
 }
 
@@ -497,9 +586,91 @@ export function useOfflineSync(userId: string) {
           return;
         }
       }
-      const uploads = await store.listUploads(userId);
-      const uploadedDocuments = new Map<string, { storage_path: string; created_at: string }>();
+      const applyQueuedChanges = async (
+        changes: OfflineChange[],
+        uploadedFiles?: Map<string, { storage_path: string; created_at: string }>,
+      ) => {
+        for (const change of changes) {
+          if (!change.projectId) {
+            const projectId =
+              (typeof change.row?.["project_id"] === "string" ? change.row["project_id"] : null) ??
+              (typeof change.base?.["project_id"] === "string"
+                ? change.base["project_id"]
+                : null) ??
+              legacyProjectId;
+            if (!projectId) throw new Error(tr("offline.no_active_project"));
+            change.projectId = projectId;
+            if (change.row) change.row["project_id"] = projectId;
+            await store.saveChange(change);
+          }
+          const uploadedFile = uploadedFiles?.get(change.rowId);
+          if (
+            (change.table === "documents" ||
+              change.table === "idea_images" ||
+              change.table === "diary_media") &&
+            uploadedFile
+          ) {
+            const { conflict: _conflict, ...withoutConflict } = change;
+            const rebased = {
+              ...withoutConflict,
+              base: change.base ? { ...change.base, ...uploadedFile } : null,
+              row: change.row ? { ...change.row, ...uploadedFile } : null,
+            };
+            await store.saveChange(rebased);
+            Object.assign(change, rebased);
+          }
+          const [result] = await syncWorkspaceChanges({
+            data: {
+              changes: [
+                {
+                  id: change.id,
+                  table: change.table,
+                  action: change.action,
+                  rowId: change.rowId,
+                  base: change.base,
+                  row: change.row,
+                  projectId: change.projectId ?? null,
+                  syncGeneration: change.syncGeneration ?? null,
+                  dependencyConsent: change.dependencyConsent,
+                },
+              ],
+            },
+          });
+          if (result?.applied) await store.removeChange(change.id);
+          else {
+            await store.saveChange({ ...change, conflict: result?.current ?? null });
+            return false;
+          }
+        }
+        return true;
+      };
+      const pendingChanges = (await store.listChanges(userId)).filter(
+        (change) => change.table !== "projects" && change.conflict === undefined,
+      );
+      const diaryDependencies = pendingChanges.filter(
+        (change) =>
+          ["tasks", "events", "trades"].includes(change.table) && change.action !== "delete",
+      );
+      if (!(await applyQueuedChanges(diaryDependencies))) return;
+      const uploads = (await store.listUploads(userId)).sort(
+        (left, right) =>
+          Number(typeof left.meta["diary_entry_id"] === "string") -
+          Number(typeof right.meta["diary_entry_id"] === "string"),
+      );
+      const uploadedFiles = new Map<string, { storage_path: string; created_at: string }>();
+      let diaryRowsApplied = false;
       for (const upload of uploads) {
+        if (typeof upload.meta["diary_entry_id"] === "string" && !diaryRowsApplied) {
+          const dependencies = (await store.listChanges(userId)).filter(
+            (change) =>
+              change.table !== "projects" &&
+              change.table !== "diary_media" &&
+              change.action !== "delete" &&
+              change.conflict === undefined,
+          );
+          if (!(await applyQueuedChanges(dependencies, uploadedFiles))) return;
+          diaryRowsApplied = true;
+        }
         const projectId =
           upload.projectId ??
           (typeof upload.meta["project_id"] === "string"
@@ -512,12 +683,27 @@ export function useOfflineSync(userId: string) {
           await store.saveUpload(upload);
         }
         const form = new FormData();
-        form.append("file", new File([upload.file], upload.name, { type: upload.mime }));
-        form.append("meta", JSON.stringify(upload.meta));
-        form.append("syncGeneration", upload.syncGeneration ?? "");
+        form.append("file", upload.file, upload.name);
+        const diaryEntryId = upload.meta["diary_entry_id"];
+        if (typeof diaryEntryId === "string") {
+          form.append(
+            "meta",
+            JSON.stringify({
+              id: upload.id,
+              diary_entry_id: diaryEntryId,
+              created_at: upload.meta["created_at"],
+            }),
+          );
+        } else {
+          form.append("meta", JSON.stringify(upload.meta));
+        }
         form.append("projectId", projectId);
-        const result = await uploadDocument({ data: form });
-        uploadedDocuments.set(upload.id, {
+        if (upload.syncGeneration) form.append("syncGeneration", upload.syncGeneration);
+        const result =
+          typeof diaryEntryId === "string"
+            ? await uploadDiaryMedia({ data: form })
+            : await uploadDocument({ data: form });
+        uploadedFiles.set(upload.id, {
           storage_path: result.storage_path,
           created_at: result.created_at,
         });
@@ -528,23 +714,28 @@ export function useOfflineSync(userId: string) {
       );
       const waiting = changes.filter((change) => change.conflict === undefined);
       for (const change of waiting) {
-        if (change.table !== "projects" && !change.projectId) {
+        if (!change.projectId) {
           const projectId =
             (typeof change.row?.["project_id"] === "string" ? change.row["project_id"] : null) ??
             (typeof change.base?.["project_id"] === "string" ? change.base["project_id"] : null) ??
             legacyProjectId;
           if (!projectId) throw new Error(tr("offline.no_active_project"));
           change.projectId = projectId;
-          if (change.row) change.row.project_id = projectId;
+          if (change.row) change.row["project_id"] = projectId;
           await store.saveChange(change);
         }
-        const uploadedDocument = uploadedDocuments.get(change.rowId);
-        if ((change.table === "documents" || change.table === "idea_images") && uploadedDocument) {
+        const uploadedFile = uploadedFiles.get(change.rowId);
+        if (
+          (change.table === "documents" ||
+            change.table === "idea_images" ||
+            change.table === "diary_media") &&
+          uploadedFile
+        ) {
           const { conflict: _conflict, ...withoutConflict } = change;
           const rebased = {
             ...withoutConflict,
-            base: change.base ? { ...change.base, ...uploadedDocument } : null,
-            row: change.row ? { ...change.row, ...uploadedDocument } : null,
+            base: change.base ? { ...change.base, ...uploadedFile } : null,
+            row: change.row ? { ...change.row, ...uploadedFile } : null,
           };
           await store.saveChange(rebased);
           Object.assign(change, rebased);

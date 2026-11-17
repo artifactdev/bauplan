@@ -17,6 +17,7 @@ describe("buildDemoSeed", () => {
       "expenses",
       "tasks",
       "events",
+      "diary_entries",
       "ideas",
       "contacts",
       "budget_pots",
@@ -26,6 +27,7 @@ describe("buildDemoSeed", () => {
     ] as const)
       expect(seed[table].length, table).toBeGreaterThan(0);
 
+    expect(seed.diary_entries).toHaveLength(2);
     expect(
       JSON.stringify(seed).match(/Freiburg|Huber|Bodenwelt|Wiesner|Schneider|Albrecht/),
     ).toBeNull();

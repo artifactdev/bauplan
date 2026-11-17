@@ -117,7 +117,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
 - Validation: end not before start.
 - Day, week, month, year and agenda views, with Today/previous/next navigation, localized dates,
   colored entry types, and a year overview that opens individual days. Agenda is the mobile default;
-  desktop starts in month view.   The picker order is Agenda, Day, Week, Month, Year, Construction timeline.
+  desktop starts in month view. The picker order is Agenda, Day, Week, Month, Year, Construction timeline.
   The month fits without horizontal scrolling. Day/week geometry follows the reference:
   96 px per hour, two clickable 48 px half-hour slots, a 72 px time gutter, and a separate
   header above the scrolling hourly grid. Day has an 800 px scroll viewport and week 736 px.
@@ -146,6 +146,67 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   deadlines appear in a separate read-only calendar. Recurring series are not supported. Previously generated iCal
   subscription links remain valid, but the legacy link-management panel is no longer shown
   in Settings: [calendar integration](calendar-feed.md).
+
+## Construction diary
+
+- Dated site reports capture the work completed, progress and issues. Entries can link to tasks,
+  calendar events, trades, offers and paid expenses from the same project.
+- Create and edit reports in a responsive modal with a scrollable body and persistent
+  actions. The compact date field sits above a full-width report title, keeping the
+  report heading distinct from its date. A labelled overflow menu keeps edit/delete actions out of the report content.
+  Deleting a report or attachment always requires explicit confirmation. Failed deletion
+  keeps the confirmation open for retry; cancelling does not change any data.
+  Escape or the close button dismisses the editor; clicking the backdrop does not.
+  Dismissal is blocked while saving or uploading, and focus returns to the opening action.
+- New entries use two steps: save the report, then optionally attach photos and videos.
+  The report remains saved if the media step is closed or skipped. Returning to the report
+  saves changes to the same entry before continuing; existing entries expose report and media
+  together in the same modal without a wizard.
+- A sticky year/month rail stays beside the chronicle on desktop and phones. Tap or drag
+  to another report month, or use arrow keys, Page Up/Down and Home/End. Its position follows
+  scrolling. A date picker jumps to the nearest matching report (newer wins ties), preserving filters.
+  Month-grouped report cards use the full content width without a second decorative
+  timeline or indentation on the left; only the right-hand rail provides time navigation.
+- The chronicle initially renders 40 matching reports and progressively adds older batches
+  near the bottom, with an explicit load button as an alternative. Distant jumps start a new
+  visible range; a newer-reports button restores preceding batches. Search, filters and PDF
+  exports always include all matching reports, not just the rendered range. This is staged
+  rendering, not server-side pagination: the account-scoped workspace snapshot still loads in full.
+- Completing a task now records its timestamp and local calendar day, including offline.
+  New reports preselect tasks completed on the chosen date; all suggestions are optional.
+  Changing the date refreshes automatic suggestions while preserving manually added links.
+  Existing reports are not changed automatically. Reopening a task clears its completion
+  date; completing it again records a new one. Older completions without a recorded date
+  are deliberately not backdated. Each link category allows up to 100 selections. If
+  daily suggestions exceed that limit, a visible notice asks you to reduce the selection
+  before saving; suggestions are never silently discarded.
+- New reports also preselect offers whose **offer date** matches the report date and
+  paid expenses whose explicit **payment date** matches. The offer date is labelled
+  “Offer dated”, not inferred as receipt time. Undated payments and unpaid expenses are
+  not suggested. Date changes preserve manual links; existing reports only add these
+  suggestions when requested. Financial links open the corresponding offer/expense,
+  and show supplier, date and amount. No receipt dates or payment dates are guessed.
+- A compact, newest-first timeline groups reports by month. Expand individual reports or
+  all matching reports. Search includes report text, linked tasks, events, trades,
+  financial titles/suppliers and media
+  filenames. Date-range and trade filters combine with the search; trade filtering also
+  matches trades of linked tasks, events, offers or payments.
+- Download the complete project diary as a chronological A4 PDF, regardless of active
+  filters, or export only the filtered reports. The PDF has a cover, page numbers,
+  searchable text, weather attribution, linked records and compressed photos. Videos are
+  listed by filename, not embedded. Unavailable or undecodable photos are explicitly
+  marked in the PDF and reported after export. Unsupported font characters cause an
+  explicit error rather than silently changing the report. Generation happens locally
+  in the browser using bundled fonts; no external PDF service is used.
+- Attach photos and videos up to 1 GiB per file. Media is stored separately from documents,
+  streamed from local storage, and video requests support byte ranges.
+- The project settings allow an explicit address search to select and save weather coordinates.
+  Reports can fetch daily forecast or archived weather for their date; without
+  a configured location no weather request is made. Weather is saved as a snapshot in the report.
+  Data comes from [Open-Meteo](https://open-meteo.com/) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/);
+  the free API is for non-commercial use and attribution is shown in the app.
+- Entries and media can be queued offline. Pending entries synchronize before their media; browser
+  storage quota can still limit large offline files. See [offline use](offline.md).
 
 ## Collections
 

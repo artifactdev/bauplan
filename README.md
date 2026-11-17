@@ -1,6 +1,6 @@
 # Bauplan – Renovation Planner
 
-Private app for managing a home renovation: budget, quotes and requests, expenses (including invoices and receipts), documents with text recognition, tasks, calendar (with two-way CalDAV synchronization and an iCal subscription), collections, and contacts. Available in German and English.
+Private app for managing a home renovation: budget, quotes and requests, expenses (including invoices and receipts), documents with text recognition, tasks, calendar (with two-way CalDAV synchronization and an iCal subscription), a construction diary, collections, and contacts. Available in German and English.
 
 Website with screenshots: <https://artifactdev.github.io/bauplan/> (source in [`site/`](site/README.md)).
 

@@ -109,6 +109,68 @@ try {
   }
 
   await visit(page, "/aufgaben", "tasks");
+  await visit(page, "/tagebuch", "diary");
+  if (!only.length || only.includes("diary-navigation")) {
+    await page.goto(`${BASE_URL}/tagebuch`);
+    await settle(page);
+    await page.getByRole("slider", { name: "Zeitnavigation" }).focus();
+    await page.keyboard.press("End");
+    await settle(page);
+    await page.getByRole("button", { name: "Zu Datum springen", exact: true }).click();
+    await settle(page);
+    await shot(page, "diary-navigation");
+  }
+  if (!only.length || only.includes("diary-editor")) {
+    await page.goto(`${BASE_URL}/tagebuch`);
+    await settle(page);
+    await page.getByRole("button", { name: "Neuer Eintrag", exact: true }).click();
+    await page.getByLabel("Titel", { exact: true }).fill("Leitungswege und Tagesfortschritt");
+    await page
+      .getByLabel("Ausgeführte Arbeiten", { exact: true })
+      .fill("Leitungswege im Erdgeschoss geprüft und mit der Ausführungsplanung abgeglichen.");
+    await settle(page);
+    await shot(page, "diary-editor");
+    await page.getByRole("button", { name: "Formular schließen", exact: true }).click();
+  }
+  if (!only.length || only.includes("diary-details")) {
+    await page.goto(`${BASE_URL}/tagebuch`);
+    await settle(page);
+    await page.getByRole("button", { name: "Rohinstallation dokumentiert", exact: true }).click();
+    await settle(page);
+    await shot(page, "diary-details");
+  }
+  if (!only.length || only.includes("diary-wizard")) {
+    await page.goto(`${BASE_URL}/tagebuch`);
+    await settle(page);
+    await page.getByRole("button", { name: "Neuer Eintrag", exact: true }).click();
+    const title = "Demo: Tagesbericht in zwei Schritten";
+    await page.getByLabel("Titel", { exact: true }).fill(title);
+    await page
+      .getByLabel("Ausgeführte Arbeiten", { exact: true })
+      .fill("Leitungswege geprüft und den Fortschritt im Erdgeschoss dokumentiert.");
+    await page.getByRole("button", { name: "Speichern und weiter zu Fotos" }).click();
+    await page.getByRole("button", { name: "Ohne Medien abschließen" }).waitFor();
+    try {
+      await settle(page);
+      await page
+        .getByText("Bautagebucheintrag gespeichert.", { exact: true })
+        .waitFor({ state: "hidden" });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await shot(page, "diary-wizard");
+    } finally {
+      await page.getByRole("button", { name: "Ohne Medien abschließen" }).click();
+      const report = page.locator("article").filter({
+        has: page.getByRole("heading", { name: title, exact: true }),
+      });
+      await report.getByRole("button", { name: `Aktionen für ${title}`, exact: true }).click();
+      await page.getByRole("menuitem", { name: "Eintrag löschen", exact: true }).click();
+      await page
+        .getByRole("alertdialog", { name: "Eintrag löschen?", exact: true })
+        .getByRole("button", { name: "Löschen", exact: true })
+        .click();
+      await report.waitFor({ state: "detached" });
+    }
+  }
   if (!only.length || only.includes("tasks-subtasks")) {
     await page.goto(`${BASE_URL}/aufgaben`);
     await settle(page);
@@ -173,6 +235,11 @@ try {
   await phone.goto(`${BASE_URL}/`);
   await settle(phone, 1200);
   await shot(phone, "mobile-overview");
+  if (!only.length || only.includes("mobile-diary")) {
+    await phone.goto(`${BASE_URL}/tagebuch`);
+    await settle(phone);
+    await shot(phone, "mobile-diary");
+  }
 
   if (!only.length || only.includes("mobile-calendar")) {
     await phone.goto(`${BASE_URL}/kalender`);

@@ -33,9 +33,56 @@ const emptyWorkspace: Workspace = {
   funding_entries: [],
   credit_terms: [],
   credit_repayments: [],
+  diary_entries: [],
+  diary_media: [],
 };
 
 describe("account-scoped offline storage", () => {
+  it("cleans financial diary links offline without removing same-ID links from other categories", () => {
+    const snapshot: Workspace = {
+      ...emptyWorkspace,
+      diary_entries: [
+        {
+          id: "entry",
+          title: "Work report",
+          entry_date: "2026-06-17",
+          work_done: null,
+          progress: null,
+          issues: null,
+          weather_snapshot: null,
+          task_ids: null,
+          event_ids: null,
+          trade_ids: null,
+          offer_ids: '["same","keep"]',
+          payment_ids: '["same"]',
+        },
+      ],
+    };
+    const untouched = {
+      ...snapshot.diary_entries[0]!,
+      id: "untouched",
+      offer_ids: null,
+      payment_ids: null,
+    };
+    snapshot.diary_entries.push(untouched);
+    const deletion: OfflineChange = {
+      id: "delete-offer",
+      userId: "account",
+      sequence: 0,
+      table: "offers",
+      action: "delete",
+      rowId: "same",
+      base: null,
+      row: null,
+    };
+    const next = applyChange(snapshot, deletion);
+    expect(next.diary_entries[0]).toMatchObject({ offer_ids: '["keep"]', payment_ids: '["same"]' });
+    expect(snapshot.diary_entries[0]?.offer_ids).toBe('["same","keep"]');
+    expect(next.diary_entries[1]).toEqual(untouched);
+    expect(
+      applyChange(next, { ...deletion, table: "expenses" }).diary_entries[0]?.payment_ids,
+    ).toBe("[]");
+  });
   it("removes only matching work prerequisites from the snapshot without mutating the original", () => {
     const dependencies = JSON.stringify([
       { source: "event", id: "work", lag_days: 2 },

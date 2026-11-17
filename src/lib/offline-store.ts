@@ -1,6 +1,7 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { TableName, Workspace } from "./schema";
 import { withoutDependency, type DependencyConsent } from "./task-dependencies";
+import { DIARY_LINK_TABLES, parseDiaryIds } from "./diary";
 
 const DB_NAME = "bauplan-offline";
 const DB_VERSION = 2;
@@ -160,7 +161,12 @@ export async function loadSnapshot(userId: string, projectId?: string) {
     return undefined;
   const snapshot = projectSnapshot ?? legacySnapshot;
   if (!snapshot) return undefined;
-  const workspace = { ...snapshot, funding_entries: snapshot.funding_entries ?? [] };
+  const workspace = {
+    ...snapshot,
+    funding_entries: snapshot.funding_entries ?? [],
+    diary_entries: snapshot.diary_entries ?? [],
+    diary_media: snapshot.diary_media ?? [],
+  };
   if (projectId) {
     const records = workspace as unknown as Record<string, Record<string, unknown>[]>;
     for (const table of Object.keys(workspace) as (keyof Workspace)[]) {
@@ -299,6 +305,16 @@ export function applyChange(workspace: Workspace, change: OfflineChange): Worksp
   const index = rows.findIndex((item) => item["id"] === change.rowId);
   if (change.action === "delete") {
     if (index !== -1) rows.splice(index, 1);
+    const diaryColumn = Object.entries(DIARY_LINK_TABLES).find(
+      ([, table]) => table === change.table,
+    )?.[0];
+    if (diaryColumn)
+      copy.diary_entries = (copy.diary_entries ?? []).map((entry) => {
+        const ids = parseDiaryIds(entry[diaryColumn as keyof typeof DIARY_LINK_TABLES]);
+        return ids.includes(change.rowId)
+          ? { ...entry, [diaryColumn]: JSON.stringify(ids.filter((id) => id !== change.rowId)) }
+          : entry;
+      });
     if (change.table === "tasks" || change.table === "events") {
       const source = {
         source: change.table === "tasks" ? ("task" as const) : ("event" as const),

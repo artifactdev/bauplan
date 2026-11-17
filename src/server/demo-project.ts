@@ -15,6 +15,7 @@ const INSERT_ORDER: TableName[] = [
   "expenses",
   "tasks",
   "events",
+  "diary_entries",
   "ideas",
   "idea_images",
   "funding_entries",

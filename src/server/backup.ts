@@ -12,6 +12,12 @@ import { z } from "zod";
 import { paperlessExportMetadataSchema } from "@/lib/paperless";
 import { normalizePaperlessUrl } from "./paperless-client";
 import { isSafeStoragePath } from "@/lib/storage-paths";
+import {
+  DIARY_MEDIA_MAX_BYTES,
+  DIARY_MEDIA_MIME_TYPES,
+  parseDiaryIds,
+  parseDiaryWeather,
+} from "@/lib/diary";
 import { MAX_BACKUP_BYTES } from "@/lib/limits";
 import type { BackupDatabase, BackupFile, Repo } from "./repo";
 
@@ -21,7 +27,12 @@ const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
 const FORMAT = "bauplan-backup";
 const VERSION = 1;
 // Tables added after the first backup format; older archives may omit them.
-const OPTIONAL_TABLES = new Set<TableName>(["funding_entries", "idea_images"]);
+const OPTIONAL_TABLES = new Set<TableName>([
+  "funding_entries",
+  "idea_images",
+  "diary_entries",
+  "diary_media",
+]);
 
 type Manifest = {
   format: typeof FORMAT;
@@ -115,26 +126,35 @@ function validateDatabase(value: unknown): BackupDatabase {
     const required =
       table !== "projects" ? columns.filter((column) => column !== "project_id") : columns;
     const requiredWithLegacyColumns =
-      table === "tasks"
+      table === "projects"
         ? required.filter(
-            (column) => !["assignee_id", "checklist", "dependencies"].includes(column),
+            (column) =>
+              !["weather_latitude", "weather_longitude", "weather_location_name"].includes(column),
           )
-        : table === "offers"
-          ? required.filter((column) => column !== "valid_until")
-          : table === "expenses"
-            ? required.filter(
-                (column) =>
-                  !["offer_id", "contact_id", "due_date", "bank_status", "document_links"].includes(
-                    column,
-                  ),
-              )
-            : table === "events"
+        : table === "tasks"
+          ? required.filter(
+              (column) => !["assignee_id", "checklist", "dependencies"].includes(column),
+            )
+          : table === "offers"
+            ? required.filter((column) => column !== "valid_until")
+            : table === "expenses"
               ? required.filter(
-                  (column) => !["caldav_uid", "caldav_data", "work_completed"].includes(column),
+                  (column) =>
+                    ![
+                      "offer_id",
+                      "contact_id",
+                      "due_date",
+                      "bank_status",
+                      "document_links",
+                    ].includes(column),
                 )
-              : table === "credit_terms"
-                ? required.filter((column) => column !== "assumed_full_draw_date")
-                : required;
+              : table === "events"
+                ? required.filter(
+                    (column) => !["caldav_uid", "caldav_data", "work_completed"].includes(column),
+                  )
+                : table === "credit_terms"
+                  ? required.filter((column) => column !== "assumed_full_draw_date")
+                  : required;
     const validatedRows = validateRows(
       OPTIONAL_TABLES.has(table) && !(table in tables) ? [] : tables[table],
       columns,
@@ -145,41 +165,58 @@ function validateDatabase(value: unknown): BackupDatabase {
         ? validatedRows.map((row) => ({ project_id: row["project_id"] ?? null, ...row }))
         : validatedRows;
     const normalizedRows: Record<string, unknown>[] =
-      table === "tasks"
+      table === "projects"
         ? rows.map((row) => ({
             ...row,
-            assignee_id: row["assignee_id"] ?? null,
-            checklist: row["checklist"] ?? null,
-            dependencies: row["dependencies"] ?? null,
+            weather_latitude: row["weather_latitude"] ?? null,
+            weather_longitude: row["weather_longitude"] ?? null,
+            weather_location_name: row["weather_location_name"] ?? null,
           }))
-        : table === "offers"
-          ? rows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
-          : table === "expenses"
-            ? rows.map((row) => ({
-                ...row,
-                offer_id: row["offer_id"] ?? null,
-                contact_id: row["contact_id"] ?? null,
-                due_date: row["due_date"] ?? null,
-                document_links: row["document_links"] ?? null,
-                ...(row["bank_status"] == null
-                  ? migrateLegacyExpenseStatus(row)
-                  : { bank_status: row["bank_status"] }),
-              }))
-            : table === "credit_terms"
+        : table === "tasks"
+          ? rows.map((row) => ({
+              ...row,
+              assignee_id: row["assignee_id"] ?? null,
+              checklist: row["checklist"] ?? null,
+              dependencies: row["dependencies"] ?? null,
+            }))
+          : table === "offers"
+            ? rows.map((row) => ({ ...row, valid_until: row["valid_until"] ?? null }))
+            : table === "expenses"
               ? rows.map((row) => ({
                   ...row,
-                  assumed_full_draw_date: row["assumed_full_draw_date"] ?? null,
+                  offer_id: row["offer_id"] ?? null,
+                  contact_id: row["contact_id"] ?? null,
+                  due_date: row["due_date"] ?? null,
+                  document_links: row["document_links"] ?? null,
+                  ...(row["bank_status"] == null
+                    ? migrateLegacyExpenseStatus(row)
+                    : { bank_status: row["bank_status"] }),
                 }))
-              : table === "events"
+              : table === "credit_terms"
                 ? rows.map((row) => ({
                     ...row,
-                    caldav_uid: row["caldav_uid"] ?? null,
-                    caldav_data: row["caldav_data"] ?? null,
-                    work_completed: row["work_completed"] ?? false,
+                    assumed_full_draw_date: row["assumed_full_draw_date"] ?? null,
                   }))
-                : rows;
+                : table === "events"
+                  ? rows.map((row) => ({
+                      ...row,
+                      caldav_uid: row["caldav_uid"] ?? null,
+                      caldav_data: row["caldav_data"] ?? null,
+                      work_completed: row["work_completed"] ?? false,
+                    }))
+                  : rows;
     for (const row of normalizedRows) {
       if (table === "tasks") parseTaskChecklist(row["checklist"]);
+      if (table === "diary_entries") {
+        try {
+          parseDiaryIds(row["task_ids"]);
+          parseDiaryIds(row["event_ids"]);
+          parseDiaryIds(row["trade_ids"]);
+          parseDiaryWeather(row["weather_snapshot"]);
+        } catch {
+          fail("Backup enthält einen ungültigen Bautagebucheintrag.");
+        }
+      }
       if (table === "expenses") {
         if (
           !["nicht_festgelegt", "einzureichen", "eingereicht", "ausgezahlt", "abgelehnt"].includes(
@@ -229,6 +266,45 @@ function validateDatabase(value: unknown): BackupDatabase {
       if (table === "projects") continue;
       for (const row of normalizedTables[table]) row["project_id"] ??= defaultProject["id"];
     }
+  const projectOf = (table: TableName, id: unknown) =>
+    normalizedTables[table].find((row) => row["id"] === id)?.["project_id"];
+  for (const entry of normalizedTables.diary_entries) {
+    const projectId = entry["project_id"];
+    if (typeof projectId !== "string")
+      fail("Backup enthält einen Bautagebucheintrag ohne Projekt.");
+    for (const [column, table] of [
+      ["task_ids", "tasks"],
+      ["event_ids", "events"],
+      ["trade_ids", "trades"],
+    ] as const) {
+      let ids: string[];
+      try {
+        ids = parseDiaryIds(entry[column]);
+      } catch {
+        fail("Backup enthält ungültige Bautagebuch-Verknüpfungen.");
+      }
+      if (ids.some((id) => projectOf(table, id) !== projectId))
+        fail("Backup enthält eine Bautagebuch-Verknüpfung zu einem anderen Projekt.");
+    }
+  }
+  const diaryEntriesById = new Map(
+    normalizedTables.diary_entries.map((entry) => [entry["id"], entry]),
+  );
+  for (const media of normalizedTables.diary_media) {
+    const entry = diaryEntriesById.get(media["diary_entry_id"]);
+    if (!entry || entry["project_id"] !== media["project_id"])
+      fail("Backup enthält ein Medium ohne zugehörigen Bautagebucheintrag.");
+    if (
+      typeof media["size"] !== "number" ||
+      media["size"] <= 0 ||
+      media["size"] > DIARY_MEDIA_MAX_BYTES ||
+      typeof media["mime_type"] !== "string" ||
+      !DIARY_MEDIA_MIME_TYPES.has(media["mime_type"]) ||
+      typeof media["storage_path"] !== "string" ||
+      !isSafeStoragePath(media["storage_path"])
+    )
+      fail("Backup enthält ein ungültiges Bautagebuchmedium.");
+  }
   validateDependencyGraph(normalizedTables.tasks, normalizedTables.events);
   const expenseIds = new Set(normalizedTables.expenses.map((row) => row["id"]));
   for (const invoice of normalizedTables.invoices) {

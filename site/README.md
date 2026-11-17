@@ -33,6 +33,13 @@ npm run site:screenshots  # captures all images into site/screenshots/
 "Sanierung Doppelhaushälfte" are reused, missing demo content is added. The data
 lives in `.demo/` (git-ignored) and is based on `createDemoProjectData()` from
 `src/server/demo-project.ts`.
+The seed adds fictional diary reports and locally generated photo/video examples
+without calling the weather API, so screenshots remain deterministic.
+Reports span multiple dates and months. Two explicitly fictional completed-task
+fixtures are refreshed to today's completion date on each seed run to demonstrate
+the new-report preselection; other existing task histories are not backdated.
+The diary archive adds 90 explicitly fictional reports across the preceding 30 months,
+without modifying existing reports. Re-seeding does not duplicate the dated archive fixtures.
 The seed script runs directly as native Node ESM; it does not depend on a
 package-internal TypeScript runner path.
 
@@ -50,6 +57,21 @@ environment variables:
 ```sh
 SHOTS=budget,expenses npm run site:screenshots
 ```
+
+The `diary` screenshot shows full-width month-grouped report cards without a decorative
+left timeline, the right-hand year/month rail, overflow action menus and filters;
+`diary-details` expands the fictional report with weather and local photo/video
+attachments. `mobile-diary` shows the responsive timeline. Refresh these when
+changing the diary page, demo reports, or media presentation.
+The `diary-editor` screenshot shows report creation in the responsive modal, with
+a compact date field above the full-width title and day-based task, offer and payment suggestions. The explicitly fictional financial
+fixtures and their report roll forward to today when re-seeding, as do the daily task fixtures.
+The `diary-wizard` screenshot shows the optional media step in the responsive editor
+modal after saving a new report. The capture script creates a temporary fictional report and removes it
+after the capture, using the same delete-confirmation dialog as normal diary entries.
+The `diary-navigation` screenshot jumps directly to the oldest report month and opens
+the date picker, demonstrating navigation across the multi-year archive. All six diary
+screenshots are referenced on the website.
 
 The construction examples include mixed Work/task prerequisites, explicit Work
 completion, a planned drying period, benign parallel trades and an intentionally

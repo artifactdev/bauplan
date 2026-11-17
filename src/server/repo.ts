@@ -37,7 +37,14 @@ import {
 } from "./uploads";
 import { DEFAULT_DOCUMENT_FOLDER, documentFolder, isSafeStoragePath } from "@/lib/storage-paths";
 import { validateFundingEntry } from "@/lib/funding";
-import { parseTaskChecklist, validateTaskDates } from "@/lib/tasks";
+import { parseTaskChecklist, taskCompletionPatch, validateTaskDates } from "@/lib/tasks";
+import {
+  DIARY_LINK_TABLES,
+  DIARY_MEDIA_MIME_TYPES,
+  parseDiaryIds,
+  validateDiaryEntry,
+} from "@/lib/diary";
+import { MAX_DIARY_MEDIA_BYTES } from "@/lib/limits";
 import {
   incomingDependencies,
   sameConsent,
@@ -235,7 +242,27 @@ const PROJECT_REFERENCES: Partial<Record<TableName, { column: string; table: Tab
   ],
   funding_entries: [{ column: "budget_pot_id", table: "budget_pots" }],
   credit_terms: [{ column: "budget_pot_id", table: "budget_pots" }],
+  diary_media: [{ column: "diary_entry_id", table: "diary_entries" }],
 };
+
+function assertWeatherLocation(row: Record<string, unknown>) {
+  const latitude = row["weather_latitude"] ?? null;
+  const longitude = row["weather_longitude"] ?? null;
+  const name = row["weather_location_name"] ?? null;
+  if (latitude === null && longitude === null && name === null) return;
+  if (
+    typeof latitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180 ||
+    (name !== null && (typeof name !== "string" || name.length > 200))
+  )
+    throw new Error("diary.invalid_weather_location");
+}
 
 function assertProjectReferences(
   db: SqliteDb,
@@ -255,6 +282,7 @@ function assertProjectReferences(
     if (related?.["project_id"] !== projectId)
       throw new Error("projects.related_record_not_in_project");
   }
+
   if (table === "expenses") {
     const links = expenseDocumentLinks(row["document_links"]);
     for (const link of links) {
@@ -264,6 +292,15 @@ function assertProjectReferences(
         .get(link.document_id);
       if (related?.["project_id"] !== projectId)
         throw new Error("projects.related_record_not_in_project");
+    }
+  }
+  if (table === "diary_entries") {
+    for (const [column, relatedTable] of Object.entries(DIARY_LINK_TABLES)) {
+      for (const id of parseDiaryIds(row[column])) {
+        const related = db.prepare(`SELECT project_id FROM ${relatedTable} WHERE id = ?`).get(id);
+        if (related?.["project_id"] !== projectId)
+          throw new Error("projects.related_record_not_in_project");
+      }
     }
   }
 }
@@ -571,10 +608,20 @@ export function sqliteRepo(): Repo {
           ? {
               ...change.base,
               ...(change.table === "tasks"
-                ? { dependencies: change.base["dependencies"] ?? null }
+                ? {
+                    dependencies: change.base["dependencies"] ?? null,
+                    completed_at: change.base["completed_at"] ?? null,
+                    completed_on: change.base["completed_on"] ?? null,
+                  }
                 : {}),
               ...(change.table === "events"
                 ? { work_completed: change.base["work_completed"] ?? null }
+                : {}),
+              ...(change.table === "diary_entries"
+                ? {
+                    offer_ids: change.base["offer_ids"] ?? null,
+                    payment_ids: change.base["payment_ids"] ?? null,
+                  }
                 : {}),
             }
           : null;
@@ -608,6 +655,9 @@ export function sqliteRepo(): Repo {
             change.table,
             {
               ...cleanRow(change.table, change.row),
+              ...(change.table === "tasks" && !("completed_at" in change.row)
+                ? { completed_at: null, completed_on: null }
+                : {}),
               id: change.rowId,
               created_at: change.row["created_at"],
             },
@@ -620,7 +670,12 @@ export function sqliteRepo(): Repo {
           await this.update(
             change.table,
             change.rowId,
-            cleanRow(change.table, change.row),
+            {
+              ...cleanRow(change.table, change.row),
+              ...(change.table === "tasks" && !("completed_at" in change.row)
+                ? { completed_at: null, completed_on: null }
+                : {}),
+            },
             userId,
             effectiveProjectId,
             legacyExpense,
@@ -965,9 +1020,23 @@ export function sqliteRepo(): Repo {
         );
       if (projectId) assertProjectReferences(d, table, row, projectId);
       if (table === "tasks") {
+        row = taskCompletionPatch(row, undefined, new Date(), true);
         validateTaskDates(row);
         if ("checklist" in row) parseTaskChecklist(row["checklist"]);
       }
+      if (table === "projects") assertWeatherLocation(row);
+      if (table === "diary_entries") validateDiaryEntry(row);
+      if (
+        table === "diary_media" &&
+        (typeof row["size"] !== "number" ||
+          row["size"] <= 0 ||
+          row["size"] > MAX_DIARY_MEDIA_BYTES ||
+          typeof row["mime_type"] !== "string" ||
+          !DIARY_MEDIA_MIME_TYPES.has(row["mime_type"]) ||
+          typeof row["storage_path"] !== "string" ||
+          !isSafeStoragePath(row["storage_path"]))
+      )
+        throw new Error("diary.invalid_media");
       if (table === "funding_entries") validateFundingEntry(row, fundingSources(d));
       const id = (row["id"] as string) || crypto.randomUUID();
       const full = {
@@ -1016,9 +1085,18 @@ export function sqliteRepo(): Repo {
         if (!existing || existing["project_id"] !== projectId)
           throw new Error("projects.row_not_in_project");
         assertProjectReferences(d, table, { ...existing, ...patch }, projectId);
+        if (table === "diary_entries") validateDiaryEntry({ ...existing, ...patch });
+      }
+      if (table === "projects" && Object.keys(patch).some((key) => key.startsWith("weather_"))) {
+        const existing = d.prepare("SELECT * FROM projects WHERE id = ?").get(id);
+        if (!existing) throw new Error("projects.not_found");
+        assertWeatherLocation({ ...existing, ...patch });
       }
       if (table === "tasks") {
         if ("checklist" in patch) parseTaskChecklist(patch["checklist"]);
+        const previous = d.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+        if (!previous) throw new Error("projects.row_not_in_project");
+        patch = taskCompletionPatch(patch, previous, new Date(), true);
       }
       if (table === "funding_entries") {
         const existing = d.prepare("SELECT * FROM funding_entries WHERE id = ?").get(id);
@@ -1111,6 +1189,28 @@ export function sqliteRepo(): Repo {
               task.id,
             );
         }
+        const diaryReferenceColumn = Object.entries(DIARY_LINK_TABLES).find(
+          ([, relatedTable]) => relatedTable === table,
+        )?.[0];
+        if (diaryReferenceColumn) {
+          const entries = projectId
+            ? d
+                .prepare(
+                  `SELECT id, ${diaryReferenceColumn} FROM diary_entries WHERE project_id = ?`,
+                )
+                .all(projectId)
+            : d.prepare(`SELECT id, ${diaryReferenceColumn} FROM diary_entries`).all();
+          for (const entry of entries) {
+            const ids = parseDiaryIds(entry[diaryReferenceColumn]);
+            if (!ids.includes(id)) continue;
+            d.prepare(`UPDATE diary_entries SET ${diaryReferenceColumn} = ? WHERE id = ?`).run(
+              JSON.stringify(ids.filter((linkedId) => linkedId !== id)),
+              entry["id"],
+            );
+          }
+        }
+        if (table === "diary_entries")
+          d.prepare("DELETE FROM diary_media WHERE diary_entry_id = ?").run(id);
         d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
         d.exec("RELEASE dependency_delete");
       } catch (error) {
@@ -1175,6 +1275,94 @@ export async function readSqliteFile(p: string, maxBytes?: number): Promise<Uint
   if (maxBytes !== undefined && bytes.byteLength > maxBytes)
     throw new Error("expenses.export_large");
   return bytes;
+}
+
+export async function putSqliteFileStream(
+  name: string,
+  source: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  expectedBytes: number,
+  folder: string,
+) {
+  const env = await uploadsEnv();
+  const relative = `${folder}/${crypto.randomUUID()}-${safeName(name)}`;
+  const full = resolveUpload(env, relative);
+  if (!full) throw new Error("Ungültiger Speicherort.");
+  const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
+  await fs.mkdir(env.path.dirname(full), { recursive: true });
+  const handle = await fs.open(full, "wx");
+  const reader = source.getReader();
+  let size = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw new Error("diary.media_too_large");
+      let offset = 0;
+      while (offset < value.byteLength) {
+        const result = await handle.write(value, offset, value.byteLength - offset);
+        offset += result.bytesWritten;
+      }
+    }
+    if (size !== expectedBytes) throw new Error("diary.media_size_mismatch");
+    await handle.close();
+    return { storage_path: relative, size };
+  } catch (error) {
+    const cleanupErrors: unknown[] = [];
+    try {
+      await reader.cancel(error);
+    } catch (cancelError) {
+      cleanupErrors.push(cancelError);
+    }
+    try {
+      await handle.close();
+    } catch (closeError) {
+      cleanupErrors.push(closeError);
+    }
+    try {
+      await fs.unlink(full);
+    } catch (unlinkError) {
+      cleanupErrors.push(unlinkError);
+    }
+    if (cleanupErrors.length)
+      throw new AggregateError([error, ...cleanupErrors], "Diary media upload cleanup failed.");
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function sqliteFileInfo(p: string): Promise<{ size: number } | null> {
+  const env = await uploadsEnv();
+  const full = resolveUpload(env, p);
+  if (!full) return null;
+  const fs = await nodeImport<typeof import("node:fs/promises")>("node:" + "fs/promises");
+  try {
+    const stat = await fs.stat(full);
+    return stat.isFile() ? { size: stat.size } : null;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
+      return null;
+    throw error;
+  }
+}
+
+export async function streamSqliteFile(
+  p: string,
+  start?: number,
+  end?: number,
+): Promise<ReadableStream<Uint8Array> | null> {
+  const env = await uploadsEnv();
+  const full = resolveUpload(env, p);
+  if (!full) return null;
+  const fs = await nodeImport<typeof import("node:fs")>("node:" + "fs");
+  const stream = await nodeImport<typeof import("node:stream")>("node:" + "stream");
+  const file = fs.createReadStream(full, {
+    ...(start === undefined ? {} : { start }),
+    ...(end === undefined ? {} : { end }),
+  });
+  return stream.Readable.toWeb(file) as ReadableStream<Uint8Array>;
 }
 
 export type PaperlessConfig = {

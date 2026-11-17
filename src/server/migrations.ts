@@ -218,6 +218,28 @@ const MIGRATIONS: readonly Migration[] = [
       }
     },
   },
+  {
+    version: 16,
+    name: "construction-diary",
+    up(db) {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS diary_entries_project_date
+          ON diary_entries(project_id, entry_date, created_at);
+        CREATE INDEX IF NOT EXISTS diary_media_entry
+          ON diary_media(project_id, diary_entry_id);
+      `);
+    },
+  },
+  {
+    version: 17,
+    name: "task-completion-day",
+    up() {},
+  },
+  {
+    version: 18,
+    name: "diary-financial-links",
+    up() {},
+  },
 ];
 
 function toSqlValue(value: unknown): string | number | null {

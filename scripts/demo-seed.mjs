@@ -5,10 +5,11 @@
 //
 // Everything is written to DATA_DIR / UPLOADS_DIR (default: .demo/data and .demo/uploads).
 // The data is fictional and based on src/lib/seed.ts. Running the script twice is safe.
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createServer } from "vite";
 import { addTimelineDemo } from "./timeline-demo.mjs";
+import { addDiaryArchiveDemo } from "./diary-demo.mjs";
 
 const root = process.cwd();
 process.env.DATA_DIR ??= path.join(root, ".demo", "data");
@@ -24,6 +25,7 @@ const DEMO_ADDRESS = "Lindenweg 12, 79098 Freiburg";
 function iso(offsetDays) {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
   return date.toISOString().slice(0, 10);
 }
 
@@ -42,7 +44,7 @@ const load = (id) => vite.ssrLoadModule(id);
 const { sqliteRepo } = await load("/src/server/repo.ts");
 const { countUsers, createUser, listUsers } = await load("/src/server/local-auth.ts");
 const { createDemoProjectData } = await load("/src/server/demo-project.ts");
-const { documentFolder, collectionFolder } = await load("/src/lib/storage-paths.ts");
+const { documentFolder, collectionFolder, diaryFolder } = await load("/src/lib/storage-paths.ts");
 
 const repo = sqliteRepo();
 
@@ -172,6 +174,47 @@ function materialImage(kind) {
   return canvas.toBuffer("image/png");
 }
 
+function diaryPhoto() {
+  const width = 960;
+  const height = 640;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#d8d3c8";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#b7ad9c";
+  ctx.fillRect(0, 515, width, 125);
+  ctx.fillStyle = "#8b7861";
+  ctx.fillRect(70, 45, 28, 470);
+  ctx.fillRect(855, 45, 28, 470);
+  ctx.fillStyle = "#a99982";
+  ctx.fillRect(98, 45, 757, 16);
+  ctx.fillRect(98, 500, 757, 15);
+  ctx.strokeStyle = "#d65b35";
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.moveTo(185, 90);
+  ctx.bezierCurveTo(180, 230, 215, 260, 210, 470);
+  ctx.stroke();
+  ctx.strokeStyle = "#215caa";
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.moveTo(305, 90);
+  ctx.bezierCurveTo(312, 230, 285, 290, 300, 470);
+  ctx.stroke();
+  ctx.strokeStyle = "#d65b35";
+  ctx.beginPath();
+  ctx.moveTo(565, 90);
+  ctx.bezierCurveTo(555, 240, 590, 290, 575, 470);
+  ctx.stroke();
+  ctx.fillStyle = "#f4f0e8";
+  ctx.fillRect(115, 115, 720, 4);
+  ctx.fillRect(115, 335, 720, 4);
+  ctx.fillStyle = "#4a443d";
+  ctx.font = "24px sans-serif";
+  ctx.fillText("Rohinstallation · Erdgeschoss", 112, 575);
+  return canvas.toBuffer("image/png");
+}
+
 async function addIdeaImage(projectId, idea, file) {
   const bytes = materialImage(file.kind);
   const storage_path = await repo.putFile(
@@ -215,11 +258,204 @@ await repo.update("projects", projectId, {
   name: DEMO_PROJECT,
   address: DEMO_ADDRESS,
   link_previews_enabled: false,
+  weather_latitude: 47.999,
+  weather_longitude: 7.842,
+  weather_location_name: "Freiburg im Breisgau",
 });
 
 const ws = await repo.getAll(projectId);
+if (!ws.diary_entries.length) {
+  const task = ws.tasks.find((entry) => entry.title === "Fotos Leitungsverlauf vor dem Verputzen");
+  const trade = ws.trades[1];
+  const entryDate = iso(-1);
+  await repo.insert(
+    "diary_entries",
+    {
+      entry_date: entryDate,
+      title: "Rohinstallation dokumentiert",
+      weather_snapshot: JSON.stringify({
+        date: entryDate,
+        code: 3,
+        temperatureMax: 18,
+        temperatureMin: 10,
+        precipitation: 0,
+        latitude: 47.999,
+        longitude: 7.842,
+        fetchedAt: new Date().toISOString(),
+        source: "archive",
+      }),
+      work_done:
+        "Elektroleitungen im Erdgeschoss verlegt und die Leitungswege vor dem Schließen der Wand fotografiert.",
+      progress: "Die Elektro-Rohinstallation im Erdgeschoss ist zu etwa 80 % abgeschlossen.",
+      issues:
+        "Eine Steckdosengruppe in der Küche muss noch mit dem finalen Küchenplan abgeglichen werden.",
+      task_ids: JSON.stringify(task ? [task.id] : []),
+      event_ids: JSON.stringify([]),
+      trade_ids: JSON.stringify(trade ? [trade.id] : []),
+    },
+    undefined,
+    projectId,
+  );
+}
 const tradeId = (index) => ws.trades[index]?.id ?? null;
 const byTitle = (rows, title) => rows.find((row) => row.title === title);
+for (const [title, trade_id] of [
+  ["Demo: Leitungswege im Erdgeschoss geprüft", tradeId(1)],
+  ["Demo: Materiallieferung kontrolliert", tradeId(0)],
+]) {
+  const task = byTitle(ws.tasks, title);
+  if (!task) {
+    await repo.insert(
+      "tasks",
+      {
+        title,
+        trade_id,
+        status: "erledigt",
+        priority: "mittel",
+        completed_at: `${iso(0)}T10:00:00.000Z`,
+        completed_on: iso(0),
+      },
+      undefined,
+      projectId,
+    );
+  } else if (task.completed_on !== iso(0) && task.status === "erledigt") {
+    await repo.update("tasks", task.id, { status: "offen" }, undefined, projectId);
+    await repo.update(
+      "tasks",
+      task.id,
+      {
+        status: "erledigt",
+        completed_at: `${iso(0)}T10:00:00.000Z`,
+        completed_on: iso(0),
+      },
+      undefined,
+      projectId,
+    );
+  }
+}
+for (const report of [
+  {
+    title: "Demo: Aufmaß und Bestandsaufnahme",
+    offset: -34,
+    trade_id: tradeId(1),
+    work_done:
+      "Räume vermessen, Leitungswege aufgenommen und die Fotodokumentation für den Baustart angelegt.",
+    progress:
+      "Bestandsaufnahme abgeschlossen; die Gewerke können ihre Ausführungsplanung abstimmen.",
+    issues: "",
+  },
+  {
+    title: "Demo: Rückbau im Erdgeschoss abgeschlossen",
+    offset: -12,
+    trade_id: tradeId(0),
+    work_done: "Alte Bodenbeläge entfernt und den Bauschutt sortenrein abtransportiert.",
+    progress: "Die Flächen sind für die Rohinstallation freigegeben.",
+    issues: "Unter dem alten Bodenbelag muss eine kleine Unebenheit ausgeglichen werden.",
+  },
+  {
+    title: "Demo: Druckprüfung und Leitungsfreigabe",
+    offset: -2,
+    trade_id: tradeId(0),
+    work_done: "Wasserleitungen mit dem Installateur geprüft und die Prüfwerte dokumentiert.",
+    progress:
+      "Die Druckprüfung war ohne Befund; die Vorwände können nach der Fotodokumentation geschlossen werden.",
+    issues: "",
+  },
+]) {
+  if (byTitle(ws.diary_entries, report.title)) continue;
+  await repo.insert(
+    "diary_entries",
+    {
+      entry_date: iso(report.offset),
+      title: report.title,
+      work_done: report.work_done,
+      progress: report.progress,
+      issues: report.issues,
+      weather_snapshot: null,
+      task_ids: "[]",
+      event_ids: "[]",
+      trade_ids: JSON.stringify(report.trade_id ? [report.trade_id] : []),
+    },
+    undefined,
+    projectId,
+  );
+}
+const offerTitle = "Demo: Angebot zur Elektroinstallation";
+await addDiaryArchiveDemo(repo, projectId);
+const paymentTitle = "Demo: Materialrechnung bezahlt";
+const financialReportTitle = "Demo: Angebote und Zahlungen abgeglichen";
+const financialTradeId = ws.trades.find((trade) => /elekt/i.test(trade.name))?.id ?? null;
+let demoOffer = byTitle(ws.offers, offerTitle);
+if (!demoOffer)
+  demoOffer = await repo.insert(
+    "offers",
+    {
+      title: offerTitle,
+      contractor: "Elektro Hagedorn",
+      amount: 2187.5,
+      status: "received",
+      offer_date: iso(0),
+      trade_id: financialTradeId,
+    },
+    undefined,
+    projectId,
+  );
+else if (demoOffer.offer_date !== iso(0) || demoOffer.trade_id !== financialTradeId)
+  await repo.update(
+    "offers",
+    demoOffer.id,
+    { offer_date: iso(0), trade_id: financialTradeId },
+    undefined,
+    projectId,
+  );
+let demoPayment = byTitle(ws.expenses, paymentTitle);
+if (!demoPayment)
+  demoPayment = await repo.insert(
+    "expenses",
+    {
+      title: paymentTitle,
+      vendor: "Baustoffhandel am Mühlbach",
+      amount: 364.8,
+      status: "bezahlt",
+      bank_status: "nicht_festgelegt",
+      expense_date: iso(-2),
+      payment_date: iso(0),
+      category: "Material",
+      trade_id: financialTradeId,
+    },
+    undefined,
+    projectId,
+  );
+else if (demoPayment.payment_date !== iso(0) || demoPayment.trade_id !== financialTradeId)
+  await repo.update(
+    "expenses",
+    demoPayment.id,
+    { payment_date: iso(0), trade_id: financialTradeId },
+    undefined,
+    projectId,
+  );
+const financialReport = byTitle(ws.diary_entries, financialReportTitle);
+const financialLinks = {
+  entry_date: iso(0),
+  offer_ids: JSON.stringify([demoOffer.id]),
+  payment_ids: JSON.stringify([demoPayment.id]),
+};
+if (!financialReport)
+  await repo.insert(
+    "diary_entries",
+    {
+      title: financialReportTitle,
+      work_done:
+        "Das Elektroangebot mit der Ausführungsplanung abgeglichen und die Materialrechnung nach der Lieferung bezahlt.",
+      progress: "Die Unterlagen für die nächste Abstimmung mit dem Elektriker sind vollständig.",
+      issues: "",
+      ...financialLinks,
+    },
+    undefined,
+    projectId,
+  );
+else if (financialReport.entry_date !== iso(0))
+  await repo.update("diary_entries", financialReport.id, financialLinks, undefined, projectId);
 const documentNames = new Set(ws.documents.map((document) => document.name));
 
 const extraDocuments = [
@@ -473,6 +709,44 @@ await planningRow("tasks", {
 });
 
 await addTimelineDemo(repo, projectId);
+
+const diaryWorkspace = await repo.getAll(projectId);
+const diaryEntry = diaryWorkspace.diary_entries[0];
+if (diaryEntry) {
+  const media = [
+    {
+      name: "Leitungsverlauf-EG.png",
+      mime: "image/png",
+      bytes: diaryPhoto(),
+    },
+    {
+      name: "Baustellenrundgang-Rohinstallation.webm",
+      mime: "video/webm",
+      bytes: readFileSync(path.join(root, "scripts/fixtures/diary-demo.webm")),
+    },
+  ];
+  for (const file of media) {
+    if (
+      diaryWorkspace.diary_media.some(
+        (item) => item.diary_entry_id === diaryEntry.id && item.name === file.name,
+      )
+    )
+      continue;
+    const stored = await repo.putFile(file.name, file.mime, file.bytes, diaryFolder());
+    await repo.insert(
+      "diary_media",
+      {
+        diary_entry_id: diaryEntry.id,
+        name: file.name,
+        storage_path: stored,
+        mime_type: file.mime,
+        size: file.bytes.byteLength,
+      },
+      undefined,
+      projectId,
+    );
+  }
+}
 
 const projects = await repo.getProjects();
 const project = projects.find((entry) => entry.id === projectId);

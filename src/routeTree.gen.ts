@@ -24,6 +24,7 @@ import { Route as WsKalenderRouteImport } from './routes/_ws/kalender'
 import { Route as WsKontakteRouteImport } from './routes/_ws/kontakte'
 import { Route as WsKreditRouteImport } from './routes/_ws/kredit'
 import { Route as WsSammlungenRouteImport } from './routes/_ws/sammlungen'
+import { Route as WsTagebuchRouteImport } from './routes/_ws/tagebuch'
 import { Route as ApiBackupExportRouteImport } from './routes/api/backup/export'
 import { Route as ApiFilesSplatRouteImport } from './routes/api/files.$'
 import { Route as ApiOidcCallbackRouteImport } from './routes/api/oidc/callback'
@@ -104,6 +105,11 @@ const WsSammlungenRoute = WsSammlungenRouteImport.update({
   path: '/sammlungen',
   getParentRoute: () => WsRouteRoute,
 } as any)
+const WsTagebuchRoute = WsTagebuchRouteImport.update({
+  id: '/tagebuch',
+  path: '/tagebuch',
+  getParentRoute: () => WsRouteRoute,
+} as any)
 const ApiBackupExportRoute = ApiBackupExportRouteImport.update({
   id: '/api/backup/export',
   path: '/api/backup/export',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/kontakte': typeof WsKontakteRoute
   '/kredit': typeof WsKreditRoute
   '/sammlungen': typeof WsSammlungenRoute
+  '/tagebuch': typeof WsTagebuchRoute
   '/api/backup/export': typeof ApiBackupExportRoute
   '/api/files/$': typeof ApiFilesSplatRoute
   '/api/oidc/callback': typeof ApiOidcCallbackRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/kontakte': typeof WsKontakteRoute
   '/kredit': typeof WsKreditRoute
   '/sammlungen': typeof WsSammlungenRoute
+  '/tagebuch': typeof WsTagebuchRoute
   '/': typeof WsIndexRoute
   '/api/backup/export': typeof ApiBackupExportRoute
   '/api/files/$': typeof ApiFilesSplatRoute
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/_ws/kontakte': typeof WsKontakteRoute
   '/_ws/kredit': typeof WsKreditRoute
   '/_ws/sammlungen': typeof WsSammlungenRoute
+  '/_ws/tagebuch': typeof WsTagebuchRoute
   '/_ws/': typeof WsIndexRoute
   '/api/backup/export': typeof ApiBackupExportRoute
   '/api/files/$': typeof ApiFilesSplatRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/kontakte'
     | '/kredit'
     | '/sammlungen'
+    | '/tagebuch'
     | '/api/backup/export'
     | '/api/files/$'
     | '/api/oidc/callback'
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/kontakte'
     | '/kredit'
     | '/sammlungen'
+    | '/tagebuch'
     | '/'
     | '/api/backup/export'
     | '/api/files/$'
@@ -254,6 +265,7 @@ export interface FileRouteTypes {
     | '/_ws/kontakte'
     | '/_ws/kredit'
     | '/_ws/sammlungen'
+    | '/_ws/tagebuch'
     | '/_ws/'
     | '/api/backup/export'
     | '/api/files/$'
@@ -380,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WsSammlungenRouteImport
       parentRoute: typeof WsRouteRoute
     }
+    '/_ws/tagebuch': {
+      id: '/_ws/tagebuch'
+      path: '/tagebuch'
+      fullPath: '/tagebuch'
+      preLoaderRoute: typeof WsTagebuchRouteImport
+      parentRoute: typeof WsRouteRoute
+    }
     '/api/backup/export': {
       id: '/api/backup/export'
       path: '/api/backup/export'
@@ -430,6 +449,7 @@ interface WsRouteRouteChildren {
   WsKontakteRoute: typeof WsKontakteRoute
   WsKreditRoute: typeof WsKreditRoute
   WsSammlungenRoute: typeof WsSammlungenRoute
+  WsTagebuchRoute: typeof WsTagebuchRoute
   WsIndexRoute: typeof WsIndexRoute
 }
 
@@ -445,6 +465,7 @@ const WsRouteRouteChildren: WsRouteRouteChildren = {
   WsKontakteRoute: WsKontakteRoute,
   WsKreditRoute: WsKreditRoute,
   WsSammlungenRoute: WsSammlungenRoute,
+  WsTagebuchRoute: WsTagebuchRoute,
   WsIndexRoute: WsIndexRoute,
 }
 

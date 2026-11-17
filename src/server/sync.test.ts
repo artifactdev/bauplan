@@ -25,6 +25,57 @@ afterAll(() => {
 });
 
 describe("offline row synchronization", () => {
+  it("records completion transitions and preserves the offline completion day on later replay", async () => {
+    await repo.insert("projects", { id: "completion-project", name: "Diary completion" });
+    await repo.insert(
+      "tasks",
+      { id: "completion-task", title: "Wiring", status: "offen" },
+      undefined,
+      "completion-project",
+    );
+    const previous = (await repo.getAll("completion-project")).tasks[0]!;
+    const completed = {
+      ...previous,
+      status: "erledigt",
+      completed_at: "2026-11-17T23:30:00.000Z",
+      completed_on: "2026-11-18",
+    };
+    expect(
+      await repo.applySyncChange(
+        "account-1",
+        {
+          id: "completion-operation",
+          table: "tasks",
+          action: "update",
+          rowId: previous.id,
+          base: { ...previous },
+          row: completed,
+        },
+        "completion-project",
+      ),
+    ).toMatchObject({ applied: true });
+    expect((await repo.getAll("completion-project")).tasks[0]).toMatchObject(completed);
+    await repo.update(
+      "tasks",
+      previous.id,
+      { status: "erledigt", title: "Edited" },
+      undefined,
+      "completion-project",
+    );
+    expect((await repo.getAll("completion-project")).tasks[0]?.completed_on).toBe("2026-11-18");
+    await repo.update("tasks", previous.id, { status: "offen" }, undefined, "completion-project");
+    expect((await repo.getAll("completion-project")).tasks[0]?.completed_on).toBeNull();
+    await repo.update(
+      "tasks",
+      previous.id,
+      { status: "erledigt" },
+      undefined,
+      "completion-project",
+    );
+    expect((await repo.getAll("completion-project")).tasks[0]?.completed_at).toBeTruthy();
+    await repo.remove("tasks", previous.id, "completion-project");
+    await repo.remove("projects", "completion-project");
+  });
   it("validates funding writes and protects sources needed by the funding ledger", async () => {
     await repo.insert("projects", { id: "funding-project", name: "Funding project" });
     await repo.insert("budget_pots", { id: "grandma", name: "Oma", deducts_from_budget: true });
@@ -116,6 +167,121 @@ describe("offline row synchronization", () => {
       "projects.row_not_in_project",
     );
     await expect(repo.getAll("missing-project")).rejects.toThrow("projects.not_found");
+  });
+  it("keeps all diary links within the same project and cleans deleted financial references", async () => {
+    await repo.insert("projects", { id: "diary-project-a", name: "Diary A" });
+    await repo.insert("projects", { id: "diary-project-b", name: "Diary B" });
+    await repo.insert("trades", { id: "diary-trade-a", name: "A" }, undefined, "diary-project-a");
+    await repo.insert("trades", { id: "diary-trade-b", name: "B" }, undefined, "diary-project-b");
+    await repo.insert("tasks", { id: "diary-task-a", title: "A" }, undefined, "diary-project-a");
+    for (const suffix of ["a", "b"]) {
+      await repo.insert(
+        "offers",
+        {
+          id: `diary-offer-${suffix}`,
+          title: "Quote",
+          contractor: "Workshop",
+          amount: 2430,
+          status: "received",
+          offer_date: "2026-06-17",
+        },
+        undefined,
+        `diary-project-${suffix}`,
+      );
+      await repo.insert(
+        "expenses",
+        {
+          id: `diary-payment-${suffix}`,
+          title: "Paid materials",
+          amount: 340.5,
+          status: "bezahlt",
+          bank_status: "nicht_festgelegt",
+          payment_date: "2026-06-17",
+        },
+        undefined,
+        `diary-project-${suffix}`,
+      );
+    }
+    await repo.insert(
+      "events",
+      { id: "diary-event-a", title: "A", event_date: "2026-06-17" },
+      undefined,
+      "diary-project-a",
+    );
+    const entry = {
+      entry_date: "2026-06-17",
+      title: "Daily report",
+      task_ids: '["diary-task-a"]',
+      event_ids: '["diary-event-a"]',
+      trade_ids: '["diary-trade-a"]',
+      offer_ids: '["diary-offer-a"]',
+      payment_ids: '["diary-payment-a"]',
+    };
+    await repo.insert(
+      "diary_entries",
+      { id: "diary-entry-a", ...entry },
+      undefined,
+      "diary-project-a",
+    );
+    await expect(
+      repo.insert(
+        "diary_entries",
+        { id: "diary-entry-cross-trade", ...entry, trade_ids: '["diary-trade-b"]' },
+        undefined,
+        "diary-project-a",
+      ),
+    ).rejects.toThrow("projects.related_record_not_in_project");
+    await expect(
+      repo.update(
+        "diary_entries",
+        "diary-entry-a",
+        { event_ids: '["diary-event-b"]' },
+        undefined,
+        "diary-project-a",
+      ),
+    ).rejects.toThrow("projects.related_record_not_in_project");
+    for (const patch of [
+      { offer_ids: '["diary-offer-b"]' },
+      { payment_ids: '["diary-payment-b"]' },
+    ])
+      await expect(
+        repo.update("diary_entries", "diary-entry-a", patch, undefined, "diary-project-a"),
+      ).rejects.toThrow("projects.related_record_not_in_project");
+    await repo.remove("offers", "diary-offer-a", "diary-project-a");
+    await repo.remove("expenses", "diary-payment-a", "diary-project-a");
+    const updated = (await repo.getAll("diary-project-a")).diary_entries.find(
+      (item) => item.id === "diary-entry-a",
+    );
+    expect(updated).toMatchObject({ offer_ids: "[]", payment_ids: "[]" });
+  });
+  it("accepts queued diary edits from before financial link columns existed", async () => {
+    await repo.insert("projects", { id: "legacy-diary-project", name: "Legacy diary" });
+    await repo.insert(
+      "diary_entries",
+      {
+        id: "legacy-diary-entry",
+        title: "Original",
+        entry_date: "2026-06-17",
+      },
+      undefined,
+      "legacy-diary-project",
+    );
+    const base = { ...(await repo.getAll("legacy-diary-project")).diary_entries[0]! };
+    delete base.offer_ids;
+    delete base.payment_ids;
+    const result = await repo.applySyncChange(
+      "account-1",
+      {
+        id: "legacy-diary-edit",
+        table: "diary_entries",
+        action: "update",
+        rowId: "legacy-diary-entry",
+        base,
+        row: { ...base, title: "Edited offline" },
+      },
+      "legacy-diary-project",
+    );
+    expect(result.applied).toBe(true);
   });
   it("rejects obsolete invoice writes explicitly rather than hiding or double-counting them", async () => {
     await expect(repo.insert("invoices", { amount: 100 })).rejects.toThrow(

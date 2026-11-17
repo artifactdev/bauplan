@@ -1,5 +1,6 @@
 import { parseTaskChecklist } from "./tasks";
 import { parseDependencies } from "./task-dependencies";
+import { DIARY_LINK_TABLES, serializeDiaryIds, serializeDiaryWeather } from "./diary";
 
 // Shared data model; SQLite creates and updates these tables at startup.
 
@@ -137,7 +138,17 @@ export const SYNC_OPERATIONS_DDL = `CREATE TABLE IF NOT EXISTS app_sync_operatio
 )`;
 
 export const TABLES = {
-  projects: ["name", "address", "total_budget", "start_date", "end_date", "link_previews_enabled"],
+  projects: [
+    "name",
+    "address",
+    "total_budget",
+    "start_date",
+    "end_date",
+    "link_previews_enabled",
+    "weather_latitude",
+    "weather_longitude",
+    "weather_location_name",
+  ],
   trades: ["project_id", "name", "budget", "color"],
   cost_items: ["project_id", "trade_id", "title", "description", "planned"],
   offers: [
@@ -193,6 +204,8 @@ export const TABLES = {
     "status",
     "start_date",
     "due_date",
+    "completed_at",
+    "completed_on",
     "notes",
     "cost_item_id",
     "document_id",
@@ -213,6 +226,21 @@ export const TABLES = {
     "caldav_data",
     "work_completed",
   ],
+  diary_entries: [
+    "project_id",
+    "entry_date",
+    "title",
+    "weather_snapshot",
+    "work_done",
+    "progress",
+    "issues",
+    "task_ids",
+    "event_ids",
+    "trade_ids",
+    "offer_ids",
+    "payment_ids",
+  ],
+  diary_media: ["project_id", "diary_entry_id", "name", "storage_path", "mime_type", "size"],
   ideas: [
     "project_id",
     "collection",
@@ -290,6 +318,8 @@ export type TableName = keyof typeof TABLES;
 export const TABLE_NAMES = Object.keys(TABLES) as TableName[];
 
 export const NUMERIC_COLS = new Set([
+  "weather_latitude",
+  "weather_longitude",
   "total_budget",
   "budget",
   "planned",
@@ -324,6 +354,9 @@ export type Project = Base & {
   start_date: string | null;
   end_date: string | null;
   link_previews_enabled?: boolean;
+  weather_latitude?: number | null;
+  weather_longitude?: number | null;
+  weather_location_name?: string | null;
 };
 export type Trade = Base & { name: string; budget: number; color: string | null };
 export type CostItem = Base & {
@@ -380,6 +413,8 @@ export type Task = Base & {
   phase: string | null;
   priority: "niedrig" | "mittel" | "hoch";
   status: "offen" | "in_arbeit" | "erledigt";
+  completed_at?: string | null;
+  completed_on?: string | null;
   start_date?: string | null;
   due_date: string | null;
   notes: string | null;
@@ -400,6 +435,26 @@ export type CalEvent = Base & {
   notes: string | null;
   caldav_uid?: string | null;
   caldav_data?: string | null;
+};
+export type DiaryEntry = Base & {
+  entry_date: string;
+  title: string;
+  weather_snapshot: string | null;
+  work_done: string | null;
+  progress: string | null;
+  issues: string | null;
+  task_ids: string | null;
+  event_ids: string | null;
+  trade_ids: string | null;
+  offer_ids?: string | null;
+  payment_ids?: string | null;
+};
+export type DiaryMedia = Base & {
+  diary_entry_id: string;
+  name: string;
+  storage_path: string | null;
+  mime_type: string | null;
+  size: number | null;
 };
 
 export type ExpenseStatus = "offen" | "bezahlt" | "eingereicht" | "erstattet" | "abgelehnt";
@@ -512,6 +567,8 @@ export type Workspace = {
   documents: Doc[];
   tasks: Task[];
   events: CalEvent[];
+  diary_entries: DiaryEntry[];
+  diary_media: DiaryMedia[];
   ideas: Idea[];
   idea_images: IdeaImage[];
   expenses: Expense[];
@@ -547,12 +604,21 @@ export function cleanRow(table: TableName, row: Record<string, unknown>) {
     if (!(col in row)) continue;
     let v = row[col];
     if (v === "" || v === undefined) v = null;
-    if (v !== null && NUMERIC_COLS.has(col)) v = Number(v) || 0;
+    if (v !== null && NUMERIC_COLS.has(col)) {
+      if (table === "projects" && (col === "weather_latitude" || col === "weather_longitude")) {
+        v = Number(v);
+        if (!Number.isFinite(v)) throw new Error("diary.invalid_weather_location");
+      } else {
+        v = Number(v) || 0;
+      }
+    }
     if (BOOL_COLS.has(col)) v = Boolean(v);
     if (table === "tasks" && col === "checklist")
       v = v === null ? null : JSON.stringify(parseTaskChecklist(v));
     if (table === "tasks" && col === "dependencies")
       v = v === null ? null : JSON.stringify(parseDependencies(v));
+    if (table === "diary_entries" && col in DIARY_LINK_TABLES) v = serializeDiaryIds(v);
+    if (table === "diary_entries" && col === "weather_snapshot") v = serializeDiaryWeather(v);
     out[col] = v;
   }
   return out;

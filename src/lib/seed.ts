@@ -25,6 +25,9 @@ export function buildSeed(): Record<TableName, Row[]> {
     total_budget: 85000,
     start_date: iso(-60),
     end_date: iso(120),
+    weather_latitude: 47.999,
+    weather_longitude: 7.842,
+    weather_location_name: "Freiburg im Breisgau",
   });
 
   const tr = (name: string, budget: number, color: string) => {
@@ -142,6 +145,8 @@ export function buildSeed(): Record<TableName, Row[]> {
       phase,
       priority,
       status,
+      completed_at: status === "erledigt" ? `${iso(due ?? 0)}T11:00:00.000Z` : null,
+      completed_on: status === "erledigt" ? iso(due ?? 0) : null,
       due_date: due === null ? null : iso(due),
       notes,
       cost_item_id: null,
@@ -164,6 +169,15 @@ export function buildSeed(): Record<TableName, Row[]> {
   task("Farbtöne für Wohnzimmer festlegen", maler, "Innenausbau", "niedrig", "offen", 30);
   task("Abnahme Sanitärinstallation", bad, "Rohinstallation", "hoch", "offen", 6);
   task("Fotos Leitungsverlauf vor dem Verputzen", elek, "Rohinstallation", "mittel", "offen", -1);
+  task(
+    "Demo: Leitungswege im Erdgeschoss geprüft",
+    elek,
+    "Rohinstallation",
+    "mittel",
+    "erledigt",
+    0,
+  );
+  task("Demo: Materiallieferung kontrolliert", bad, "Rohinstallation", "mittel", "erledigt", 0);
 
   const ev = (title: string, d: number, kind: string, trade_id: string | null) =>
     out.events.push({
@@ -182,6 +196,72 @@ export function buildSeed(): Record<TableName, Row[]> {
   ev("Küchenstudio Beratung", 12, "termin", kueche);
   ev("Frist Angebot Parkett", 2, "frist", boden);
   ev("Maler Start Obergeschoss", 35, "arbeit", maler);
+
+  const diaryEntry = (
+    daysAgo: number,
+    title: string,
+    work_done: string,
+    progress: string,
+    issues: string,
+    taskTitles: string[],
+    eventTitles: string[],
+    trade_ids: string[],
+    weather: { code: number; high: number; low: number; rain: number },
+  ) => {
+    const entryDate = iso(-daysAgo);
+    out.diary_entries.push({
+      id: id(),
+      entry_date: entryDate,
+      title,
+      weather_snapshot: JSON.stringify({
+        date: entryDate,
+        code: weather.code,
+        temperatureMax: weather.high,
+        temperatureMin: weather.low,
+        precipitation: weather.rain,
+        latitude: 47.999,
+        longitude: 7.842,
+        fetchedAt: new Date().toISOString(),
+        source: "archive",
+      }),
+      work_done,
+      progress,
+      issues,
+      task_ids: JSON.stringify(
+        taskTitles
+          .map((taskTitle) => out.tasks.find((task) => task["title"] === taskTitle)?.id)
+          .filter((taskId): taskId is string => typeof taskId === "string"),
+      ),
+      event_ids: JSON.stringify(
+        eventTitles
+          .map((eventTitle) => out.events.find((event) => event["title"] === eventTitle)?.id)
+          .filter((eventId): eventId is string => typeof eventId === "string"),
+      ),
+      trade_ids: JSON.stringify(trade_ids),
+    });
+  };
+  diaryEntry(
+    1,
+    "Rohinstallation dokumentiert",
+    "Elektroleitungen im Erdgeschoss verlegt und die Leitungswege vor dem Schließen der Wand fotografiert.",
+    "Die Elektro-Rohinstallation im Erdgeschoss ist zu etwa 80 % abgeschlossen.",
+    "Eine Steckdosengruppe in der Küche muss noch mit dem finalen Küchenplan abgeglichen werden.",
+    ["Fotos Leitungsverlauf vor dem Verputzen", "Steckdosenplan Küche finalisieren"],
+    ["Netzbetreiber: Zählertausch"],
+    [elek],
+    { code: 3, high: 18, low: 10, rain: 0 },
+  );
+  diaryEntry(
+    4,
+    "Bad für die Installation vorbereitet",
+    "Alte Sanitärobjekte entfernt, Bauschutt abtransportiert und die Wandbereiche für neue Leitungen freigelegt.",
+    "Rückbau abgeschlossen; Sanitärinstallation kann nach dem abgestimmten Ablauf starten.",
+    "",
+    ["Termin Wasser abstellen mit Installateur", "Abnahme Sanitärinstallation"],
+    [],
+    [bad],
+    { code: 61, high: 14, low: 8, rain: 2.4 },
+  );
 
   const ex = (
     title: string,
@@ -228,6 +308,9 @@ export function buildDemoSeed(): Record<TableName, Row[]> {
     name: "Demo",
     address: null,
     link_previews_enabled: false,
+    weather_latitude: null,
+    weather_longitude: null,
+    weather_location_name: null,
   });
   seed.offers.forEach((offer, index) => {
     offer["contractor"] = companies[index % companies.length]!;

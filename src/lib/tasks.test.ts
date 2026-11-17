@@ -1,7 +1,62 @@
 import { describe, expect, it } from "vitest";
 import { coversDay } from "./events";
-import { parseTaskChecklist, taskRange, validateTaskDates } from "./tasks";
+import { parseTaskChecklist, taskCompletionPatch, taskRange, validateTaskDates } from "./tasks";
 import { cleanRow } from "./schema";
+
+describe("task completion history", () => {
+  const now = new Date("2026-11-17T23:30:00.000Z");
+  it("records completion, preserves the original day on edits and clears it on reopening", () => {
+    const completed = taskCompletionPatch(
+      { status: "erledigt", completed_at: null, completed_on: null },
+      { status: "offen" },
+      now,
+    );
+    expect(completed["completed_at"]).toBe(now.toISOString());
+    expect(completed["completed_on"]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(
+      taskCompletionPatch(
+        { status: "erledigt", title: "Edited" },
+        completed,
+        new Date("2026-12-01"),
+      ),
+    ).toMatchObject(completed);
+    expect(taskCompletionPatch({ status: "offen" }, completed)).toMatchObject({
+      completed_at: null,
+      completed_on: null,
+    });
+    expect(
+      taskCompletionPatch(
+        { status: "erledigt" },
+        { status: "offen" },
+        new Date("2026-12-01T10:00:00Z"),
+      )["completed_at"],
+    ).toBe("2026-12-01T10:00:00.000Z");
+  });
+  it("retains the local offline day across time zones and does not invent legacy dates", () => {
+    const local = {
+      status: "erledigt",
+      completed_at: now.toISOString(),
+      completed_on: "2026-11-18",
+    };
+    expect(taskCompletionPatch(local, { status: "offen" }, new Date("2026-11-25"))).toEqual(local);
+    expect(taskCompletionPatch({ status: "erledigt" }, { status: "erledigt" }, now)).toEqual({
+      status: "erledigt",
+      completed_at: null,
+      completed_on: null,
+    });
+    expect(
+      taskCompletionPatch(
+        { status: "erledigt", completed_at: null, completed_on: null },
+        undefined,
+        now,
+        true,
+      )["completed_on"],
+    ).toBeNull();
+    expect(() => taskCompletionPatch({ status: "erledigt", completed_on: "2026-02-30" })).toThrow(
+      "tasks.invalid_completion_date",
+    );
+  });
+});
 
 describe("task checklists", () => {
   it("supports older tasks with no checklist and normalizes new lists", () => {

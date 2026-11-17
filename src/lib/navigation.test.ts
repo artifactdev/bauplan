@@ -27,19 +27,21 @@ describe("Navigation preferences", () => {
     ])
       expect(navigationSchema.safeParse(value).success).toBe(false);
   });
-  it("adds the credit page to existing saved navigation preferences", () => {
-    const previous = NAV_PATHS.filter((path) => path !== "/kredit" && path !== "/analyse");
+  it("adds all pages introduced after pre-credit preferences", () => {
+    const previous = NAV_PATHS.filter(
+      (path) => path !== "/kredit" && path !== "/analyse" && path !== "/tagebuch",
+    );
     const parsed = parseNavigation({ order: [...previous].reverse(), hidden: ["/budget"] });
     expect(parsed.order).toHaveLength(NAV_PATHS.length);
-    expect(parsed.order.slice(0, -2)).toEqual([...previous].reverse());
-    expect(parsed.order.slice(-2)).toEqual(["/kredit", "/analyse"]);
+    expect(parsed.order.slice(0, -3)).toEqual([...previous].reverse());
+    expect(parsed.order.slice(-3)).toEqual(["/kredit", "/analyse", "/tagebuch"]);
     expect(parsed.hidden).toEqual(["/budget"]);
   });
-  it("adds the analysis page to saved preferences without changing their order", () => {
-    const previous = NAV_PATHS.filter((path) => path !== "/analyse");
+  it("adds the diary page to saved preferences without changing their order", () => {
+    const previous = NAV_PATHS.filter((path) => path !== "/tagebuch");
     const order = [...previous].reverse();
     const parsed = parseNavigation({ order, hidden: ["/kredit"] });
-    expect(parsed.order).toEqual([...order, "/analyse"]);
+    expect(parsed.order).toEqual([...order, "/tagebuch"]);
     expect(parsed.hidden).toEqual(["/kredit"]);
   });
   it("still rejects invalid legacy preferences", () => {

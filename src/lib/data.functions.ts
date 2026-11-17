@@ -3,7 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { dependencyConsentSchema } from "./task-dependencies";
 import { cleanRow, TABLE_NAMES, type TableName } from "./schema";
-import { collectionFolder, documentFolder } from "./storage-paths";
+import { collectionFolder, diaryFolder, documentFolder } from "./storage-paths";
 import type { Repo } from "@/server/repo";
 import { buildSeed } from "./seed";
 import {
@@ -16,9 +16,15 @@ import {
 import { appearanceSchema } from "./appearance";
 import { navigationSchema } from "./navigation";
 import { analysisViewsSchema } from "./analysis";
-import { MAX_BACKUP_BYTES, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
+import {
+  MAX_BACKUP_BYTES,
+  MAX_DIARY_MEDIA_BYTES,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MB,
+} from "@/lib/limits";
 import { pushSubscriptionSchema } from "./push";
 import { ideaImages } from "./ideas";
+import { DIARY_MEDIA_MIME_TYPES } from "./diary";
 import {
   paperlessSettingsSchema,
   paperlessSearchSchema,
@@ -437,6 +443,34 @@ export const getWorkspace = createServerFn()
   .inputValidator((d: unknown) => z.object({ projectId: z.string().min(1) }).parse(d))
   .handler(async ({ context, data }) => context.repo.getAll(data.projectId));
 
+export const searchWeatherLocations = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) =>
+    z.object({ query: z.string().trim().min(2).max(200) }).parse(data),
+  )
+  .handler(async ({ data }) =>
+    (await import("@/server/weather")).searchWeatherLocations(data.query),
+  );
+
+export const getDiaryWeather = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        projectId: z.string().min(1),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const project = (await context.repo.getProjects()).find((item) => item.id === data.projectId);
+    if (!project) throw new Error("projects.not_found");
+    const latitude = project.weather_latitude;
+    const longitude = project.weather_longitude;
+    if (typeof latitude !== "number" || typeof longitude !== "number") return null;
+    return (await import("@/server/weather")).weatherForDate(latitude, longitude, data.date);
+  });
+
 export const exportExpenses = createServerFn({ method: "POST" })
   .middleware([dataContext])
   .inputValidator((data: unknown) =>
@@ -510,6 +544,7 @@ export const createRow = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.table !== "projects" && !data.projectId)
       throw new Error("projects.selection_required");
+    if (data.table === "diary_media") throw new Error("diary.media_managed");
     if (data.table === "tasks") await validateTaskAssignee(data.row["assignee_id"]);
     const row = await context.repo.insert(
       data.table,
@@ -539,6 +574,7 @@ export const updateRow = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     if (data.table !== "projects" && !data.projectId)
       throw new Error("projects.selection_required");
+    if (data.table === "diary_media") throw new Error("diary.media_managed");
     if (data.table === "tasks" && "assignee_id" in data.patch)
       await validateTaskAssignee(data.patch["assignee_id"]);
     await context.repo.update(
@@ -582,12 +618,28 @@ async function ownedFiles(
   id: string,
   projectId?: string,
 ): Promise<OwnedFiles> {
-  if (table !== "documents" && table !== "idea_images" && table !== "ideas")
+  if (
+    table !== "documents" &&
+    table !== "idea_images" &&
+    table !== "ideas" &&
+    table !== "diary_media" &&
+    table !== "diary_entries"
+  )
     return { paths: [], images: [] };
   const ws = await repo.getAll(projectId);
   if (table === "documents") {
     const path = ws.documents.find((doc) => doc.id === id)?.storage_path;
     return { paths: path ? [path] : [], images: [] };
+  }
+  if (table === "diary_media") {
+    const path = ws.diary_media.find((media) => media.id === id)?.storage_path;
+    return { paths: path ? [path] : [], images: [] };
+  }
+  if (table === "diary_entries") {
+    const paths = ws.diary_media
+      .filter((media) => media.diary_entry_id === id)
+      .flatMap((media) => (media.storage_path ? [media.storage_path] : []));
+    return { paths, images: [] };
   }
   const images = ws.idea_images.filter((image) =>
     table === "ideas" ? image.idea_id === id : image.id === id,
@@ -634,6 +686,8 @@ export const syncWorkspaceChanges = createServerFn({ method: "POST" })
       );
     const results = [];
     for (const change of data.changes) {
+      if (change.table === "diary_media" && change.action !== "delete")
+        throw new Error("diary.media_managed");
       if (change.table !== "projects" && !change.projectId)
         throw new Error("projects.selection_required");
       const { syncGeneration: _syncGeneration, ...syncChange } = change;
@@ -721,6 +775,7 @@ export const uploadDocument = createServerFn({ method: "POST" })
       mime_type: mime,
       size: data.file.size,
     });
+
     const createdAt =
       typeof data.meta["created_at"] === "string" ? data.meta["created_at"] : undefined;
     let row: Record<string, unknown>;
@@ -745,6 +800,100 @@ export const uploadDocument = createServerFn({ method: "POST" })
       storage_path: String(row["storage_path"] ?? ""),
       created_at: String(row["created_at"] ?? ""),
     };
+  });
+
+export const uploadDiaryMedia = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) => {
+    if (!(data instanceof FormData)) throw new Error("FormData erwartet");
+    const file = data.get("file");
+    if (!(file instanceof File)) throw new Error("Keine Datei");
+    if (!file.size || file.size > MAX_DIARY_MEDIA_BYTES) throw new Error("diary.media_too_large");
+    if (!DIARY_MEDIA_MIME_TYPES.has(file.type.toLowerCase()))
+      throw new Error("diary.media_type_not_allowed");
+    if (!file.name.trim() || file.name.length > 255) throw new Error("diary.invalid_media_name");
+    let rawMeta: unknown;
+    try {
+      rawMeta = JSON.parse(String(data.get("meta") ?? "{}")) as unknown;
+    } catch {
+      throw new Error("diary.invalid_media");
+    }
+    const meta = z
+      .object({
+        id: z.string().min(1).max(200).optional(),
+        diary_entry_id: z.string().min(1).max(200),
+        created_at: z.string().datetime().optional(),
+      })
+      .strict()
+      .parse(rawMeta);
+    const syncGeneration = data.has("syncGeneration")
+      ? String(data.get("syncGeneration"))
+      : undefined;
+    const projectId = String(data.get("projectId") ?? "");
+    if (!projectId) throw new Error("projects.selection_required");
+    return { file, meta, syncGeneration, projectId };
+  })
+  .handler(async ({ context, data }) => {
+    if (
+      data.syncGeneration !== undefined &&
+      data.syncGeneration !== (await context.repo.getSyncGeneration())
+    )
+      throw new Error(
+        "Der Datenstand wurde durch eine Wiederherstellung ersetzt. Melde dich ab und verwerfe die veralteten Offline-Änderungen.",
+      );
+    const ws = await context.repo.getAll(data.projectId);
+    const entry = ws.diary_entries.find((item) => item.id === data.meta.diary_entry_id);
+    if (!entry) throw new Error("diary.entry_not_found");
+    if (data.meta.id) {
+      const existing = ws.diary_media.find(
+        (media) => media.id === data.meta.id && media.diary_entry_id === entry.id,
+      );
+      if (existing)
+        return {
+          id: existing.id,
+          storage_path: existing.storage_path ?? "",
+          created_at: existing.created_at ?? "",
+        };
+    }
+    const repoMod = await import("@/server/repo");
+    const mime = data.file.type.toLowerCase();
+    const stored = await repoMod.putSqliteFileStream(
+      data.file.name,
+      data.file.stream(),
+      MAX_DIARY_MEDIA_BYTES,
+      data.file.size,
+      diaryFolder(),
+    );
+    try {
+      const row = await context.repo.insert(
+        "diary_media",
+        {
+          ...data.meta,
+          name: data.file.name,
+          project_id: data.projectId,
+          storage_path: stored.storage_path,
+          mime_type: mime,
+          size: stored.size,
+        },
+        undefined,
+        data.projectId,
+      );
+      return {
+        id: String(row["id"]),
+        storage_path: String(row["storage_path"] ?? ""),
+        created_at: String(row["created_at"] ?? ""),
+      };
+    } catch (error) {
+      try {
+        await context.repo.deleteFile(stored.storage_path);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Diary media upload failed and its temporary file could not be removed.",
+        );
+      }
+      throw error;
+    }
   });
 
 export const createIdeaLinkScreenshot = createServerFn({ method: "POST" })

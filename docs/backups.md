@@ -4,7 +4,7 @@ Admins can download or restore a portable ZIP backup in **Settings → Administr
 
 ## Backup contents
 
-The versioned archive contains the SQLite application data, project and personal settings, and user accounts (including password hashes). A full backup also contains every uploaded file (documents and collection images, with their folder structure). A database-only backup contains no uploaded files. Neither contains active login sessions. OIDC settings, calendar-feed tokens, and other values stored in application settings are included, so treat backup files as sensitive credentials and store them securely.
+The versioned archive contains the SQLite application data, project and personal settings, and user accounts (including password hashes). A full backup also contains every uploaded file (documents, collection images, and diary media, with their folder structure). A database-only backup contains no uploaded files. Neither contains active login sessions. OIDC settings, calendar-feed tokens, and other values stored in application settings are included, so treat backup files as sensitive credentials and store them securely.
 
 OCR language models are stored separately under `DATA_DIR/ocr-models` and are not included. Download them again from OCR settings if needed. Environment variables and external identity-provider configuration are also not part of the archive.
 
@@ -12,7 +12,7 @@ Web Push VAPID keys are sensitive application settings and are included. Device 
 
 Paperless source links and local document copies are preserved. Personal Paperless API tokens, automatic tag-import rules and per-user access grants are excluded. After restore, administrators must re-grant member access before members reconnect and explicitly re-enable automation; administrators retain implicit access. Historical unresolved transfers must be reconciled explicitly, not replayed as new uploads. The deployment encryption key is external to the archive. Bauplan backups do not replace a backup of the Paperless archive. See [Paperless integration](paperless.md).
 
-The application accepts ZIP backups up to 512 MiB and limits expanded archive contents to 512 MiB. Export and restore hold archive data in memory and may require several times that amount of available RAM. Configure the reverse proxy to accept the backup size plus multipart overhead. Only archives created with a supported Bauplan backup format version are accepted. Database-only backups require a version of Bauplan that supports that format.
+The application accepts ZIP backups up to 512 MiB and limits expanded archive contents to 512 MiB. This is lower than the 1 GiB per-file diary-media limit, so an individual large media file cannot fit in an in-app full backup; use a coordinated filesystem backup of `DATA_DIR` and `UPLOADS_DIR` for those files. Export and restore hold archive data in memory and may require several times the archive limit in available RAM. Configure the reverse proxy to accept the backup size plus multipart overhead. Only archives created with a supported Bauplan backup format version are accepted. Database-only backups require a version of Bauplan that supports that format.
 
 ## Restore
 

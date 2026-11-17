@@ -1,18 +1,21 @@
 # Operations and self-hosting
 
 ## Docker + SQLite
+
 ```bash
 docker compose up -d --build
 ```
-| Container | Purpose |
-| --- | --- |
-| `app` | Bauplan on port 3000; database and local OCR language models in `./daten`, documents in `./dokumente` |
+
+| Container | Purpose                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| `app`     | Bauplan on port 3000; database and local OCR language models in `./daten`, documents in `./dokumente` |
 
 ### Environment variables
-| Variable | Meaning |
-| --- | --- |
-| `DATA_DIR=/data` | Directory for SQLite (`renovierung.db`) and downloaded OCR language models (`ocr-models/`) |
-| `UPLOADS_DIR=/uploads` | Directory for uploaded files; the Docker image defaults to `/uploads` |
+
+| Variable                 | Meaning                                                                                                                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATA_DIR=/data`         | Directory for SQLite (`renovierung.db`) and downloaded OCR language models (`ocr-models/`)                                                                                              |
+| `UPLOADS_DIR=/uploads`   | Directory for uploaded files; the Docker image defaults to `/uploads`                                                                                                                   |
 | `PAPERLESS_SETTINGS_KEY` | Optional 64-character hexadecimal secret (`openssl rand -hex 32`) for encrypting personal Paperless API tokens; required before connecting accounts, never included in portable backups |
 
 ### Paperless-ngx
@@ -36,9 +39,10 @@ Reminder identities and per-device deliveries persist across restarts. If the se
 The app has no OCR-related environment variables. Legacy `OCR_URL`, API-key, or service settings do not enable remote OCR.
 
 ### Backup
+
 The Compose setup stores the database and OCR models in `./daten` and uploaded files separately in `./dokumente`. Back up all three paths. For older installations, copy `daten/uploads/` into `dokumente/` before switching to the separate mount.
 
-Admins can also create a portable application backup in Settings and import it during setup or from Settings. It contains the database and optionally uploaded documents, but not OCR language models; the archive includes sensitive user credentials and application settings. The in-app ZIP limit is 512 MiB. See [backups and restore](backups.md) for memory requirements, expanded-size limits and restore behavior.
+Admins can also create a portable application backup in Settings and import it during setup or from Settings. It contains the database and optionally uploaded documents, collection images and diary media, but not OCR language models; the archive includes sensitive user credentials and application settings. The in-app ZIP limit is 512 MiB. See [backups and restore](backups.md) for memory requirements, expanded-size limits and restore behavior.
 
 ### Updates and database migrations
 
@@ -57,15 +61,18 @@ Migration v3 introduces the additional-funding ledger, created from the shared s
 Synchronize offline work before updating. Writes from obsolete invoice forms or queued invoice operations are explicitly rejected with a reload/reconciliation message rather than creating hidden records. Unsynchronized changes remain local; transfer them to the migrated expense (or create a new expense) before discarding them. Expense operations with an older row shape may require the existing conflict-resolution flow after new nullable columns are added.
 
 ### Reverse proxy
+
 Put HTTPS in front of the app (cookies are `secure` under `https`). For OIDC, enter the public address in Settings.
-Allow a 512 MiB backup upload plus multipart overhead (for example `client_max_body_size 520m;` in nginx) and OCR processing durations up to 180 seconds in the proxy. The regular individual file upload limit remains 100 MiB.
- OCR language models are downloaded only after an explicit admin action; once downloaded, OCR processing is offline. Optional OIDC uses the identity provider configured by an administrator; disable it to keep sign-in fully local. Docker needs network access while downloading base images and build dependencies.
+Allow a 512 MiB backup upload plus multipart overhead (for example `client_max_body_size 520m;` in nginx) and OCR processing durations up to 180 seconds in the proxy. Regular file uploads remain limited to 100 MiB; construction-diary photos and videos allow up to 1 GiB per file, so self-hosted reverse proxies and request timeouts must allow a little more than 1 GiB for these uploads. The in-app backup limit remains 512 MiB.
+OCR language models are downloaded only after an explicit admin action; once downloaded, OCR processing is offline. Optional OIDC uses the identity provider configured by an administrator; disable it to keep sign-in fully local. Docker needs network access while downloading base images and build dependencies.
 
 ## Development
+
 ```bash
 bun install
 bun run dev
 bunx vitest run      # tests
 ```
+
 For development, `UPLOADS_DIR` is optional; without it, uploaded files are stored in `DATA_DIR/uploads`.
 Tests cover budget/calendar/auth rules, local OCR, OCR model/settings authorization, parsing/mapping, and routing.

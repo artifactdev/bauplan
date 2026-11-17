@@ -23,6 +23,7 @@ import {
   syncWorkspaceChanges,
   updateRow,
   uploadDocument,
+  uploadDiaryMedia,
 } from "@/lib/data.functions";
 import {
   clearAccountData,
@@ -45,6 +46,7 @@ vi.mock("@/lib/data.functions", () => ({
   updateRow: vi.fn(),
   deleteRow: vi.fn(),
   uploadDocument: vi.fn(),
+  uploadDiaryMedia: vi.fn(),
   getWorkspace: vi.fn(),
   getProjects: vi.fn(),
   syncWorkspaceChanges: vi.fn(),
@@ -84,6 +86,8 @@ const empty: Workspace = {
   funding_entries: [],
   credit_terms: [],
   credit_repayments: [],
+  diary_entries: [],
+  diary_media: [],
 };
 let client: QueryClient;
 function Wrapper({ children }: { children: ReactNode }) {
@@ -112,9 +116,46 @@ afterEach(async () => {
   clearOfflineAccount();
   onlineManager.setOnline(true);
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("offline mutation completion", () => {
+  it("persists the actual completion day in offline snapshots and queued changes", async () => {
+    const { result } = renderHook(useMutations, { wrapper: Wrapper });
+    let id = "";
+    await act(async () => {
+      ({ id } = await result.current.create.mutateAsync({
+        table: "tasks",
+        row: { title: "Diary task", status: "offen" },
+      }));
+      await result.current.update.mutateAsync({
+        table: "tasks",
+        id,
+        patch: { status: "erledigt", completed_at: null, completed_on: null },
+      });
+    });
+    const task = (await loadSnapshot(userId, "project-test"))!.tasks[0]!;
+    expect(task.completed_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(task.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect((await listChanges(userId)).at(-1)?.row).toMatchObject({
+      completed_at: task.completed_at,
+      completed_on: task.completed_on,
+    });
+    await act(async () => {
+      await result.current.update.mutateAsync({
+        table: "tasks",
+        id,
+        patch: { status: "erledigt", title: "Edited" },
+      });
+    });
+    expect((await loadSnapshot(userId, "project-test"))!.tasks[0]!.completed_at).toBe(
+      task.completed_at,
+    );
+    await act(async () => {
+      await result.current.update.mutateAsync({ table: "tasks", id, patch: { status: "offen" } });
+    });
+    expect((await loadSnapshot(userId, "project-test"))!.tasks[0]!.completed_on).toBeNull();
+  });
   it("persists task dates offline and rejects partial changes that reverse the range", async () => {
     const { result } = renderHook(useMutations, { wrapper: Wrapper });
     let id = "";
@@ -191,6 +232,51 @@ describe("offline mutation completion", () => {
     expect(updateRow).not.toHaveBeenCalled();
     expect(deleteRow).not.toHaveBeenCalled();
     expect(uploadDocument).not.toHaveBeenCalled();
+  });
+
+  it("queues diary media offline with its report association", async () => {
+    const workspace = {
+      ...structuredClone(empty),
+      diary_entries: [
+        {
+          id: "diary-entry",
+          entry_date: "2026-06-17",
+          title: "Work report",
+          weather_snapshot: null,
+          work_done: null,
+          progress: null,
+          issues: null,
+          task_ids: "[]",
+          event_ids: "[]",
+          trade_ids: "[]",
+        },
+      ],
+    };
+    await saveSnapshot(userId, workspace, "project-test");
+    client.setQueryData(["ws", userId, "project-test"], workspace);
+    const { result } = renderHook(useMutations, { wrapper: Wrapper });
+
+    let mediaId = "";
+    await act(async () => {
+      ({ id: mediaId } = await result.current.diaryMediaUpload.mutateAsync({
+        file: new File(["photo"], "site.png", { type: "image/png" }),
+        diaryEntryId: "diary-entry",
+      }));
+    });
+
+    const [upload] = await listUploads(userId);
+    const snapshot = await loadSnapshot(userId, "project-test");
+    expect(upload).toMatchObject({
+      id: mediaId,
+      projectId: "project-test",
+      mime: "image/png",
+      meta: { diary_entry_id: "diary-entry" },
+    });
+    expect(snapshot?.diary_media[0]).toMatchObject({
+      id: mediaId,
+      diary_entry_id: "diary-entry",
+      storage_path: `offline:${mediaId}`,
+    });
   });
 
   function Form() {
@@ -319,7 +405,7 @@ describe("offline mutation completion", () => {
       {
         id: "upload-new",
         userId,
-        file: new Blob(["pdf"], { type: "application/pdf" }),
+        file: new File(["pdf"], "plan.pdf", { type: "application/pdf" }),
         name: "plan.pdf",
         mime: "application/pdf",
         meta: { project_id: "project-new" },
@@ -350,11 +436,133 @@ describe("offline mutation completion", () => {
       return { id: "upload-new", storage_path: "documents/plan.pdf", created_at: "2026-01-01" };
     });
 
+    vi.stubGlobal(
+      "FormData",
+      class {
+        append() {}
+      },
+    );
     renderHook(() => useOfflineSync(userId), { wrapper: Wrapper });
     await waitFor(async () => {
       expect(await listChanges(userId)).toHaveLength(0);
       expect(await listUploads(userId)).toHaveLength(0);
     });
     expect(order).toEqual(["projects", "upload"]);
+  });
+
+  it("uploads financial documents and syncs offers/payments before their diary and its media", async () => {
+    for (const [sequence, table, rowId] of [
+      [1, "offers", "offer"],
+      [2, "expenses", "payment"],
+    ] as const)
+      await saveChange({
+        id: `change-${table}`,
+        userId,
+        sequence,
+        table,
+        action: "create",
+        rowId,
+        projectId: "project-test",
+        base: null,
+        row: { id: rowId, document_id: "financial-doc" },
+      });
+    await saveChange({
+      id: "diary-entry-change",
+      userId,
+      sequence: 3,
+      table: "diary_entries",
+      action: "create",
+      rowId: "diary-entry",
+      projectId: "project-test",
+      base: null,
+      row: {
+        id: "diary-entry",
+        title: "Work report",
+        entry_date: "2026-06-17",
+        offer_ids: '["offer"]',
+        payment_ids: '["payment"]',
+      },
+      syncGeneration: "generation",
+    });
+    await persistUpload(userId, structuredClone(empty), {
+      id: "diary-media-change",
+      userId,
+      file: new File(["video"], "site.webm", { type: "video/webm" }),
+      name: "site.webm",
+      mime: "video/webm",
+      meta: { diary_entry_id: "diary-entry" },
+      projectId: "project-test",
+      syncGeneration: "generation",
+    });
+    await persistUpload(userId, structuredClone(empty), {
+      id: "financial-doc",
+      userId,
+      file: new File(["pdf"], "invoice.pdf", { type: "application/pdf" }),
+      name: "invoice.pdf",
+      mime: "application/pdf",
+      meta: { id: "financial-doc" },
+      projectId: "project-test",
+      syncGeneration: "generation",
+    });
+    const order: string[] = [];
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    onlineManager.setOnline(true);
+    vi.mocked(getAuthState).mockResolvedValue({
+      needsSetup: false,
+      user: {
+        id: userId,
+        email: "offline@example.test",
+        name: "Test",
+        role: "member",
+      },
+      oidc: { enabled: false, label: "" },
+    });
+    vi.mocked(getProjects).mockResolvedValue(empty.projects);
+    vi.mocked(syncWorkspaceChanges).mockImplementation(async (options) => {
+      const data = options?.data;
+      if (!data || typeof data !== "object" || !("changes" in data) || !Array.isArray(data.changes))
+        throw new Error("Expected sync changes");
+      const change: unknown = data.changes[0];
+      if (
+        !change ||
+        typeof change !== "object" ||
+        !("id" in change) ||
+        !("table" in change) ||
+        typeof change.id !== "string" ||
+        typeof change.table !== "string"
+      )
+        throw new Error("Expected a sync change");
+      order.push(change.table);
+      return [{ id: change.id, applied: true, current: null }];
+    });
+    vi.mocked(uploadDocument).mockImplementation(async () => {
+      order.push("document-upload");
+      return {
+        id: "financial-doc",
+        storage_path: "documents/invoice.pdf",
+        created_at: "2026-06-17T10:00:00.000Z",
+      };
+    });
+    vi.mocked(uploadDiaryMedia).mockImplementation(async () => {
+      order.push("upload");
+      return {
+        id: "diary-media-change",
+        storage_path: "diary/site.webm",
+        created_at: "2026-06-17T10:00:00.000Z",
+      };
+    });
+    vi.stubGlobal(
+      "FormData",
+      class {
+        append() {}
+      },
+    );
+
+    renderHook(() => useOfflineSync(userId), { wrapper: Wrapper });
+    await waitFor(async () => {
+      expect(await listChanges(userId)).toHaveLength(0);
+      expect(await listUploads(userId)).toHaveLength(0);
+    });
+    expect(order).toEqual(["document-upload", "offers", "expenses", "diary_entries", "upload"]);
   });
 });

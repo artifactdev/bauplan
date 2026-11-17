@@ -19,6 +19,8 @@ const empty = (): Workspace => ({
   funding_entries: [],
   credit_terms: [],
   credit_repayments: [],
+  diary_entries: [],
+  diary_media: [],
 });
 
 function workspace() {

@@ -35,8 +35,43 @@ export function validateTaskDates(row: Record<string, unknown>) {
     )
       throw new Error("tasks.invalid_date");
   }
+
   const start = row["start_date"];
   const end = row["due_date"];
   if (typeof start === "string" && start && typeof end === "string" && end && end < start)
     throw new Error("tasks.due_before_start");
+}
+
+export function taskCompletionPatch(
+  patch: Record<string, unknown>,
+  previous?: Record<string, unknown> | null,
+  now = new Date(),
+  preserveUnknown = false,
+): Record<string, unknown> {
+  if (!("status" in patch) && !("completed_at" in patch) && !("completed_on" in patch))
+    return patch;
+  const status = patch["status"] ?? previous?.["status"];
+  if (status !== "erledigt") return { ...patch, completed_at: null, completed_on: null };
+  if (previous?.["status"] === "erledigt")
+    return {
+      ...patch,
+      completed_at: previous["completed_at"] ?? null,
+      completed_on: previous["completed_on"] ?? null,
+    };
+  if (preserveUnknown && patch["completed_at"] === null && patch["completed_on"] === null)
+    return patch;
+  const local = new Date(now);
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  const completed_at = patch["completed_at"] ?? now.toISOString();
+  const completed_on = patch["completed_on"] ?? local.toISOString().slice(0, 10);
+  if (
+    typeof completed_at !== "string" ||
+    !z.string().datetime({ offset: true }).safeParse(completed_at).success ||
+    typeof completed_on !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(completed_on) ||
+    !Number.isFinite(Date.parse(`${completed_on}T00:00:00Z`)) ||
+    new Date(`${completed_on}T00:00:00Z`).toISOString().slice(0, 10) !== completed_on
+  )
+    throw new Error("tasks.invalid_completion_date");
+  return { ...patch, completed_at, completed_on };
 }

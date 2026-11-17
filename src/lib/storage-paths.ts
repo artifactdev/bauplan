@@ -2,6 +2,7 @@
 
 export const DOCUMENTS_DIR = "documents";
 export const COLLECTIONS_DIR = "collections";
+export const DIARY_DIR = "diary";
 export const DEFAULT_DOCUMENT_FOLDER = "Sonstiges";
 export const DEFAULT_COLLECTION_FOLDER = "Allgemein";
 const SEGMENT = /^[a-zA-Z0-9._-]{1,255}$/;
@@ -48,6 +49,10 @@ export function documentFolder(category: string | null | undefined): string {
 
 export function collectionFolder(collection: string | null | undefined): string {
   return `${COLLECTIONS_DIR}/${folderName(collection, DEFAULT_COLLECTION_FOLDER)}`;
+}
+
+export function diaryFolder(): string {
+  return DIARY_DIR;
 }
 
 /** Target path for an existing file in a folder, keeping its unique file name. */
