@@ -15,14 +15,27 @@ import {
   tradeName,
   tradeOptions,
 } from "@/lib/options";
-import { type Expense, type ExpenseStatus } from "@/lib/schema";
-import { expenseIsOverdue, reimbursementSource } from "@/lib/expenses";
+import { type BankSubmissionStatus, type Expense, type ExpenseStatus } from "@/lib/schema";
+import { expenseIsOverdue, expenseTransition, migrateExpenseStatus } from "@/lib/expenses";
+import { exportExpenses, markExportedExpensesSubmitted } from "@/lib/data.functions";
+import { getOfflineAccount, listChanges, listUploads } from "@/lib/offline-store";
 import { Empty, MetricCard, PageHeader, Panel, Pill } from "@/components/app/ui-bits";
 import { ExpenseDialog } from "@/components/app/ExpenseDialog";
 import { ExpenseSplitDialog } from "@/components/app/ExpenseSplitDialog";
 import { resolveFileUrl } from "@/components/app/doc-open";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -63,16 +76,52 @@ const EXPENSE_STATUS: Record<
   erstattet: { label: tr("shared.reimbursed"), tone: "primary" },
   abgelehnt: { label: tr("shared.rejected"), tone: "danger" },
 };
-const STATUS_OPTIONS = Object.entries(EXPENSE_STATUS).map(([value, s]) => ({
-  value,
-  label: s.label,
-}));
+const STATUS_OPTIONS = Object.entries(EXPENSE_STATUS)
+  .filter(([value]) => value === "offen" || value === "bezahlt")
+  .map(([value, s]) => ({
+    value,
+    label: s.label,
+  }));
+const BANK_STATUS: Record<BankSubmissionStatus, string> = {
+  nicht_festgelegt: tr("expenses.bank_unset"),
+  einzureichen: tr("expenses.bank_ready"),
+  eingereicht: tr("expenses.bank_submitted"),
+  ausgezahlt: tr("expenses.bank_paid_out"),
+  abgelehnt: tr("expenses.bank_rejected"),
+};
+const bankStatus = (expense: Expense) =>
+  expense.bank_status ?? migrateExpenseStatus(expense.status).bank_status;
+
+type Snapshot = Record<string, string | number | boolean | null>;
+function snapshot(value: object): Snapshot {
+  const result: Snapshot = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) continue;
+    if (
+      item !== null &&
+      typeof item !== "string" &&
+      typeof item !== "number" &&
+      typeof item !== "boolean"
+    )
+      throw new Error("expenses.export_failed");
+    result[key] = item;
+  }
+  return result;
+}
 
 function ExpensesPage() {
-  const { ws } = useWorkspace();
+  const { ws, projectId, refetch } = useWorkspace();
   const { update, remove } = useMutations();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const [bankFilter, setBankFilter] = useState("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState<{
+    projectId: string;
+    expenses: Snapshot[];
+    documents: Snapshot[];
+  } | null>(null);
   const [source, setSource] = useState<string>("all");
   const [trade, setTrade] = useState("all");
   const [contact, setContact] = useState("all");
@@ -96,29 +145,23 @@ function ExpensesPage() {
   const linkedOffer = (expense: Expense) => ws.offers.find((item) => item.id === expense.offer_id);
   const changeStatus = (expense: Expense, value: string) => {
     if (value === expense.status) return;
-    const bankSource = reimbursementSource(
-      { status: value, budget_pot_id: expense.budget_pot_id },
-      expense,
-      ws,
-    );
-    update.mutate(
-      {
-        table: "expenses",
-        id: expense.id,
-        patch: bankSource ? { status: value, budget_pot_id: bankSource } : { status: value },
-      },
-      {
-        onSuccess: () => {
-          if (bankSource)
-            toast.success(
-              tr("expenses.moved_to_source", {
-                source: potName(ws, bankSource) ?? "",
-                previous: potName(ws, expense.budget_pot_id) ?? "–",
-              }),
-            );
-        },
-      },
-    );
+    update.mutate({
+      table: "expenses",
+      id: expense.id,
+      patch: { status: value },
+    });
+  };
+  const changeBankStatus = (expense: Expense, value: string) => {
+    if (value === bankStatus(expense)) return;
+    try {
+      const patch = expenseTransition({ bank_status: value }, expense, ws.budget_pots);
+      update.mutate({ table: "expenses", id: expense.id, patch });
+    } catch (error) {
+      if (error instanceof Error && error.message === "expenses.private_source_required") {
+        setDlg({ id: expense.id, initial: { ...expense, bank_status: value } });
+        toast.info(tr(error.message));
+      } else toast.error(tr(error instanceof Error ? error.message : "expenses.export_failed"));
+    }
   };
   const statusPill = (expense: Expense) => (
     <Pill tone={expenseIsOverdue(expense, today) ? "danger" : EXPENSE_STATUS[expense.status]?.tone}>
@@ -136,6 +179,17 @@ function ExpensesPage() {
           status === "all" ||
           (status === "overdue" ? expenseIsOverdue(e, today) : e.status === status),
       )
+      .filter((e) => {
+        const bank = bankStatus(e);
+        return (
+          bankFilter === "all" ||
+          (bankFilter === "not_submitted"
+            ? bank === "einzureichen" || bank === "nicht_festgelegt"
+            : bankFilter === "completed"
+              ? bank === "ausgezahlt" || bank === "abgelehnt"
+              : bank === bankFilter)
+        );
+      })
       .filter(
         (e) =>
           source === "all" || (source === "none" ? !e.budget_pot_id : e.budget_pot_id === source),
@@ -169,7 +223,7 @@ function ExpensesPage() {
         if (sort === "title") return a.title.localeCompare(b.title);
         return (b.expense_date ?? "").localeCompare(a.expense_date ?? "");
       });
-  }, [ws, q, status, source, trade, contact, offer, sort, today]);
+  }, [ws, q, status, bankFilter, source, trade, contact, offer, sort, today]);
   const bySource = (id: string | null) =>
     ws.expenses
       .filter((e) => (id ? e.budget_pot_id === id : !e.budget_pot_id))
@@ -177,12 +231,80 @@ function ExpensesPage() {
 
   const sumBy = (st: ExpenseStatus) =>
     ws.expenses.filter((e) => e.status === st).reduce((a, e) => a + Number(e.amount), 0);
+  const sumBank = (st: BankSubmissionStatus) =>
+    ws.expenses.filter((e) => bankStatus(e) === st).reduce((a, e) => a + Number(e.amount), 0);
   const total = ws.expenses.reduce((a, e) => a + Number(e.amount), 0);
-  const hasRejected = ws.expenses.some((e) => e.status === "abgelehnt");
+  const hasRejected = ws.expenses.some((e) => bankStatus(e) === "abgelehnt");
   const overdueTotal = ws.expenses
     .filter((e) => expenseIsOverdue(e, today))
     .reduce((sum, e) => sum + Number(e.amount), 0);
   const listTotal = list.reduce((a, e) => a + Number(e.amount), 0);
+  const selectedExpenses = ws.expenses.filter((expense) => selected.has(expense.id));
+  const toggleSelected = (id: string, checked: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const download = async (expenses: Expense[]) => {
+    if (!navigator.onLine) {
+      toast.error(tr("expenses.export_online"));
+      return;
+    }
+    if (!projectId || !expenses.length) {
+      toast.error(tr("expenses.export_empty"));
+      return;
+    }
+    setExporting(true);
+    try {
+      const account = getOfflineAccount();
+      if (!account) throw new Error("offline.no_account_available_offline");
+      const [changes, uploads] = await Promise.all([
+        listChanges(account.id),
+        listUploads(account.id),
+      ]);
+      if (changes.length || uploads.length) throw new Error("expenses.export_pending");
+      const result = await exportExpenses({
+        data: { projectId, ids: expenses.map((item) => item.id) },
+      });
+      if ("missing" in result && result.missing) {
+        toast.error(tr("expenses.export_missing", { titles: result.missing.join(", ") }));
+        return;
+      }
+      if (!("archive" in result) || !result.archive) throw new Error("expenses.export_failed");
+      const decoded = atob(result.archive);
+      const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "bank-submission.zip";
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExported({
+        projectId,
+        expenses: result.expenses.map(snapshot),
+        documents: result.documents.map(snapshot),
+      });
+    } catch (error) {
+      toast.error(tr(error instanceof Error ? error.message : "expenses.export_failed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+  const markExported = async () => {
+    if (!projectId || !exported) return;
+    try {
+      if (projectId !== exported.projectId) throw new Error("expenses.export_conflict");
+      await markExportedExpensesSubmitted({ data: exported });
+      await refetch();
+      toast.success(tr("expenses.export_marked"));
+    } catch (error) {
+      toast.error(tr(error instanceof Error ? error.message : "expenses.export_failed"));
+    } finally {
+      setExported(null);
+    }
+  };
 
   const openDoc = async (docId: string | null) => {
     const d = ws.documents.find((x) => x.id === docId);
@@ -210,10 +332,10 @@ function ExpensesPage() {
       />
 
       <div
-        className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${hasRejected ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}
+        className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${hasRejected ? "xl:grid-cols-8" : "xl:grid-cols-7"}`}
       >
         <Stat label={tr("shared.total")} value={eur(total, true)} amount={total} tone="neutral" />
-        {(["offen", "bezahlt", "eingereicht"] as const).map((st) => (
+        {(["offen", "bezahlt"] as const).map((st) => (
           <Stat
             key={st}
             label={EXPENSE_STATUS[st].label}
@@ -222,6 +344,17 @@ function ExpensesPage() {
             tone={EXPENSE_STATUS[st].tone}
             active={status === st}
             onClick={() => setStatus(status === st ? "all" : st)}
+          />
+        ))}
+        {(["einzureichen", "eingereicht"] as const).map((st) => (
+          <Stat
+            key={st}
+            label={BANK_STATUS[st]}
+            value={eur(sumBank(st), true)}
+            amount={sumBank(st)}
+            tone="info"
+            active={bankFilter === st}
+            onClick={() => setBankFilter(bankFilter === st ? "all" : st)}
           />
         ))}
         <Stat
@@ -233,21 +366,21 @@ function ExpensesPage() {
           onClick={() => setStatus(status === "overdue" ? "all" : "overdue")}
         />
         <Stat
-          label={EXPENSE_STATUS.erstattet.label}
-          value={eur(sumBy("erstattet"), true)}
-          amount={sumBy("erstattet")}
-          tone={EXPENSE_STATUS.erstattet.tone}
-          active={status === "erstattet"}
-          onClick={() => setStatus(status === "erstattet" ? "all" : "erstattet")}
+          label={BANK_STATUS.ausgezahlt}
+          value={eur(sumBank("ausgezahlt"), true)}
+          amount={sumBank("ausgezahlt")}
+          tone="primary"
+          active={bankFilter === "ausgezahlt"}
+          onClick={() => setBankFilter(bankFilter === "ausgezahlt" ? "all" : "ausgezahlt")}
         />
         {hasRejected && (
           <Stat
-            label={EXPENSE_STATUS.abgelehnt.label}
-            value={eur(sumBy("abgelehnt"), true)}
-            amount={sumBy("abgelehnt")}
+            label={BANK_STATUS.abgelehnt}
+            value={eur(sumBank("abgelehnt"), true)}
+            amount={sumBank("abgelehnt")}
             tone={EXPENSE_STATUS.abgelehnt.tone}
-            active={status === "abgelehnt"}
-            onClick={() => setStatus(status === "abgelehnt" ? "all" : "abgelehnt")}
+            active={bankFilter === "abgelehnt"}
+            onClick={() => setBankFilter(bankFilter === "abgelehnt" ? "all" : "abgelehnt")}
           />
         )}
       </div>
@@ -300,6 +433,23 @@ function ExpensesPage() {
                 </SelectItem>
               ))}
               <SelectItem value="overdue">{tr("shared.overdue")}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select value={bankFilter} onValueChange={setBankFilter}>
+          <SelectTrigger className="w-full sm:w-44" aria-label={tr("expenses.bank_status")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">{tr("expenses.bank_all")}</SelectItem>
+              <SelectItem value="not_submitted">{tr("expenses.bank_not_submitted")}</SelectItem>
+              <SelectItem value="completed">{tr("expenses.bank_completed")}</SelectItem>
+              {Object.entries(BANK_STATUS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -370,6 +520,7 @@ function ExpensesPage() {
         </Select>
         {(q ||
           status !== "all" ||
+          bankFilter !== "all" ||
           source !== "all" ||
           trade !== "all" ||
           contact !== "all" ||
@@ -380,6 +531,7 @@ function ExpensesPage() {
             onClick={() => {
               setQ("");
               setStatus("all");
+              setBankFilter("all");
               setSource("all");
               setTrade("all");
               setContact("all");
@@ -391,11 +543,53 @@ function ExpensesPage() {
         )}
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!list.length}
+          onClick={() =>
+            setSelected((current) => new Set([...current, ...list.map((expense) => expense.id)]))
+          }
+        >
+          {tr("expenses.select_filtered")}
+        </Button>
+        {selectedExpenses.length > 0 && (
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            {tr("expenses.clear_selection")}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!list.length || exporting}
+          onClick={() => void download(list)}
+        >
+          {tr("expenses.download_filtered")}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!selectedExpenses.length || exporting}
+          onClick={() => void download(selectedExpenses)}
+        >
+          {tr("expenses.download_selected")}
+        </Button>
+        {selectedExpenses.length > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {tr("expenses.download_count", { count: selectedExpenses.length })}
+          </span>
+        )}
+      </div>
+
       <Panel>
         <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>
+                  <span className="sr-only">{tr("expenses.select_expense")}</span>
+                </TableHead>
                 <TableHead>{tr("shared.date")}</TableHead>
                 <TableHead>{tr("shared.description")}</TableHead>
                 <TableHead>
@@ -404,7 +598,9 @@ function ExpensesPage() {
                 <TableHead>{tr("shared.paid_2")}</TableHead>
                 <TableHead>{tr("shared.payable")}</TableHead>
                 <TableHead className="text-right">{tr("shared.amount")}</TableHead>
-                <TableHead>{tr("shared.status")}</TableHead>
+                <TableHead>
+                  {tr("expenses.payment_status")} / {tr("expenses.bank_status")}
+                </TableHead>
                 <TableHead>{tr("shared.receipt")}</TableHead>
                 <TableHead />
               </TableRow>
@@ -412,6 +608,13 @@ function ExpensesPage() {
             <TableBody className="tabular">
               {list.map((e) => (
                 <TableRow key={e.id}>
+                  <TableCell>
+                    <Checkbox
+                      aria-label={`${tr("expenses.select_expense")}: ${e.title}`}
+                      checked={selected.has(e.id)}
+                      onCheckedChange={(checked) => toggleSelected(e.id, checked === true)}
+                    />
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{fmtDate(e.expense_date)}</TableCell>
                   <TableCell className="max-w-64">
                     <div className="truncate font-medium" title={e.title}>
@@ -454,18 +657,43 @@ function ExpensesPage() {
                   </TableCell>
                   <TableCell className="text-right">{eur(e.amount, true)}</TableCell>
                   <TableCell>
-                    <Select value={e.status} onValueChange={(v) => changeStatus(e, v)}>
-                      <SelectTrigger className="h-8 w-36" aria-label={tr("expenses.change_status")}>
-                        {statusPill(e)}
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUS_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-col gap-1">
+                      <Select value={e.status} onValueChange={(v) => changeStatus(e, v)}>
+                        <SelectTrigger
+                          className="h-8 w-36"
+                          aria-label={tr("expenses.change_status")}
+                        >
+                          {statusPill(e)}
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={bankStatus(e)}
+                        onValueChange={(value) => changeBankStatus(e, value)}
+                      >
+                        <SelectTrigger
+                          className="h-8 w-36"
+                          aria-label={`${tr("expenses.bank_status")}: ${e.title}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {Object.entries(BANK_STATUS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </TableCell>
                   <TableCell>
                     {e.document_id ? (
@@ -514,7 +742,7 @@ function ExpensesPage() {
             {list.length > 0 && (
               <TableFooter className="tabular">
                 <TableRow>
-                  <TableCell colSpan={5}>{tr("expenses.sum")}</TableCell>
+                  <TableCell colSpan={6}>{tr("expenses.sum")}</TableCell>
                   <TableCell className="text-right">{eur(listTotal, true)}</TableCell>
                   <TableCell colSpan={3} />
                 </TableRow>
@@ -525,6 +753,16 @@ function ExpensesPage() {
         <div className="grid gap-3 md:hidden">
           {list.map((e) => (
             <article key={e.id} className="rounded-lg border p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <Checkbox
+                  aria-label={`${tr("expenses.select_expense")}: ${e.title}`}
+                  checked={selected.has(e.id)}
+                  onCheckedChange={(checked) => toggleSelected(e.id, checked === true)}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {tr("expenses.select_expense")}
+                </span>
+              </div>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="break-words font-medium">{e.title}</h3>
@@ -575,6 +813,23 @@ function ExpensesPage() {
                         {o.label}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+                <Select value={bankStatus(e)} onValueChange={(value) => changeBankStatus(e, value)}>
+                  <SelectTrigger
+                    className="h-8 w-40 text-xs"
+                    aria-label={`${tr("expenses.bank_status")}: ${e.title}`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {Object.entries(BANK_STATUS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
                 <div className="flex">
@@ -640,6 +895,32 @@ function ExpensesPage() {
         initial={dlg?.initial}
       />
       <ExpenseSplitDialog expense={splitting} onClose={() => setSplitting(null)} />
+      <AlertDialog
+        open={!!exported}
+        onOpenChange={(open) => {
+          if (!open) setExported(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tr("expenses.export_mark_title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {tr("expenses.export_mark_description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tr("expenses.export_not_mark")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void markExported();
+              }}
+            >
+              {tr("expenses.export_mark")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

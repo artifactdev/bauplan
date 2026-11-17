@@ -31,7 +31,8 @@ const expense = {
   created_at: "2026-11-01",
   title: "Baumarkt",
   amount: 300,
-  status: "eingereicht",
+  status: "bezahlt",
+  bank_status: "eingereicht",
   budget_pot_id: "jerry",
 } as Expense;
 
@@ -51,7 +52,7 @@ it("creates the reimbursed part on the bank source and reduces the original", as
   expect(submit).toBeDisabled();
 
   fireEvent.change(dialog.getByLabelText(/Partial amount/), { target: { value: "120" } });
-  expect(dialog.getByText(/Partial amount: .*Reimbursed · Bank/)).toBeInTheDocument();
+  expect(dialog.getByText(/Partial amount: .*Approved \/ paid out · Bank/)).toBeInTheDocument();
   expect(dialog.getByText(/Remainder: .*Submitted · Jerry/)).toBeInTheDocument();
   fireEvent.click(submit);
 
@@ -59,9 +60,10 @@ it("creates the reimbursed part on the bank source and reduces the original", as
   expect(mutations.create).toHaveBeenCalledWith({
     table: "expenses",
     row: expect.objectContaining({
-      title: "Baumarkt (Reimbursed)",
+      title: "Baumarkt (Approved / paid out)",
       amount: 120,
-      status: "erstattet",
+      status: "bezahlt",
+      bank_status: "ausgezahlt",
       budget_pot_id: "bank",
     }),
   });

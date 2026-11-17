@@ -40,6 +40,33 @@ afterAll(() => {
 });
 
 describe("Bauplan backups", () => {
+  it("migrates legacy submitted expenses while preserving their paid accounting", async () => {
+    await repo.insert("expenses", {
+      id: "legacy-submission",
+      title: "Invoice",
+      amount: 25,
+      status: "bezahlt",
+    });
+    const entries = unzipSync(await createBackup(repo));
+    const manifest = JSON.parse(strFromU8(entries["backup.json"]!)) as {
+      database: { tables: { expenses: Record<string, unknown>[] } };
+    };
+    const expense = manifest.database.tables.expenses.find(
+      (row) => row["id"] === "legacy-submission",
+    );
+    if (!expense) throw new Error("Missing test expense");
+    expense["status"] = "eingereicht";
+    delete expense["bank_status"];
+    delete expense["document_links"];
+    entries["backup.json"] = strToU8(JSON.stringify(manifest));
+    expect(
+      parseBackup(zipSync(entries)).database.tables.expenses.find(
+        (row) => row["id"] === "legacy-submission",
+      ),
+    ).toMatchObject({ status: "bezahlt", bank_status: "eingereicht", document_links: null });
+    await repo.remove("expenses", "legacy-submission");
+  });
+
   it("round-trips additional funding and accepts legacy backups without the new ledger", async () => {
     await repo.insert("budget_pots", { id: "gift-source", name: "Oma", deducts_from_budget: true });
     await repo.insert("funding_entries", {

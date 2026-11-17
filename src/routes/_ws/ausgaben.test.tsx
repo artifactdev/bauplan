@@ -61,6 +61,37 @@ function openExpenseForm() {
 }
 
 describe("unified expense creation", () => {
+  it("filters bank submission independently from payment status", async () => {
+    const base: Expense = {
+      id: "open",
+      title: "Open invoice",
+      vendor: null,
+      amount: 100,
+      expense_date: null,
+      category: null,
+      trade_id: null,
+      cost_item_id: null,
+      document_id: null,
+      notes: null,
+      status: "offen",
+      bank_status: "eingereicht",
+    };
+    mocks.expenses.push(base, {
+      ...base,
+      id: "paid",
+      title: "Paid receipt",
+      status: "bezahlt",
+      bank_status: "einzureichen",
+    });
+    const Page = Route.options.component;
+    if (!Page) throw new Error("Missing expenses page component");
+    render(<Page />);
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Bank status" }), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Not yet submitted" }));
+    expect(screen.queryByText("Open invoice")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Paid receipt").length).toBeGreaterThan(0);
+  });
+
   it("links a partial invoice to a quote and prefills assignments without replacing its amount", async () => {
     mocks.offers.push({
       id: "offer-1",

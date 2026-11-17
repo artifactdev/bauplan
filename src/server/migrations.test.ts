@@ -17,6 +17,34 @@ afterEach(() => {
 });
 
 describe("database migrations", () => {
+  it("separates legacy bank states without changing paid totals or sources", () => {
+    const db = database();
+    migrateDatabase(db);
+    for (const [id, status] of [
+      ["open", "offen"],
+      ["paid", "bezahlt"],
+      ["submitted", "eingereicht"],
+      ["reimbursed", "erstattet"],
+      ["rejected", "abgelehnt"],
+    ] as const) {
+      db.prepare(
+        "INSERT INTO expenses (id, created_at, status, budget_pot_id) VALUES (?, ?, ?, ?)",
+      ).run(id, "2026-01-01", status, "private");
+    }
+    db.exec("PRAGMA user_version = 14");
+    migrateDatabase(db);
+    const rows = db
+      .prepare("SELECT id, status, bank_status, budget_pot_id FROM expenses ORDER BY id")
+      .all();
+    expect(rows).toEqual([
+      { id: "open", status: "offen", bank_status: "einzureichen", budget_pot_id: "private" },
+      { id: "paid", status: "bezahlt", bank_status: "einzureichen", budget_pot_id: "private" },
+      { id: "reimbursed", status: "bezahlt", bank_status: "ausgezahlt", budget_pot_id: "private" },
+      { id: "rejected", status: "bezahlt", bank_status: "abgelehnt", budget_pot_id: "private" },
+      { id: "submitted", status: "bezahlt", bank_status: "eingereicht", budget_pot_id: "private" },
+    ]);
+  });
+
   it("initializes a fresh database with the complete typed schema and version", () => {
     const db = database();
     migrateDatabase(db);
@@ -42,7 +70,7 @@ describe("database migrations", () => {
           .map((column) => column["name"]),
       ).toEqual(columns);
     }
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(14);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(15);
     db.prepare("INSERT INTO projects (id, created_at, name) VALUES (?, ?, ?)").run(
       "preview-default",
       "2026-11-13",
@@ -123,7 +151,7 @@ describe("database migrations", () => {
         .all()
         .some((column) => column["name"] === "assignee_id"),
     ).toBe(true);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(14);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(15);
     expect(
       db.prepare("SELECT start_date, due_date, checklist FROM tasks WHERE id = 'task'").get(),
     ).toEqual({
@@ -176,7 +204,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_access; PRAGMA user_version=7;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_access").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(14);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(15);
   });
 
   it("upgrades v6 with an empty private auto-import table without enabling imports", () => {
@@ -185,7 +213,7 @@ describe("database migrations", () => {
     db.exec("DROP TABLE app_paperless_auto_import; PRAGMA user_version=6;");
     migrateDatabase(db);
     expect(db.prepare("SELECT * FROM app_paperless_auto_import").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(14);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(15);
   });
 
   it("assigns legacy rows while preserving existing CalDAV UIDs and leaves empty workspaces empty", () => {
@@ -266,7 +294,7 @@ describe("database migrations", () => {
       "https://new.example.test",
     );
     expect(await repository.credential("user", "instance")).toBe("encrypted-token");
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(14);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(15);
   });
 
   it("upgrades an empty v5 links table so initial Paperless settings can be saved", async () => {
@@ -330,7 +358,7 @@ describe("database migrations", () => {
     migrateDatabase(db);
     expect(db.prepare("SELECT total_budget FROM projects").get()?.["total_budget"]).toBe(100000);
     expect(db.prepare("SELECT * FROM funding_entries").all()).toEqual([]);
-    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(14);
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(15);
   });
 
   it("moves paid and open invoices into expenses once while preserving their fields", () => {

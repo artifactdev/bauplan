@@ -36,6 +36,7 @@ import {
 } from "@/lib/schema";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
 import { validateTaskDates } from "@/lib/tasks";
+import { expenseDocumentLinks, expenseTransition, normalizeLegacyExpense } from "@/lib/expenses";
 import i18n from "@/i18n";
 import {
   incomingDependencies,
@@ -93,15 +94,16 @@ export function useWorkspace() {
       if (!navigator.onLine) {
         const cached = await loadSnapshot(userId, activeProjectId);
         if (!cached) throw new Error(tr("offline.saved_workspace_unavailable_offline"));
-        return cached;
+        return { ...cached, expenses: cached.expenses.map(normalizeLegacyExpense) };
       }
       const workspace = await mergePendingWorkspace(
         userId,
         (await getWorkspace({ data: { projectId: activeProjectId } })) as Workspace,
         activeProjectId,
       );
-      await saveSnapshot(userId, workspace, activeProjectId);
-      return workspace;
+      const normalized = { ...workspace, expenses: workspace.expenses.map(normalizeLegacyExpense) };
+      await saveSnapshot(userId, normalized, activeProjectId);
+      return normalized;
     },
     enabled: !!userId && !!activeProjectId,
   });
@@ -168,8 +170,10 @@ export function useMutations() {
       const rowId = typeof v.row["id"] === "string" ? v.row["id"] : crypto.randomUUID();
       const projectId = v.table === "projects" ? undefined : activeProjectId!;
       const snapshotProjectId = projectId ?? rowId;
+      const input =
+        v.table === "expenses" ? expenseTransition(v.row, undefined, current.budget_pots) : v.row;
       const row = completeRow(v.table, {
-        ...v.row,
+        ...input,
         id: rowId,
         ...(projectId ? { project_id: projectId } : {}),
         created_at: new Date().toISOString(),
@@ -231,7 +235,9 @@ export function useMutations() {
       const account = requireAccount(userId);
       const current = await readCachedWorkspace(qc, key, account.id);
       const base = findRow(current, v.table, v.id);
-      const row = { ...base, ...cleanRow(v.table, v.patch) };
+      const patch =
+        v.table === "expenses" ? expenseTransition(v.patch, base, current.budget_pots) : v.patch;
+      const row = { ...base, ...cleanRow(v.table, patch) };
       if (v.table === "tasks") validateTaskDates(row);
       const change: OfflineChange = {
         id: crypto.randomUUID(),
@@ -279,6 +285,13 @@ export function useMutations() {
       const account = requireAccount(userId);
       const current = await readCachedWorkspace(qc, key, account.id);
       const base = findRow(current, v.table, v.id);
+      if (
+        v.table === "documents" &&
+        current.expenses.some((expense) =>
+          expenseDocumentLinks(expense.document_links).some((link) => link.document_id === v.id),
+        )
+      )
+        throw new Error("expenses.document_in_use");
       if (v.table === "tasks" || v.table === "events") {
         const incoming = incomingDependencies(current.tasks, {
           source: v.table === "tasks" ? "task" : "event",

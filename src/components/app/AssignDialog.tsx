@@ -138,6 +138,7 @@ export function AssignDialog({
           ? ex.expense_category
           : "Sonstiges",
       status: ex?.doc_type === "rechnung" ? "offen" : "bezahlt",
+      bank_status: "einzureichen",
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ex, documentId]);
@@ -201,14 +202,25 @@ export function AssignDialog({
                 },
                 {
                   name: "status",
-                  label: tr("shared.status"),
+                  label: tr("expenses.payment_status"),
                   type: "select" as const,
                   required: true,
                   options: [
                     { value: "offen", label: tr("shared.open") },
                     { value: "bezahlt", label: tr("shared.paid") },
-                    { value: "eingereicht", label: tr("shared.submitted") },
-                    { value: "erstattet", label: tr("shared.reimbursed") },
+                  ],
+                },
+                {
+                  name: "bank_status",
+                  label: tr("expenses.bank_status"),
+                  type: "select" as const,
+                  required: true,
+                  options: [
+                    { value: "nicht_festgelegt", label: tr("expenses.bank_unset") },
+                    { value: "einzureichen", label: tr("expenses.bank_ready") },
+                    { value: "eingereicht", label: tr("expenses.bank_submitted") },
+                    { value: "ausgezahlt", label: tr("expenses.bank_paid_out") },
+                    { value: "abgelehnt", label: tr("expenses.bank_rejected") },
                   ],
                 },
               ]
@@ -262,6 +274,7 @@ export function AssignDialog({
             payment_date: v["payment_date"],
             category: v.category,
             status: v.status,
+            bank_status: v["bank_status"],
             budget_pot_id: v["budget_pot_id"] ?? null,
           },
           ws,

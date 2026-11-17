@@ -21,7 +21,7 @@ Recognized values are set only when present; users always review before saving.
 A quote and an invoice for the same work describe the same money. Expected costs use the most informative value rather than the sum. Only accepted quotes count.
 
 ### 6. Expenses always count; reimbursements are not credited back
-Expenses count as money spent; "reimbursed" does not change the budget (shown separately).
+Expenses count as money spent; a bank payout is shown separately and is not credited back as a second transaction. Moving the expense to the Bank source can change which budget source bears the cost.
 
 ### 7. One shared project, roles instead of ownership
 Household members work together. All members see all data; roles are admin/member/pending, kept in a separate table (protection against privilege escalation).

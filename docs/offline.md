@@ -34,6 +34,8 @@ Offline creates, edits, deletions, and uploads complete after being saved to the
 
 The app shell and versioned static assets are cached. Authenticated API responses, private file URLs, and other server responses are not cached by the service worker. Workspace data and queued file uploads are stored locally in account-scoped IndexedDB. Previously uploaded document contents, OCR, and server-backed account or administration settings require a connection.
 
+Bank-submission ZIP downloads require an online connection and no pending changes or uploads. Synchronize first, then download; the optional submitted-status confirmation is checked against the exported server snapshot. Expense changes queued by an older app version retain their original accounting source and are translated to the new statuses during synchronization. Concurrent edits still require review in the normal sync conflict flow.
+
 The document scanner's image-processing worker (about 16 MB) is not precached; it is cached the first time the scanner is used online. Scanning offline works only after that.
 
 The PDF reader's worker and supporting fonts, character maps, and image decoders are hosted locally and cached as used, rather than all being precached at installation. Previewing a PDF still requires access to the document itself; authenticated document responses are not cached for offline use. The full-screen preview fills the app viewport on iOS without requiring native browser fullscreen support.

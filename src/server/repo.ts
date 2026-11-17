@@ -9,10 +9,17 @@ import {
   type TableName,
   type Workspace,
   type CalEvent,
+  type BudgetPot,
   type Project,
   type Task,
 } from "@/lib/schema";
 import { TABLES } from "@/lib/schema";
+import {
+  expenseDocumentLinks,
+  expenseDocuments,
+  expenseTransition,
+  migrateExpenseStatus,
+} from "@/lib/expenses";
 import type { PushJob, PushSubscriptionData } from "@/lib/push";
 import type { PaperlessExportMetadata, PaperlessJobState } from "@/lib/paperless";
 import { PaperlessError } from "./paperless-client";
@@ -76,6 +83,7 @@ export interface Repo {
     row: Record<string, unknown>,
     actorId?: string,
     projectId?: string,
+    preserveLegacyExpenseSource?: boolean,
   ): Promise<Record<string, unknown>>;
   update(
     table: TableName,
@@ -83,6 +91,7 @@ export interface Repo {
     patch: Record<string, unknown>,
     actorId?: string,
     projectId?: string,
+    preserveLegacyExpenseSource?: boolean,
   ): Promise<void>;
   remove(
     table: TableName,
@@ -100,7 +109,12 @@ export interface Repo {
   putFile(name: string, mime: string, bytes: Uint8Array, folder?: string): Promise<string>;
   fileUrl(path: string): Promise<string>;
   deleteFile(path: string): Promise<void>;
-  readFile(path: string): Promise<Uint8Array | null>;
+  readFile(path: string, maxBytes?: number): Promise<Uint8Array | null>;
+  markExpensesSubmitted(
+    projectId: string,
+    expenses: readonly Record<string, unknown>[],
+    documents: readonly Record<string, unknown>[],
+  ): Promise<void>;
   readOcrSettings(): Promise<string | null>;
   writeOcrSettings(value: string | null): Promise<void>;
   readAppearance(userId: string): Promise<Appearance>;
@@ -145,6 +159,20 @@ export type SyncChange = {
   row: Record<string, unknown> | null;
   dependencyConsent?: DependencyConsent | undefined;
 };
+
+function migrateSyncExpense(row: Record<string, unknown> | null) {
+  if (!row || "bank_status" in row) return row;
+  const status = row["status"];
+  if (
+    status !== "offen" &&
+    status !== "bezahlt" &&
+    status !== "eingereicht" &&
+    status !== "erstattet" &&
+    status !== "abgelehnt"
+  )
+    throw new Error("expenses.invalid_payment_status");
+  return { ...row, ...migrateExpenseStatus(status), document_links: null };
+}
 
 function dependencyTasks(d: SqliteDb, projectId?: string) {
   const rows = projectId
@@ -226,6 +254,17 @@ function assertProjectReferences(
     const related = db.prepare(`SELECT project_id FROM ${reference.table} WHERE id = ?`).get(id);
     if (related?.["project_id"] !== projectId)
       throw new Error("projects.related_record_not_in_project");
+  }
+  if (table === "expenses") {
+    const links = expenseDocumentLinks(row["document_links"]);
+    for (const link of links) {
+      if (link.document_id === row["document_id"]) throw new Error("expenses.invalid_documents");
+      const related = db
+        .prepare("SELECT project_id FROM documents WHERE id = ?")
+        .get(link.document_id);
+      if (related?.["project_id"] !== projectId)
+        throw new Error("projects.related_record_not_in_project");
+    }
   }
 }
 
@@ -489,6 +528,14 @@ export function sqliteRepo(): Repo {
     },
     async applySyncChange(userId, change, projectId) {
       if (change.table === "invoices") throw new Error("expenses.legacy_invoice_write");
+      const legacyExpense =
+        change.table === "expenses" && change.row !== null && !("bank_status" in change.row);
+      if (change.table === "expenses")
+        change = {
+          ...change,
+          base: migrateSyncExpense(change.base),
+          row: migrateSyncExpense(change.row),
+        };
       const d = await db();
       d.exec("BEGIN IMMEDIATE");
       try {
@@ -566,6 +613,7 @@ export function sqliteRepo(): Repo {
             },
             userId,
             effectiveProjectId,
+            legacyExpense,
           );
         } else {
           if (!change.row) throw new Error("Sync update requires a row");
@@ -575,6 +623,7 @@ export function sqliteRepo(): Repo {
             cleanRow(change.table, change.row),
             userId,
             effectiveProjectId,
+            legacyExpense,
           );
         }
         d.prepare("INSERT INTO app_sync_operations (id, user_id, applied_at) VALUES (?, ?, ?)").run(
@@ -613,6 +662,58 @@ export function sqliteRepo(): Repo {
         out[t] = rows.map(normalize);
       }
       return out as unknown as Workspace;
+    },
+    async markExpensesSubmitted(projectId, expenses, documents) {
+      const d = await db();
+      d.exec("BEGIN IMMEDIATE");
+      try {
+        const documentIds = new Set<string>();
+        const expenseIds = new Set<string>();
+        for (const expense of expenses) {
+          if (typeof expense["id"] !== "string" || expenseIds.has(expense["id"]))
+            throw new Error("expenses.export_conflict");
+          expenseIds.add(expense["id"]);
+          const links = expenseDocuments({
+            document_id: typeof expense["document_id"] === "string" ? expense["document_id"] : null,
+            document_links:
+              typeof expense["document_links"] === "string" ? expense["document_links"] : null,
+          });
+          if (!links.some((link) => link.role === "invoice"))
+            throw new Error("expenses.export_conflict");
+          for (const link of links) documentIds.add(link.document_id);
+        }
+        const suppliedIds = documents.map((document) => document["id"]);
+        if (
+          new Set(suppliedIds).size !== suppliedIds.length ||
+          suppliedIds.length !== documentIds.size ||
+          suppliedIds.some((id) => typeof id !== "string" || !documentIds.has(id))
+        )
+          throw new Error("expenses.export_conflict");
+        for (const [table, rows] of [
+          ["expenses", expenses],
+          ["documents", documents],
+        ] as const) {
+          for (const expected of rows) {
+            const current = d
+              .prepare(`SELECT * FROM ${table} WHERE id = ? AND project_id = ?`)
+              .get(expected["id"], projectId);
+            if (!current || !sameRecord(serializeRow(normalize(current)), expected))
+              throw new Error("expenses.export_conflict");
+          }
+        }
+        for (const expense of expenses) {
+          if (expense["bank_status"] === "einzureichen")
+            d.prepare("UPDATE expenses SET bank_status = ? WHERE id = ? AND project_id = ?").run(
+              "eingereicht",
+              expense["id"],
+              projectId,
+            );
+        }
+        d.exec("COMMIT");
+      } catch (error) {
+        d.exec("ROLLBACK");
+        throw error;
+      }
     },
     async getSyncGeneration() {
       const d = await db();
@@ -843,7 +944,7 @@ export function sqliteRepo(): Repo {
       }
       if (!preserveUploads) organizeUploads(d, await uploadsEnv());
     },
-    async insert(table, row, actorId, projectId) {
+    async insert(table, row, actorId, projectId, preserveLegacyExpenseSource) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
       const targetProjectId =
@@ -855,6 +956,13 @@ export function sqliteRepo(): Repo {
               : (d.prepare("SELECT id FROM projects ORDER BY created_at, id LIMIT 1").get()?.[
                   "id"
                 ] as string | undefined)));
+      if (table === "expenses")
+        row = expenseTransition(
+          row,
+          undefined,
+          expenseSources(d, targetProjectId),
+          preserveLegacyExpenseSource,
+        );
       if (projectId) assertProjectReferences(d, table, row, projectId);
       if (table === "tasks") {
         validateTaskDates(row);
@@ -885,14 +993,24 @@ export function sqliteRepo(): Repo {
         throw error;
       }
     },
-    async update(table, id, input, actorId, projectId) {
+    async update(table, id, input, actorId, projectId, preserveLegacyExpenseSource) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       // File locations are managed by the server and follow category or collection changes.
       const { storage_path: _storagePath, project_id: requestedProjectId, ...managed } = input;
       if (projectId && requestedProjectId != null && requestedProjectId !== projectId)
         throw new Error("projects.row_not_in_project");
-      const patch = managed;
+      let patch = managed;
       const d = await db();
+      if (table === "expenses") {
+        const existing = d.prepare("SELECT * FROM expenses WHERE id = ?").get(id);
+        if (!existing) throw new Error("projects.row_not_in_project");
+        patch = expenseTransition(
+          patch,
+          existing,
+          expenseSources(d, projectId),
+          preserveLegacyExpenseSource,
+        );
+      }
       if (table !== "projects" && projectId) {
         const existing = d.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
         if (!existing || existing["project_id"] !== projectId)
@@ -958,6 +1076,17 @@ export function sqliteRepo(): Repo {
     async remove(table, id, projectId, dependencyConsent) {
       if (table === "invoices") throw new Error("expenses.legacy_invoice_write");
       const d = await db();
+      if (table === "documents") {
+        const rows = projectId
+          ? d.prepare("SELECT document_links FROM expenses WHERE project_id = ?").all(projectId)
+          : d.prepare("SELECT document_links FROM expenses").all();
+        if (
+          rows.some((row) =>
+            expenseDocumentLinks(row["document_links"]).some((link) => link.document_id === id),
+          )
+        )
+          throw new Error("expenses.document_in_use");
+      }
       if (table !== "projects" && projectId) {
         const row = d.prepare(`SELECT project_id FROM ${table} WHERE id = ?`).get(id);
         if (!row || row["project_id"] !== projectId) throw new Error("projects.row_not_in_project");
@@ -1017,7 +1146,7 @@ export function sqliteRepo(): Repo {
       }
       removeEmptyParent(env, full);
     },
-    readFile: (p) => readSqliteFile(p),
+    readFile: (p, maxBytes) => readSqliteFile(p, maxBytes),
     async readOcrSettings() {
       const row = (await db())
         .prepare("SELECT value FROM app_settings WHERE key = ?")
@@ -1035,12 +1164,17 @@ export function sqliteRepo(): Repo {
   };
 }
 
-export async function readSqliteFile(p: string): Promise<Uint8Array | null> {
+export async function readSqliteFile(p: string, maxBytes?: number): Promise<Uint8Array | null> {
   const env = await uploadsEnv();
   const full = resolveUpload(env, p);
-  return full && env.fs.existsSync(full) && env.fs.statSync(full).isFile()
-    ? new Uint8Array(env.fs.readFileSync(full))
-    : null;
+  if (!full || !env.fs.existsSync(full)) return null;
+  const stat = env.fs.statSync(full);
+  if (!stat.isFile()) return null;
+  if (maxBytes !== undefined && stat.size > maxBytes) throw new Error("expenses.export_large");
+  const bytes = new Uint8Array(env.fs.readFileSync(full));
+  if (maxBytes !== undefined && bytes.byteLength > maxBytes)
+    throw new Error("expenses.export_large");
+  return bytes;
 }
 
 export type PaperlessConfig = {
@@ -1627,6 +1761,18 @@ function fundingSources(db: SqliteDb) {
       id: String(row["id"]),
       deducts_from_budget: Boolean(row["deducts_from_budget"]),
     }));
+}
+
+function expenseSources(db: SqliteDb, projectId?: string): BudgetPot[] {
+  const rows = projectId
+    ? db.prepare("SELECT * FROM budget_pots WHERE project_id = ?").all(projectId)
+    : db.prepare("SELECT * FROM budget_pots").all();
+  return rows.map((row) => ({
+    id: String(row["id"]),
+    name: String(row["name"]),
+    deducts_from_budget: Boolean(row["deducts_from_budget"]),
+    notes: typeof row["notes"] === "string" ? row["notes"] : null,
+  }));
 }
 
 function normalize(row: Record<string, unknown>) {

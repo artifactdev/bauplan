@@ -4,7 +4,7 @@ import { BOOL_COLS, NUMERIC_COLS, TABLE_NAMES, TABLES, type TableName } from "@/
 import { appearanceSchema } from "@/lib/appearance";
 import { parseNavigation } from "@/lib/navigation";
 import { analysisViewsSchema } from "@/lib/analysis";
-import { legacyInvoiceExpense } from "@/lib/expenses";
+import { expenseDocuments, legacyInvoiceExpense, migrateExpenseStatus } from "@/lib/expenses";
 import { validateFundingEntry } from "@/lib/funding";
 import { parseTaskChecklist } from "@/lib/tasks";
 import { validateDependencyGraph } from "@/lib/task-dependencies";
@@ -42,6 +42,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isScalar(value: unknown): value is string | number | null {
   return value === null || typeof value === "string" || typeof value === "number";
+}
+
+function migrateLegacyExpenseStatus(row: Record<string, unknown>) {
+  const status = row["status"];
+  if (status == null) return { status: "bezahlt", bank_status: "einzureichen" };
+  if (
+    status !== "offen" &&
+    status !== "bezahlt" &&
+    status !== "eingereicht" &&
+    status !== "erstattet" &&
+    status !== "abgelehnt"
+  )
+    fail("Backup enthält einen ungültigen Ausgabenstatus.");
+  return migrateExpenseStatus(status);
 }
 
 function validateRows(
@@ -108,7 +122,12 @@ function validateDatabase(value: unknown): BackupDatabase {
         : table === "offers"
           ? required.filter((column) => column !== "valid_until")
           : table === "expenses"
-            ? required.filter((column) => !["offer_id", "contact_id", "due_date"].includes(column))
+            ? required.filter(
+                (column) =>
+                  !["offer_id", "contact_id", "due_date", "bank_status", "document_links"].includes(
+                    column,
+                  ),
+              )
             : table === "events"
               ? required.filter(
                   (column) => !["caldav_uid", "caldav_data", "work_completed"].includes(column),
@@ -141,6 +160,10 @@ function validateDatabase(value: unknown): BackupDatabase {
                 offer_id: row["offer_id"] ?? null,
                 contact_id: row["contact_id"] ?? null,
                 due_date: row["due_date"] ?? null,
+                document_links: row["document_links"] ?? null,
+                ...(row["bank_status"] == null
+                  ? migrateLegacyExpenseStatus(row)
+                  : { bank_status: row["bank_status"] }),
               }))
             : table === "credit_terms"
               ? rows.map((row) => ({
@@ -157,6 +180,20 @@ function validateDatabase(value: unknown): BackupDatabase {
                 : rows;
     for (const row of normalizedRows) {
       if (table === "tasks") parseTaskChecklist(row["checklist"]);
+      if (table === "expenses") {
+        if (
+          !["nicht_festgelegt", "einzureichen", "eingereicht", "ausgezahlt", "abgelehnt"].includes(
+            String(row["bank_status"]),
+          )
+        )
+          fail("Backup enthält einen ungültigen Bankstatus.");
+        if (row["status"] !== null && row["status"] !== "offen" && row["status"] !== "bezahlt")
+          fail("Backup enthält einen ungültigen Zahlungsstatus.");
+        expenseDocuments({
+          document_id: typeof row["document_id"] === "string" ? row["document_id"] : null,
+          document_links: typeof row["document_links"] === "string" ? row["document_links"] : null,
+        });
+      }
       for (const [column, item] of Object.entries(row)) {
         if (item !== null && NUMERIC_COLS.has(column) && typeof item !== "number")
           fail("Backup-Datensatz enthält ungültige Zahlenwerte.");
@@ -195,7 +232,12 @@ function validateDatabase(value: unknown): BackupDatabase {
   validateDependencyGraph(normalizedTables.tasks, normalizedTables.events);
   const expenseIds = new Set(normalizedTables.expenses.map((row) => row["id"]));
   for (const invoice of normalizedTables.invoices) {
-    const expense = legacyInvoiceExpense(invoice);
+    const legacyExpense = legacyInvoiceExpense(invoice);
+    const expense: Record<string, unknown> = {
+      ...legacyExpense,
+      ...migrateLegacyExpenseStatus(legacyExpense),
+      document_links: null,
+    };
     if (expenseIds.has(expense["id"]))
       fail("Backup enthält kollidierende Rechnungs- und Ausgaben-IDs.");
     expenseIds.add(expense["id"]);

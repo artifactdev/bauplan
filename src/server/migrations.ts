@@ -15,7 +15,7 @@ import {
   DEFAULT_COST_ITEM_TITLES,
 } from "@/lib/schema";
 import type { SqliteDb } from "./repo";
-import { legacyInvoiceExpense } from "@/lib/expenses";
+import { legacyInvoiceExpense, migrateExpenseStatus } from "@/lib/expenses";
 import { convertIdeaDocuments } from "./uploads";
 
 type Migration = { version: number; name: string; up: (db: SqliteDb) => void };
@@ -186,6 +186,36 @@ const MIGRATIONS: readonly Migration[] = [
     name: "stored-idea-link-previews",
     up(db) {
       db.exec("UPDATE idea_images SET source = 'upload' WHERE source IS NULL");
+    },
+  },
+  {
+    version: 15,
+    name: "separate-expense-bank-status",
+    up(db) {
+      for (const row of db.prepare("SELECT id, status FROM expenses").all()) {
+        const status = row["status"];
+        if (status == null) {
+          db.prepare("UPDATE expenses SET status = 'bezahlt', bank_status = ? WHERE id = ?").run(
+            "einzureichen",
+            row["id"],
+          );
+          continue;
+        }
+        if (
+          status !== "offen" &&
+          status !== "bezahlt" &&
+          status !== "eingereicht" &&
+          status !== "erstattet" &&
+          status !== "abgelehnt"
+        )
+          throw new Error("Cannot migrate an expense with an invalid status.");
+        const migrated = migrateExpenseStatus(status);
+        db.prepare("UPDATE expenses SET status = ?, bank_status = ? WHERE id = ?").run(
+          migrated.status,
+          migrated.bank_status,
+          row["id"],
+        );
+      }
     },
   },
 ];

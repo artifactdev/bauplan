@@ -1,5 +1,114 @@
 import { isBankPot } from "./calc";
-import type { Expense, ExpenseStatus, Offer, Workspace } from "./schema";
+import { z } from "zod";
+import type {
+  BankSubmissionStatus,
+  BudgetPot,
+  Expense,
+  ExpenseStatus,
+  Offer,
+  Workspace,
+} from "./schema";
+
+const expenseDocumentLinksSchema = z
+  .array(
+    z.object({
+      document_id: z.string().min(1),
+      role: z.enum(["invoice", "payment", "other"]),
+    }),
+  )
+  .max(100)
+  .superRefine((links, context) => {
+    if (new Set(links.map((link) => link.document_id)).size !== links.length)
+      context.addIssue({ code: "custom", message: "Duplicate expense document" });
+  });
+
+export type ExpenseDocumentLink = z.infer<typeof expenseDocumentLinksSchema>[number];
+
+export function expenseDocumentLinks(value: unknown): ExpenseDocumentLink[] {
+  if (value == null || value === "") return [];
+  if (typeof value !== "string") throw new Error("expenses.invalid_documents");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("expenses.invalid_documents");
+  }
+  const result = expenseDocumentLinksSchema.safeParse(parsed);
+  if (!result.success) throw new Error("expenses.invalid_documents");
+  return result.data;
+}
+
+export function expenseDocuments(expense: Pick<Expense, "document_id" | "document_links">) {
+  const extra = expenseDocumentLinks(expense.document_links);
+  if (expense.document_id && extra.some((link) => link.document_id === expense.document_id))
+    throw new Error("expenses.invalid_documents");
+  return [
+    ...(expense.document_id
+      ? [{ document_id: expense.document_id, role: "invoice" as const }]
+      : []),
+    ...extra,
+  ];
+}
+
+/** Preserve the old accounting interpretation when separating payment and bank status. */
+export function migrateExpenseStatus(status: ExpenseStatus): {
+  status: "offen" | "bezahlt";
+  bank_status: BankSubmissionStatus;
+} {
+  switch (status) {
+    case "offen":
+      return { status: "offen", bank_status: "einzureichen" };
+    case "bezahlt":
+      return { status: "bezahlt", bank_status: "einzureichen" };
+    case "eingereicht":
+      return { status: "bezahlt", bank_status: "eingereicht" };
+    case "erstattet":
+      return { status: "bezahlt", bank_status: "ausgezahlt" };
+    case "abgelehnt":
+      return { status: "bezahlt", bank_status: "abgelehnt" };
+    default:
+      throw new Error("expenses.invalid_payment_status");
+  }
+}
+
+export function normalizeLegacyExpense(expense: Expense): Expense {
+  return expense.bank_status ? expense : { ...expense, ...migrateExpenseStatus(expense.status) };
+}
+
+export function expenseTransition(
+  changes: Record<string, unknown>,
+  previous: Record<string, unknown> | undefined,
+  pots: BudgetPot[],
+  preserveLegacySource = false,
+) {
+  const patch = { ...changes };
+  const bankStatus = patch["bank_status"] ?? previous?.["bank_status"] ?? "einzureichen";
+  if (
+    bankStatus !== "nicht_festgelegt" &&
+    bankStatus !== "einzureichen" &&
+    bankStatus !== "eingereicht" &&
+    bankStatus !== "ausgezahlt" &&
+    bankStatus !== "abgelehnt"
+  )
+    throw new Error("expenses.invalid_bank_status");
+  if (!previous || "bank_status" in patch) patch["bank_status"] = bankStatus;
+  const paymentStatus = patch["status"] ?? previous?.["status"];
+  if (paymentStatus !== "offen" && paymentStatus !== "bezahlt")
+    throw new Error("expenses.invalid_payment_status");
+  if (!preserveLegacySource && bankStatus !== previous?.["bank_status"]) {
+    if (bankStatus === "ausgezahlt") {
+      const bank = pots.find(isBankPot);
+      if (!bank) throw new Error("expenses.bank_source_required");
+      patch["status"] = "bezahlt";
+      patch["budget_pot_id"] = bank.id;
+    } else if (bankStatus === "abgelehnt") {
+      const sourceId = patch["budget_pot_id"] ?? previous?.["budget_pot_id"];
+      const source = pots.find((pot) => pot.id === sourceId);
+      if (!source || isBankPot(source)) throw new Error("expenses.private_source_required");
+    }
+  }
+  return patch;
+}
 
 /** Prefix legacy IDs to avoid collisions between the formerly separate tables. */
 export function legacyInvoiceExpense(invoice: Record<string, unknown>): Record<string, unknown> {
@@ -69,8 +178,6 @@ export function expenseIsOverdue(expense: Pick<Expense, "status" | "due_date">, 
   return expense.status === "offen" && !!expense.due_date && expense.due_date < today;
 }
 
-type SourceFields = { status?: unknown; budget_pot_id?: unknown };
-
 /**
  * Splits a partial amount off an expense (e.g. only part of a hardware-store purchase is
  * reimbursed). The original keeps the remainder, status and source; the new part gets its own
@@ -80,42 +187,22 @@ type SourceFields = { status?: unknown; budget_pot_id?: unknown };
 export function splitExpense(
   expense: Expense,
   partAmount: number,
-  status: ExpenseStatus,
+  status: BankSubmissionStatus,
   title: string,
   ws: Pick<Workspace, "budget_pots">,
+  sourceId: string | null = expense.budget_pot_id ?? null,
 ) {
   const partCents = Math.round(partAmount * 100);
   const totalCents = Math.round(Number(expense.amount) * 100);
   if (!Number.isFinite(partCents) || partCents <= 0 || partCents >= totalCents) return null;
   const { id: _id, created_at: _createdAt, ...rest } = expense;
-  const source =
-    reimbursementSource(
-      { status, budget_pot_id: expense.budget_pot_id },
-      { status: expense.status, budget_pot_id: expense.budget_pot_id },
-      ws,
-    ) ??
-    expense.budget_pot_id ??
-    null;
+  const patch = expenseTransition(
+    { bank_status: status, budget_pot_id: sourceId },
+    expense,
+    ws.budget_pots,
+  );
   return {
     remainder: (totalCents - partCents) / 100,
-    part: { ...rest, title, amount: partCents / 100, status, budget_pot_id: source },
+    part: { ...rest, title, amount: partCents / 100, ...patch },
   };
-}
-
-/**
- * Expenses are usually paid from another source first and then submitted to the bank.
- * Only once they are reimbursed do they move to the bank source; "submitted" and
- * "rejected" keep the source they were paid from. Returns the bank source id to move
- * to, or null to keep the current one (also when the user picked a source explicitly).
- */
-export function reimbursementSource(
-  values: SourceFields,
-  initial: SourceFields | undefined,
-  ws: Pick<Workspace, "budget_pots">,
-) {
-  if (values.status !== "erstattet" || initial?.status === "erstattet") return null;
-  const current = values.budget_pot_id || null;
-  if (current !== (initial?.budget_pot_id || null)) return null;
-  const bank = (ws.budget_pots ?? []).find(isBankPot);
-  return bank && bank.id !== current ? bank.id : null;
 }

@@ -87,7 +87,15 @@ try {
   await visit(page, "/", "overview");
   await visit(page, "/budget", "budget");
   await visit(page, "/angebote", "quotes");
-  await visit(page, "/ausgaben", "expenses");
+  if (!only.length || only.includes("expenses")) {
+    await page.goto(`${BASE_URL}/ausgaben`);
+    await settle(page);
+    await page
+      .getByRole("checkbox", { name: "Ausgabe auswählen: Abschlagsrechnung Sanitär" })
+      .first()
+      .check();
+    await shot(page, "expenses");
+  }
   await visit(page, "/dokumente", "documents");
 
   if (!only.length || only.includes("document-viewer")) {

@@ -8,9 +8,11 @@ import {
   type CreditSummary,
 } from "./calc";
 import { todayISO } from "./format";
+import { expenseDocuments } from "./expenses";
 import {
   DEFAULT_COST_ITEM_TITLES,
   type Expense,
+  type BankSubmissionStatus,
   type ExpenseStatus,
   type Offer,
   type OfferStatus,
@@ -130,6 +132,7 @@ export type LedgerEntry = {
   costItemId: string | null;
   potId: string | null;
   status: ExpenseStatus;
+  bankStatus?: BankSubmissionStatus | null;
   hasDocument: boolean;
   /** Bank money always counts; other sources only for real cost items that deduct from the budget. */
   countsToBudget: boolean;
@@ -178,7 +181,8 @@ export function buildLedger(
     costItemId: expense.cost_item_id,
     potId: expense.budget_pot_id ?? null,
     status: expense.status,
-    hasDocument: !!expense.document_id,
+    bankStatus: expense.bank_status ?? null,
+    hasDocument: expenseDocuments(expense).length > 0,
     countsToBudget: classify(expense.budget_pot_id, expense.cost_item_id),
   }));
   for (const invoice of ws.invoices) {
@@ -222,7 +226,11 @@ export function filterLedger(entries: LedgerEntry[], filters: AnalysisFilters) {
       matches(filters.categories, entry.category) &&
       matches(filters.potIds, entry.potId) &&
       matches(filters.contactIds, entry.contactId) &&
-      (filters.statuses.length === 0 || filters.statuses.includes(entry.status)) &&
+      (filters.statuses.length === 0 ||
+        filters.statuses.includes(entry.status) ||
+        (entry.bankStatus === "ausgezahlt" && filters.statuses.includes("erstattet")) ||
+        (entry.bankStatus === "eingereicht" && filters.statuses.includes("eingereicht")) ||
+        (entry.bankStatus === "abgelehnt" && filters.statuses.includes("abgelehnt"))) &&
       (!filters.budgetOnly || entry.countsToBudget),
   );
 }
@@ -354,7 +362,11 @@ export function ledgerTotals(entries: LedgerEntry[]) {
 export function reimbursementFunnel(entries: LedgerEntry[]) {
   const sum = (status: ExpenseStatus) =>
     entries
-      .filter((entry) => entry.status === status)
+      .filter(
+        (entry) =>
+          entry.bankStatus === (status === "erstattet" ? "ausgezahlt" : status) ||
+          (!entry.bankStatus && entry.status === status),
+      )
       .reduce((total, entry) => total + entry.amount, 0);
   const submitted = sum("eingereicht");
   const reimbursed = sum("erstattet");

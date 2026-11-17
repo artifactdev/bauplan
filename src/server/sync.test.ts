@@ -185,4 +185,95 @@ describe("offline row synchronization", () => {
     expect((await repo.applySyncChange("account-1", rebased)).applied).toBe(true);
     expect((await repo.getAll()).projects[0]?.name).toBe("Changed offline");
   });
+  it("migrates queued legacy expenses without changing their accounting source", async () => {
+    const projectId = "legacy-expense-project";
+    await repo.insert("projects", { id: projectId, name: "Legacy expenses" });
+    await repo.insert(
+      "budget_pots",
+      { id: "legacy-private", name: "Private", deducts_from_budget: true },
+      undefined,
+      projectId,
+    );
+    const create: SyncChange = {
+      id: "legacy-expense-create",
+      table: "expenses",
+      action: "create",
+      rowId: "legacy-offline",
+      base: null,
+      row: {
+        id: "legacy-offline",
+        project_id: projectId,
+        title: "Offline receipt",
+        amount: 25,
+        status: "erstattet",
+        budget_pot_id: "legacy-private",
+      },
+    };
+    expect((await repo.applySyncChange("account-1", create, projectId)).applied).toBe(true);
+    const created = (await repo.getAll(projectId)).expenses[0]!;
+    expect(created).toMatchObject({
+      status: "bezahlt",
+      bank_status: "ausgezahlt",
+      budget_pot_id: "legacy-private",
+    });
+
+    await repo.insert(
+      "expenses",
+      {
+        id: "legacy-existing",
+        title: "Original",
+        amount: 50,
+        status: "offen",
+        budget_pot_id: "legacy-private",
+      },
+      undefined,
+      projectId,
+    );
+    const existing = (await repo.getAll(projectId)).expenses.find(
+      (row) => row.id === "legacy-existing",
+    )!;
+    const { bank_status: _bankStatus, document_links: _documentLinks, ...base } = existing;
+    const edit: SyncChange = {
+      id: "legacy-expense-edit",
+      table: "expenses",
+      action: "update",
+      rowId: existing.id,
+      base,
+      row: { ...base, title: "Offline edit", status: "abgelehnt" },
+    };
+    expect((await repo.applySyncChange("account-1", edit, projectId)).applied).toBe(true);
+    expect(
+      (await repo.getAll(projectId)).expenses.find((row) => row.id === existing.id),
+    ).toMatchObject({
+      title: "Offline edit",
+      status: "bezahlt",
+      bank_status: "abgelehnt",
+      budget_pot_id: "legacy-private",
+    });
+
+    await repo.update("expenses", existing.id, { title: "Online edit" }, undefined, projectId);
+    const conflict = await repo.applySyncChange(
+      "account-1",
+      { ...edit, id: "legacy-expense-conflict" },
+      projectId,
+    );
+    expect(conflict).toMatchObject({ applied: false, current: { title: "Online edit" } });
+    expect(
+      (
+        await repo.applySyncChange(
+          "account-1",
+          { ...edit, id: "legacy-expense-rebased", base: conflict.current },
+          projectId,
+        )
+      ).applied,
+    ).toBe(true);
+    expect(
+      (await repo.getAll(projectId)).expenses.find((row) => row.id === existing.id),
+    ).toMatchObject({
+      title: "Offline edit",
+      status: "bezahlt",
+      bank_status: "abgelehnt",
+      budget_pot_id: "legacy-private",
+    });
+  });
 });

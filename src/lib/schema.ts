@@ -252,7 +252,9 @@ export const TABLES = {
     "trade_id",
     "cost_item_id",
     "document_id",
+    "document_links",
     "status",
+    "bank_status",
     "notes",
     "budget_pot_id",
   ],
@@ -401,6 +403,8 @@ export type CalEvent = Base & {
 };
 
 export type ExpenseStatus = "offen" | "bezahlt" | "eingereicht" | "erstattet" | "abgelehnt";
+export type BankSubmissionStatus =
+  "nicht_festgelegt" | "einzureichen" | "eingereicht" | "ausgezahlt" | "abgelehnt";
 export type Expense = Base & {
   title: string;
   vendor: string | null;
@@ -414,7 +418,9 @@ export type Expense = Base & {
   trade_id: string | null;
   cost_item_id: string | null;
   document_id: string | null;
+  document_links?: string | null;
   status: ExpenseStatus;
+  bank_status?: BankSubmissionStatus | null;
   notes: string | null;
   budget_pot_id?: string | null;
 };

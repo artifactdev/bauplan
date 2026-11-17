@@ -5,7 +5,8 @@ import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import { splitExpense } from "@/lib/expenses";
 import { eur } from "@/lib/format";
 import { potName } from "@/lib/options";
-import type { Expense, ExpenseStatus } from "@/lib/schema";
+import { isBankPot } from "@/lib/calc";
+import type { BankSubmissionStatus, Expense } from "@/lib/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,16 +26,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const statusLabel = (status: ExpenseStatus) =>
+const statusLabel = (status: BankSubmissionStatus) =>
   ({
-    offen: tr("shared.open"),
-    bezahlt: tr("shared.paid"),
-    eingereicht: tr("shared.submitted"),
-    erstattet: tr("shared.reimbursed"),
-    abgelehnt: tr("shared.rejected"),
+    nicht_festgelegt: tr("expenses.bank_unset"),
+    einzureichen: tr("expenses.bank_ready"),
+    eingereicht: tr("expenses.bank_submitted"),
+    ausgezahlt: tr("expenses.bank_paid_out"),
+    abgelehnt: tr("expenses.bank_rejected"),
   })[status];
 
-const PART_STATUSES: ExpenseStatus[] = ["erstattet", "eingereicht", "abgelehnt", "bezahlt"];
+const PART_STATUSES: BankSubmissionStatus[] = [
+  "ausgezahlt",
+  "eingereicht",
+  "abgelehnt",
+  "einzureichen",
+  "nicht_festgelegt",
+];
 
 /**
  * Splits one expense into two, e.g. when the bank only reimburses part of a purchase.
@@ -50,22 +57,33 @@ export function ExpenseSplitDialog({
   const { ws } = useWorkspace();
   const { create, update, remove } = useMutations();
   const [amount, setAmount] = useState("");
-  const [status, setStatus] = useState<ExpenseStatus>("erstattet");
+  const [status, setStatus] = useState<BankSubmissionStatus>("ausgezahlt");
+  const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     setAmount("");
-    setStatus("erstattet");
+    setStatus("ausgezahlt");
+    setSource(expense?.budget_pot_id ?? "");
+    // Keep an open draft intact when workspace data refetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expense?.id]);
 
-  const split = expense
-    ? splitExpense(
+  let split: ReturnType<typeof splitExpense> = null;
+  let splitError: string | null = null;
+  if (expense) {
+    try {
+      split = splitExpense(
         expense,
         Number(amount.replace(",", ".")),
         status,
         `${expense.title} (${statusLabel(status)})`,
         ws,
-      )
-    : null;
+        source || null,
+      );
+    } catch (error) {
+      splitError = error instanceof Error ? error.message : "expenses.export_failed";
+    }
+  }
   const partSource = potName(ws, split?.part["budget_pot_id"] as string | null) ?? "–";
 
   const submit = async () => {
@@ -128,7 +146,10 @@ export function ExpenseSplitDialog({
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="split-status">{tr("expenses.split_part_status")}</Label>
-            <Select value={status} onValueChange={(value) => setStatus(value as ExpenseStatus)}>
+            <Select
+              value={status}
+              onValueChange={(value) => setStatus(value as BankSubmissionStatus)}
+            >
               <SelectTrigger id="split-status">
                 <SelectValue />
               </SelectTrigger>
@@ -141,6 +162,25 @@ export function ExpenseSplitDialog({
               </SelectContent>
             </Select>
           </div>
+          {status === "abgelehnt" && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="split-source">{tr("shared.paid_2")}</Label>
+              <Select value={source} onValueChange={setSource}>
+                <SelectTrigger id="split-source">
+                  <SelectValue placeholder={tr("expenses.private_source_required")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {ws.budget_pots
+                    .filter((pot) => !isBankPot(pot))
+                    .map((pot) => (
+                      <SelectItem key={pot.id} value={pot.id}>
+                        {pot.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div
             id="split-preview"
             aria-live="polite"
@@ -158,14 +198,16 @@ export function ExpenseSplitDialog({
                 <p>
                   {tr("expenses.split_remainder_preview", {
                     amount: eur(split.remainder, true),
-                    status: statusLabel(expense.status),
+                    status: statusLabel(expense.bank_status ?? "einzureichen"),
                     source: potName(ws, expense.budget_pot_id) ?? "–",
                   })}
                 </p>
               </>
             ) : (
               <p className={amount ? "text-destructive" : "text-muted-foreground"}>
-                {tr("expenses.split_invalid", { amount: eur(expense?.amount ?? 0, true) })}
+                {splitError
+                  ? tr(splitError)
+                  : tr("expenses.split_invalid", { amount: eur(expense?.amount ?? 0, true) })}
               </p>
             )}
           </div>

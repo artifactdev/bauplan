@@ -205,7 +205,7 @@ export function summarize(
     );
   const expensesTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const reimbursed = expenses
-    .filter((e) => e.status === "erstattet")
+    .filter((e) => e.bank_status === "ausgezahlt" || (!e.bank_status && e.status === "erstattet"))
     .reduce((s, e) => s + Number(e.amount), 0);
 
   return {

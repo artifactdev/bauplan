@@ -1,4 +1,6 @@
 import { TABLE_NAMES, type TableName } from "./schema";
+import { migrateExpenseStatus } from "./expenses";
+import type { ExpenseStatus } from "./schema";
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -188,7 +190,7 @@ export function buildSeed(): Record<TableName, Row[]> {
     d: number,
     category: string,
     trade_id: string | null,
-    status: string,
+    status: ExpenseStatus,
   ) =>
     out.expenses.push({
       id: id(),
@@ -200,12 +202,12 @@ export function buildSeed(): Record<TableName, Row[]> {
       trade_id,
       cost_item_id: null,
       document_id: null,
-      status,
+      ...migrateExpenseStatus(status),
       notes: null,
     });
   ex("Schutzfolie, Abdeckband, Kreppband", "Hornbach", 64.9, -35, "Baumarkt", maler, "bezahlt");
   ex("Container 7 m³ Bauschutt", "Entsorgung Südbaden", 420, -38, "Entsorgung", bad, "eingereicht");
-  ex("Akku-Bohrhammer", "Bauhaus", 189, -30, "Werkzeug", null, "erstattet");
+  ex("Akku-Bohrhammer", "Bauhaus", 189, -30, "Werkzeug", null, "bezahlt");
   ex("Silikon, Fugenmasse", "OBI", 37.45, -6, "Material", bad, "offen");
 
   return out;
@@ -320,7 +322,7 @@ export function buildDemoSeed(): Record<TableName, Row[]> {
   const grant = id();
   seed.budget_pots.push(
     { id: ownFunds, name: "Eigenmittel", deducts_from_budget: true, notes: "Beispiel" },
-    { id: loan, name: "Bankdarlehen", deducts_from_budget: true, notes: "Beispiel" },
+    { id: loan, name: "Bank", deducts_from_budget: true, notes: "Beispiel" },
     { id: grant, name: "Fördermittel", deducts_from_budget: true, notes: "Beispiel" },
   );
   seed.funding_entries.push(

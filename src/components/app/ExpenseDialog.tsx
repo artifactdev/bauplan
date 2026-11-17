@@ -1,4 +1,5 @@
 import { tr } from "@/i18n";
+import { useEffect, useState } from "react";
 import { useMutations, useWorkspace } from "@/hooks/use-workspace";
 import {
   contactOptions,
@@ -9,7 +10,22 @@ import {
   tradeOptions,
 } from "@/lib/options";
 import { EXPENSE_CATEGORIES } from "@/lib/schema";
-import { expenseLinkDefaults, normalizeExpense, reimbursementSource } from "@/lib/expenses";
+import {
+  expenseDocumentLinks,
+  expenseLinkDefaults,
+  expenseTransition,
+  normalizeExpense,
+  type ExpenseDocumentLink,
+} from "@/lib/expenses";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { EntityDialog } from "./EntityDialog";
 
 export function ExpenseDialog({
@@ -31,6 +47,17 @@ export function ExpenseDialog({
 }) {
   const { ws } = useWorkspace();
   const { create, update } = useMutations();
+  const [links, setLinks] = useState<ExpenseDocumentLink[]>([]);
+  const [document, setDocument] = useState("");
+  const [role, setRole] = useState<ExpenseDocumentLink["role"]>("invoice");
+  useEffect(() => {
+    if (!open) return;
+    setLinks(expenseDocumentLinks(initial?.["document_links"]));
+    setDocument("");
+    setRole("invoice");
+    // Keep an open draft intact when workspace data refetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editId]);
   return (
     <EntityDialog
       open={open}
@@ -68,15 +95,25 @@ export function ExpenseDialog({
         },
         {
           name: "status",
-          label: tr("shared.status"),
+          label: tr("expenses.payment_status"),
           type: "select",
           required: true,
           options: [
             { value: "offen", label: tr("shared.open") },
             { value: "bezahlt", label: tr("shared.paid") },
-            { value: "eingereicht", label: tr("shared.submitted") },
-            { value: "erstattet", label: tr("shared.reimbursed") },
-            { value: "abgelehnt", label: tr("shared.rejected") },
+          ],
+        },
+        {
+          name: "bank_status",
+          label: tr("expenses.bank_status"),
+          type: "select",
+          required: true,
+          options: [
+            { value: "nicht_festgelegt", label: tr("expenses.bank_unset") },
+            { value: "einzureichen", label: tr("expenses.bank_ready") },
+            { value: "eingereicht", label: tr("expenses.bank_submitted") },
+            { value: "ausgezahlt", label: tr("expenses.bank_paid_out") },
+            { value: "abgelehnt", label: tr("expenses.bank_rejected") },
           ],
         },
         {
@@ -105,11 +142,93 @@ export function ExpenseDialog({
         },
         { name: "notes", label: tr("shared.notes"), type: "textarea" },
       ]}
-      initial={initial}
+      initial={{ bank_status: "einzureichen", ...initial }}
+      extra={
+        <div className="flex flex-col gap-2">
+          <div className="text-sm font-medium">{tr("expenses.additional_documents")}</div>
+          {links.map((link) => (
+            <div className="flex items-center gap-2" key={link.document_id}>
+              <span className="min-w-0 flex-1 truncate">
+                {ws.documents.find((item) => item.id === link.document_id)?.name ??
+                  link.document_id}
+                {" — "}
+                {tr(`expenses.document_${link.role}`)}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setLinks((current) =>
+                    current.filter((item) => item.document_id !== link.document_id),
+                  )
+                }
+              >
+                {tr("expenses.remove_document_link")}
+              </Button>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <Select value={document} onValueChange={setDocument}>
+              <SelectTrigger
+                className="min-w-40 flex-1"
+                aria-label={tr("expenses.select_document")}
+              >
+                <SelectValue placeholder={tr("expenses.select_document")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {ws.documents
+                    .filter((item) => !links.some((link) => link.document_id === item.id))
+                    .map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Select
+              value={role}
+              onValueChange={(value) => setRole(value as ExpenseDocumentLink["role"])}
+            >
+              <SelectTrigger className="w-44" aria-label={tr("expenses.document_role")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {(["invoice", "payment", "other"] as const).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {tr(`expenses.document_${value}`)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!document}
+              onClick={() => {
+                setLinks((current) => [...current, { document_id: document, role }]);
+                setDocument("");
+              }}
+            >
+              {tr("expenses.add_document_link")}
+            </Button>
+          </div>
+        </div>
+      }
       onSubmit={(values) => {
-        const bankSource = reimbursementSource(values, initial, ws);
+        if (links.some((link) => link.document_id === values["document_id"]))
+          throw new Error("expenses.invalid_documents");
+        const previous = editId ? ws.expenses.find((expense) => expense.id === editId) : undefined;
         const row = normalizeExpense(
-          bankSource ? { ...values, budget_pot_id: bankSource } : values,
+          expenseTransition(
+            { ...values, document_links: links.length ? JSON.stringify(links) : null },
+            previous,
+            ws.budget_pots,
+          ),
           ws,
         );
         return editId

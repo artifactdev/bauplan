@@ -3,9 +3,10 @@ import { bankFundedPayments, summarize } from "./calc";
 import {
   expenseIsOverdue,
   expenseLinkDefaults,
+  expenseTransition,
   legacyInvoiceExpense,
+  migrateExpenseStatus,
   normalizeExpense,
-  reimbursementSource,
   splitExpense,
 } from "./expenses";
 import type { Expense, Offer, Workspace } from "./schema";
@@ -83,6 +84,29 @@ const workspace: Workspace = {
 };
 
 describe("unified expenses", () => {
+  it("preserves legacy payment semantics when separating bank submission status", () => {
+    expect(migrateExpenseStatus("offen")).toEqual({
+      status: "offen",
+      bank_status: "einzureichen",
+    });
+    expect(migrateExpenseStatus("bezahlt")).toEqual({
+      status: "bezahlt",
+      bank_status: "einzureichen",
+    });
+    expect(migrateExpenseStatus("eingereicht")).toEqual({
+      status: "bezahlt",
+      bank_status: "eingereicht",
+    });
+    expect(migrateExpenseStatus("erstattet")).toEqual({
+      status: "bezahlt",
+      bank_status: "ausgezahlt",
+    });
+    expect(migrateExpenseStatus("abgelehnt")).toEqual({
+      status: "bezahlt",
+      bank_status: "abgelehnt",
+    });
+  });
+
   it("converts an invoice without guessing an offer or losing accounting fields", () => {
     expect(
       legacyInvoiceExpense({
@@ -180,29 +204,43 @@ describe("unified expenses", () => {
     ],
   };
 
-  it("moves an expense to the bank source only when it becomes reimbursed", () => {
-    const paidByJerry = { status: "eingereicht", budget_pot_id: "jerry" };
-    expect(
-      reimbursementSource({ status: "erstattet", budget_pot_id: "jerry" }, paidByJerry, pots),
-    ).toBe("bank");
-    for (const status of ["eingereicht", "abgelehnt", "bezahlt"])
-      expect(reimbursementSource({ status, budget_pot_id: "jerry" }, paidByJerry, pots)).toBeNull();
-    // an explicitly chosen source, an already reimbursed expense or no bank source keep the source
-    expect(
-      reimbursementSource({ status: "erstattet", budget_pot_id: "bank" }, paidByJerry, pots),
-    ).toBeNull();
-    expect(
-      reimbursementSource(
-        { status: "erstattet", budget_pot_id: "jerry" },
-        { status: "erstattet", budget_pot_id: "jerry" },
-        pots,
+  it("tracks bank submission independently of payment and changes the source only on payout", () => {
+    const open = { status: "offen", bank_status: "einzureichen", budget_pot_id: "jerry" };
+    expect(expenseTransition({ bank_status: "eingereicht" }, open, pots.budget_pots)).toEqual({
+      bank_status: "eingereicht",
+    });
+    expect(expenseTransition({ bank_status: "ausgezahlt" }, open, pots.budget_pots)).toEqual({
+      bank_status: "ausgezahlt",
+      status: "bezahlt",
+      budget_pot_id: "bank",
+    });
+    expect(expenseTransition({ bank_status: "abgelehnt" }, open, pots.budget_pots)).toEqual({
+      bank_status: "abgelehnt",
+    });
+    expect(() =>
+      expenseTransition(
+        { bank_status: "abgelehnt" },
+        { ...open, budget_pot_id: "bank" },
+        pots.budget_pots,
       ),
-    ).toBeNull();
-    expect(
-      reimbursementSource({ status: "erstattet", budget_pot_id: "jerry" }, paidByJerry, {
-        budget_pots: [pots.budget_pots[1]!],
-      }),
-    ).toBeNull();
+    ).toThrow("expenses.private_source_required");
+    expect(() =>
+      expenseTransition({ bank_status: "ausgezahlt" }, open, [pots.budget_pots[1]!]),
+    ).toThrow("expenses.bank_source_required");
+  });
+
+  it("keeps a submitted open invoice in the forecast until the bank pays it", () => {
+    const submitted: Expense = {
+      ...expense,
+      status: "offen",
+      bank_status: "eingereicht",
+      budget_pot_id: "bank",
+    };
+    const paid: Expense = { ...submitted, status: "bezahlt", bank_status: "ausgezahlt" };
+    expect(bankFundedPayments([], [submitted], "bank")).toMatchObject([{ actual: false }]);
+    expect(bankFundedPayments([], [paid], "bank")).toMatchObject([{ actual: true }]);
+    expect(summarize({ ...workspace, expenses: [submitted], ...pots }).reimbursed).toBe(0);
+    expect(summarize({ ...workspace, expenses: [paid], ...pots }).reimbursed).toBe(1000);
   });
 
   it("keeps submitted and rejected expenses off the bank until they are reimbursed", () => {
@@ -225,12 +263,13 @@ describe("unified expenses", () => {
 
   it("splits a partially reimbursed expense without changing the total", () => {
     const eingereicht: Expense = { ...expense, amount: 300.1, budget_pot_id: "jerry" };
-    const split = splitExpense(eingereicht, 120.05, "erstattet", "Part", pots)!;
+    const split = splitExpense(eingereicht, 120.05, "ausgezahlt", "Part", pots)!;
     expect(split.remainder).toBe(180.05);
     expect(split.part).toMatchObject({
       title: "Part",
       amount: 120.05,
-      status: "erstattet",
+      status: "bezahlt",
+      bank_status: "ausgezahlt",
       budget_pot_id: "bank",
       cost_item_id: eingereicht.cost_item_id,
       document_id: eingereicht.document_id,
@@ -241,7 +280,7 @@ describe("unified expenses", () => {
     expect(submitted.part).toMatchObject({ budget_pot_id: "jerry" });
 
     for (const amount of [0, -5, 300.1, 400, Number.NaN])
-      expect(splitExpense(eingereicht, amount, "erstattet", "Part", pots)).toBeNull();
+      expect(splitExpense(eingereicht, amount, "ausgezahlt", "Part", pots)).toBeNull();
 
     const s = summarize({
       ...workspace,

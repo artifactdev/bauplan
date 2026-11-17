@@ -437,6 +437,38 @@ export const getWorkspace = createServerFn()
   .inputValidator((d: unknown) => z.object({ projectId: z.string().min(1) }).parse(d))
   .handler(async ({ context, data }) => context.repo.getAll(data.projectId));
 
+export const exportExpenses = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        projectId: z.string().min(1),
+        ids: z.array(z.string().min(1)).min(1).max(1000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    const { exportExpenseDocuments } = await import("@/server/expense-export");
+    return exportExpenseDocuments(context.repo, data.projectId, data.ids);
+  });
+
+const exportSnapshotRow = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]));
+export const markExportedExpensesSubmitted = createServerFn({ method: "POST" })
+  .middleware([dataContext])
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        projectId: z.string().min(1),
+        expenses: z.array(exportSnapshotRow).min(1).max(1000),
+        documents: z.array(exportSnapshotRow).max(10000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ context, data }) => {
+    await context.repo.markExpensesSubmitted(data.projectId, data.expenses, data.documents);
+    return { ok: true };
+  });
+
 export const getWorkspaceSyncGeneration = createServerFn()
   .middleware([dataContext])
   .handler(async ({ context }) => context.repo.getSyncGeneration());

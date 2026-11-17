@@ -60,6 +60,10 @@ Both are referenced in the website gallery. Refresh `calendar`, `calendar-week`,
 `mobile-calendar`, `tasks` and `tasks-subtasks` when changing planning data or the
 calendar toolbar.
 
+The `expenses` capture selects the fictional contractor invoice and shows
+payment and bank-submission statuses, filtering, and ZIP actions. Refresh it
+whenever that workflow changes.
+
 ### In CI
 
 [`.github/workflows/screenshots.yml`](../.github/workflows/screenshots.yml) runs
