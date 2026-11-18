@@ -148,7 +148,7 @@ try {
       .locator("summary")
       .filter({ hasText: /^Unteraufgaben/ })
       .click();
-    await page.locator("#diary-subtask-links-search").fill("Demo: Elektro-Rohinstallation prüfen");
+    await page.locator("#diary-subtask-links-search").fill("Elektro-Rohinstallation");
     await page
       .locator("details")
       .filter({ has: page.locator("#diary-subtask-links-search") })

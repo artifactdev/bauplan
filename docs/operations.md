@@ -49,9 +49,20 @@ Admins can also create a portable application backup in Settings and import it d
 Updates migrate the persistent SQLite database automatically **before the production server starts listening**. No separate migration command is required. Deploy the new image/build and restart the app; do not run old and new app versions against the same database simultaneously.
 
 - New workspace tables/columns are derived from `src/lib/schema.ts` on every startup, including for existing installations that predate migration versioning. Existing rows and files are preserved; new columns start as `NULL`.
-- Private-schema changes and data backfills use consecutively numbered migrations in `src/server/migrations.ts`, recorded by SQLite `PRAGMA user_version`. Append a migration for a rename, type conversion, backfill, or other non-additive change; do not edit an already released migration. Keep the shared schema as the only workspace column registry.
+- Private-schema changes and data backfills use consecutively numbered migrations in `src/server/migrations.ts`, recorded by SQLite `PRAGMA user_version`. Append a migration for a rename, type conversion, backfill, or other non-additive change; do not edit an already released migration. Keep the shared schema as the only workspace column registry. Never delete or renumber a released migration, even when the feature it belonged to is removed again: keep it as a no-op (`up() {}`) so installations that already recorded that version still start. Dropping the related columns from `src/lib/schema.ts` is enough; `synchronizeWorkspaceSchema` never removes existing columns.
 - All startup schema changes, pending migrations, and the version update run in one transaction. SQLite waits up to five seconds for another writer. Failure is logged, changes are rolled back, and startup fails instead of serving requests against a partially migrated database. Fix the cause and restart.
-- A database version newer than the running build supports is rejected. Rolling back application code is not a database downgrade mechanism.
+- A database version newer than the running build supports is rejected with `Database version N is newer than supported version M`; the container then restarts in a loop. Rolling back application code is not a database downgrade mechanism. Start the newer build again, or restore the backup/database copy taken before that update. Only if neither exists, and after checking that no columns or tables from the newer migration are still in use, reset the version in a copy of the database:
+  ```bash
+  docker compose stop app
+  cp -a daten "daten.bak-$(date +%F-%H%M)"
+  docker compose run --rm --entrypoint node app -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync("/data/renovierung.db");
+    db.exec("PRAGMA user_version = 18");
+    console.log(db.prepare("PRAGMA user_version").get());'
+  docker compose up -d
+  ```
+  This bypasses the version gate, so any data the newer migration rewrote can be read incorrectly. Prefer the newer build or a pre-update backup.
 - Take a backup **before deploying an update**. For a rollback, restore a matching pre-update database and app version. Migrations do not create an automatic backup and cannot undo a successfully committed update.
 
 Migration v2 consolidates existing invoices into expenses, using `invoice-<old-id>` IDs and preserving all financial fields and existing document/contact/cost-item links. It then empties the legacy invoice table so totals are not counted twice. An ID collision fails and rolls back the migration rather than overwriting either record. The empty legacy table/schema is retained for reading older backups and cached workspaces; old ZIP imports undergo the same conversion. New expenses can optionally link to a quote; no historical quote link is guessed.

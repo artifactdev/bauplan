@@ -185,7 +185,7 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   are deliberately not backdated. Each link category allows up to 100 selections. If
   daily suggestions exceed that limit, a visible notice asks you to reduce the selection
   before saving; suggestions are never silently discarded.
-- Subtasks are independently selectable with their parent task shown for context.
+- Subtasks are grouped by their parent task in the diary picker; each subtask remains independently selectable, and searching for a parent shows its subtasks.
   New reports preselect subtasks completed on the report day even when their parent remains
   open. Undated legacy completions remain manually selectable. Existing reports gain these
   links only when explicitly selected or when adding daily suggestions. The parent task is

@@ -218,6 +218,43 @@ describe("diary entry wizard", () => {
     ]);
   });
 
+  it("groups subtasks by parent and finds all of a parent's subtasks by its title", () => {
+    mocks.tasks = [
+      {
+        ...task("Bathroom renovation", null),
+        checklist: JSON.stringify([{ id: "valve", title: "Replace valve", done: false }]),
+      },
+      {
+        ...task("Kitchen wiring", null),
+        checklist: JSON.stringify([{ id: "outlet", title: "Check outlet", done: false }]),
+      },
+    ];
+    render(<DiaryPage />);
+    openReport();
+    fireEvent.click(screen.getByText("Subtasks", { selector: "summary" }));
+
+    expect(screen.getByRole("group", { name: "Bathroom renovation" })).toBeVisible();
+    fireEvent.change(screen.getByRole("searchbox", { name: /Subtasks/ }), {
+      target: { value: "Bathroom renovation" },
+    });
+
+    expect(
+      screen.getByRole("checkbox", { name: "Bathroom renovation: Replace valve" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("checkbox", { name: "Kitchen wiring: Check outlet" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the subtask picker visible when current tasks have no subtasks", () => {
+    mocks.tasks = [task("Open parent", null)];
+    render(<DiaryPage />);
+    openReport();
+
+    fireEvent.click(screen.getByText("Subtasks", { selector: "summary" }));
+    expect(screen.getByText("The current tasks have no subtasks.")).toBeVisible();
+  });
+
   it("opens the clicked photo in the shared gallery with only photos from the same diary entry", () => {
     mocks.entries = [report("Existing report", "2026-11-17")];
     mocks.media = [

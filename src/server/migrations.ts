@@ -241,6 +241,9 @@ const MIGRATIONS: readonly Migration[] = [
     up() {},
   },
   {
+    // Released with 2.2.0. The diary subtask links were removed again, but installations that
+    // already applied this version must keep starting; never renumber or delete a released
+    // migration.
     version: 19,
     name: "diary-subtask-links",
     up() {},

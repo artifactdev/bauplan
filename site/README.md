@@ -71,7 +71,7 @@ modal after saving a new report. The capture script creates a temporary fictiona
 after the capture, using the same delete-confirmation dialog as normal diary entries.
 The `diary-navigation` screenshot jumps directly to the oldest report month and opens
 the date picker, demonstrating navigation across the multi-year archive.
-`diary-subtasks` shows independent subtask selection and the completion-day preselection.
+`diary-subtasks` shows subtask choices grouped by their parent task, with independent selection and completion-day preselection.
 Its explicitly fictional open parent has subtasks completed today, yesterday, without a
 known legacy date, and still open; the daily fixtures roll forward when re-seeding.
 `diary-photos` opens the second of two locally generated illustrations in the report's

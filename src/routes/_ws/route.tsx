@@ -197,10 +197,10 @@ function Shell() {
       >
         {t("skip")}
       </a>
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground md:flex">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground md:flex">
         <Link
           to="/"
-          className="mb-7 flex items-center gap-3 rounded-lg px-3 font-display text-lg font-semibold text-sidebar-accent-foreground"
+          className="mb-7 flex shrink-0 items-center gap-3 rounded-lg px-3 font-display text-lg font-semibold text-sidebar-accent-foreground"
         >
           <img
             src="/app-icon.svg"
@@ -209,8 +209,11 @@ function Shell() {
           />
           {tr("shared.bauplan")}
         </Link>
-        <p className="mb-3 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
-        <nav aria-label={t("navigation")} className="grid gap-1">
+        <p className="mb-3 shrink-0 px-3 text-xs font-medium tracking-wide">{t("workspace")}</p>
+        <nav
+          aria-label={t("navigation")}
+          className="grid min-h-0 flex-1 content-start gap-1 overflow-y-auto overscroll-contain [scrollbar-width:thin] [-webkit-overflow-scrolling:touch]"
+        >
           {[
             ...items,
             { to: "/einstellungen", label: tr("shared.settings"), icon: Settings } as const,

@@ -345,6 +345,18 @@ export function DiaryPage() {
     );
   const suggestions = diaryDaySuggestions(ws, draft.entry_date);
   const subtasks = diarySubtasks(ws.tasks);
+  const suggestedSubtaskIds = new Set(suggestions.subtask_links.map(diarySubtaskKey));
+  const subtaskGroups = subtasks.reduce<RecordPickerGroup[]>((groups, item) => {
+    const row = {
+      id: item.id,
+      label: item.title,
+      suggested: suggestedSubtaskIds.has(item.id),
+    };
+    const parent = groups.at(-1);
+    if (parent?.id === item.link.task_id) parent.rows.push(row);
+    else groups.push({ id: item.link.task_id, label: item.taskTitle, rows: [row] });
+    return groups;
+  }, []);
   const suggestionCount =
     suggestions.task_ids.length +
     suggestions.subtask_links.length +
@@ -835,13 +847,7 @@ export function DiaryPage() {
                           label={tr("diary.subtasks")}
                           description={tr("diary.subtasks_help")}
                           values={draft.subtask_links.map(diarySubtaskKey)}
-                          rows={subtasks.map((item) => ({
-                            id: item.id,
-                            label: subtaskLabel(item),
-                            suggested: suggestions.subtask_links.some(
-                              (link) => diarySubtaskKey(link) === item.id,
-                            ),
-                          }))}
+                          groups={subtaskGroups}
                           onChange={(values) =>
                             setDraft((current) => ({
                               ...current,
@@ -1552,25 +1558,66 @@ export function DiaryPage() {
   );
 }
 
+type RecordPickerRow = { id: string; label: string; suggested?: boolean };
+type RecordPickerGroup = { id: string; label: string; rows: RecordPickerRow[] };
+
 function RecordPicker({
   id,
   label,
   description,
   values,
-  rows,
+  rows = [],
+  groups,
   onChange,
 }: {
   id: string;
   label: string;
   description?: string;
   values: string[];
-  rows: { id: string; label: string; suggested?: boolean }[];
+  rows?: RecordPickerRow[];
+  groups?: RecordPickerGroup[];
   onChange: (values: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const visible = rows
-    .filter((row) => row.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
-    .sort((left, right) => Number(!!right.suggested) - Number(!!left.suggested));
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const sortSuggestions = (left: RecordPickerRow, right: RecordPickerRow) =>
+    Number(!!right.suggested) - Number(!!left.suggested);
+  const visibleRows = rows
+    .filter((row) => row.label.toLocaleLowerCase().includes(normalizedQuery))
+    .sort(sortSuggestions);
+  const visibleGroups = groups?.flatMap((group) => {
+    const groupRows = group.rows
+      .filter((row) => `${group.label} ${row.label}`.toLocaleLowerCase().includes(normalizedQuery))
+      .sort(sortSuggestions);
+    return groupRows.length ? [{ ...group, rows: groupRows }] : [];
+  });
+  const hasRows = groups ? groups.some((group) => group.rows.length > 0) : rows.length > 0;
+  const renderRow = (row: RecordPickerRow, groupLabel?: string) => (
+    <label
+      key={row.id}
+      className="flex cursor-pointer items-start gap-2 rounded-md p-2 text-sm hover:bg-muted"
+    >
+      <Checkbox
+        className="mt-0.5"
+        aria-label={
+          groupLabel ? tr("diary.subtask_label", { task: groupLabel, title: row.label }) : undefined
+        }
+        checked={values.includes(row.id)}
+        disabled={!values.includes(row.id) && values.length >= MAX_DIARY_LINKS}
+        onCheckedChange={(checked) =>
+          onChange(checked ? [...values, row.id] : values.filter((value) => value !== row.id))
+        }
+      />
+      <span className="min-w-0">
+        {row.label}
+        {row.suggested && (
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {tr("diary.matches_day")}
+          </span>
+        )}
+      </span>
+    </label>
+  );
   return (
     <details className="min-w-0 rounded-lg border p-3">
       <summary className="cursor-pointer rounded-sm text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -1591,37 +1638,29 @@ function RecordPicker({
           onChange={(event) => setQuery(event.target.value)}
           placeholder={tr("diary.search")}
         />
-        <fieldset className="grid max-h-48 gap-1 overflow-y-auto">
-          <legend className="sr-only">{label}</legend>
-          {visible.map((row) => (
-            <label
-              key={row.id}
-              className="flex cursor-pointer items-start gap-2 rounded-md p-2 text-sm hover:bg-muted"
-            >
-              <Checkbox
-                className="mt-0.5"
-                checked={values.includes(row.id)}
-                disabled={!values.includes(row.id) && values.length >= MAX_DIARY_LINKS}
-                onCheckedChange={(checked) =>
-                  onChange(
-                    checked ? [...values, row.id] : values.filter((value) => value !== row.id),
-                  )
-                }
-              />
-              <span className="min-w-0">
-                {row.label}
-                {row.suggested && (
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {tr("diary.matches_day")}
-                  </span>
-                )}
-              </span>
-            </label>
-          ))}
-          {!visible.length && (
-            <p className="py-2 text-xs text-muted-foreground">{tr("diary.no_links")}</p>
-          )}
-        </fieldset>
+        {groups ? (
+          <div className="grid max-h-48 gap-3 overflow-y-auto">
+            {visibleGroups?.map((group) => (
+              <fieldset key={group.id} className="grid gap-1 border-l-2 border-border pl-3">
+                <legend className="px-1 text-sm font-medium">{group.label}</legend>
+                {group.rows.map((row) => renderRow(row, group.label))}
+              </fieldset>
+            ))}
+            {!visibleGroups?.length && (
+              <p className="py-2 text-xs text-muted-foreground">
+                {hasRows ? tr("diary.no_links") : tr("diary.no_subtasks")}
+              </p>
+            )}
+          </div>
+        ) : (
+          <fieldset className="grid max-h-48 gap-1 overflow-y-auto">
+            <legend className="sr-only">{label}</legend>
+            {visibleRows.map((row) => renderRow(row))}
+            {!visibleRows.length && (
+              <p className="py-2 text-xs text-muted-foreground">{tr("diary.no_links")}</p>
+            )}
+          </fieldset>
+        )}
       </div>
     </details>
   );

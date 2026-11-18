@@ -17,6 +17,16 @@ afterEach(() => {
 });
 
 describe("database migrations", () => {
+  it("starts databases that already applied the released migration 19", () => {
+    // 2.2.0 shipped migration 19; a later build removed the feature but must keep accepting
+    // databases that already recorded version 19. Never delete or renumber a released migration.
+    const db = database();
+    migrateDatabase(db);
+    db.exec("PRAGMA user_version = 19");
+    expect(() => migrateDatabase(db)).not.toThrow();
+    expect(db.prepare("PRAGMA user_version").get()?.["user_version"]).toBe(19);
+  });
+
   it("separates legacy bank states without changing paid totals or sources", () => {
     const db = database();
     migrateDatabase(db);
