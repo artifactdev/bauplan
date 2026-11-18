@@ -399,8 +399,6 @@
   "diary.entry_count": "{{count}} of {{total}} reports",
   "diary.reset_filters": "Reset filters",
   "diary.no_matches": "No matching reports. Change your search or reset the filters.",
-  "diary.expand_all": "Expand all",
-  "diary.collapse_all": "Collapse all",
   "diary.jump_month": "Jump to month",
   "diary.time_navigation": "Time navigation",
   "diary.timeline_month_one": "{{month}} · {{count}} report",

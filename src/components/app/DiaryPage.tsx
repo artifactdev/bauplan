@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   CheckCheck,
-  ChevronDown,
+  ChevronRight,
   Download,
   ImageIcon,
   CloudSun,
@@ -263,6 +263,7 @@ export function DiaryPage() {
   const { create, update, remove, diaryMediaUpload } = useMutations();
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailEntryId, setDetailEntryId] = useState<string | null>(null);
   const [wizardStep, setWizardStep] = useState<"report" | "media" | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -274,7 +275,6 @@ export function DiaryPage() {
   const [autoLinks, setAutoLinks] = useState<DiarySuggestions>(EMPTY_AUTO_LINKS);
   const [filters, setFilters] = useState(EMPTY_DIARY_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [gallery, setGallery] = useState<{
     entryId: string;
@@ -290,6 +290,7 @@ export function DiaryPage() {
   const editorHeading = useRef<HTMLHeadingElement>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const editorTrigger = useRef<HTMLButtonElement | null>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const deleteTrigger = useRef<HTMLElement | null>(null);
   const actionOpensDialog = useRef(false);
   const busy = create.isPending || update.isPending || uploading || deleting;
@@ -302,9 +303,9 @@ export function DiaryPage() {
     setAutoLinks(EMPTY_AUTO_LINKS);
     setDeletion(null);
     setGallery(null);
+    setDetailEntryId(null);
     setFilters(EMPTY_DIARY_FILTERS);
     setFiltersOpen(false);
-    setExpandedIds([]);
   }, [projectId]);
 
   useEffect(() => {
@@ -612,6 +613,127 @@ export function DiaryPage() {
   const project = ws.projects.find((item) => item.id === projectId);
   const mediaForEntry = (entryId: string) =>
     ws.diary_media.filter((media) => media.diary_entry_id === entryId);
+  const detailEntry = detailEntryId
+    ? (ws.diary_entries.find((entry) => entry.id === detailEntryId) ?? null)
+    : null;
+  const renderEntryDetails = (entry: DiaryEntry) => {
+    const weather = parseDiaryWeather(entry.weather_snapshot);
+    const taskIds = parseDiaryIds(entry.task_ids);
+    const selectedSubtasks = linkedDiarySubtasks(entry, ws.tasks);
+    const eventIds = parseDiaryIds(entry.event_ids);
+    const tradeIds = parseDiaryIds(entry.trade_ids);
+    const offerIds = parseDiaryIds(entry.offer_ids);
+    const paymentIds = parseDiaryIds(entry.payment_ids);
+    const media = mediaForEntry(entry.id);
+
+    return (
+      <div className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          {entry.work_done && <EntryText label={tr("diary.work_done")} text={entry.work_done} />}
+          {entry.progress && <EntryText label={tr("diary.progress")} text={entry.progress} />}
+          {entry.issues && <EntryText label={tr("diary.issues")} text={entry.issues} />}
+          {weather && <WeatherSummary weather={weather} />}
+        </div>
+        {offerIds.length > 0 && (
+          <section className="grid gap-2">
+            <h4 className="text-sm font-medium">{tr("diary.offers")}</h4>
+            <ul className="grid gap-2 text-sm">
+              {ws.offers
+                .filter((offer) => offerIds.includes(offer.id))
+                .map((offer) => (
+                  <li key={offer.id}>
+                    <Link
+                      to="/angebote"
+                      search={{ eintrag: offer.id }}
+                      className="font-medium underline underline-offset-4"
+                    >
+                      {offer.title || offer.contractor}
+                    </Link>
+                    <p className="mt-1 text-muted-foreground">
+                      {tr("diary.offer_on", { date: fmtDate(offer.offer_date) })} ·{" "}
+                      {offer.contractor} · {eur(offer.amount, true)}
+                    </p>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        )}
+        {paymentIds.length > 0 && (
+          <section className="grid gap-2">
+            <h4 className="text-sm font-medium">{tr("diary.payments")}</h4>
+            <ul className="grid gap-2 text-sm">
+              {ws.expenses
+                .filter((expense) => paymentIds.includes(expense.id))
+                .map((expense) => (
+                  <li key={expense.id}>
+                    <Link
+                      to="/ausgaben"
+                      search={{ eintrag: expense.id }}
+                      className="font-medium underline underline-offset-4"
+                    >
+                      {expense.title}
+                    </Link>
+                    <p className="mt-1 text-muted-foreground">
+                      {tr("diary.payment_on", { date: fmtDate(expense.payment_date) })}
+                      {expense.vendor ? ` · ${expense.vendor}` : ""} · {eur(expense.amount, true)}
+                    </p>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        )}
+        {(taskIds.length > 0 ||
+          selectedSubtasks.length > 0 ||
+          eventIds.length > 0 ||
+          tradeIds.length > 0) && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            {taskIds.map((id) => {
+              const task = ws.tasks.find((item) => item.id === id);
+              return task ? (
+                <span key={id} className="rounded-full bg-muted px-2 py-1">
+                  {task.title}
+                </span>
+              ) : null;
+            })}
+            {selectedSubtasks.map((item) => (
+              <span key={item.id} className="rounded-full bg-muted px-2 py-1">
+                {subtaskLabel(item)}
+              </span>
+            ))}
+            {eventIds.map((id) => {
+              const event = ws.events.find((item) => item.id === id);
+              return event ? (
+                <span key={id} className="rounded-full bg-muted px-2 py-1">
+                  {event.title}
+                </span>
+              ) : null;
+            })}
+            {tradeIds.map((id) => {
+              const trade = ws.trades.find((item) => item.id === id);
+              return trade ? (
+                <span key={id} className="rounded-full bg-muted px-2 py-1">
+                  {trade.name}
+                </span>
+              ) : null;
+            })}
+          </div>
+        )}
+        {media.length > 0 && (
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {media.map((item) => (
+              <DiaryMediaItem
+                key={item.id}
+                media={item}
+                onOpen={() => openPhoto(item, entry.title)}
+                removing={busy}
+                onRemove={() => requestMediaDelete(item)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
 
   if (isLoading) return <p className="text-sm text-muted-foreground">{tr("shared.loading")}</p>;
 
@@ -1018,6 +1140,33 @@ export function DiaryPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <Dialog
+            open={detailEntry !== null}
+            onOpenChange={(open) => {
+              if (!open) setDetailEntryId(null);
+            }}
+          >
+            {detailEntry && (
+              <DialogContent
+                className="flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)]"
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault();
+                  if (detailTrigger.current?.isConnected) detailTrigger.current.focus();
+                  else document.getElementById("diary-new-entry")?.focus();
+                }}
+              >
+                <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6 sm:py-5">
+                  <DialogTitle className="leading-snug">{detailEntry.title}</DialogTitle>
+                  <DialogDescription>
+                    {dateFormat.format(new Date(`${detailEntry.entry_date}T00:00:00`))}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-6">
+                  {renderEntryDetails(detailEntry)}
+                </div>
+              </DialogContent>
+            )}
+          </Dialog>
           <AlertDialog
             open={deletion !== null}
             onOpenChange={(open) => {
@@ -1150,29 +1299,15 @@ export function DiaryPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap gap-2">
+              {filtersActive && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button
                     size="sm"
-                    variant="ghost"
-                    onClick={() => setExpandedIds(entries.map((entry) => entry.id))}
+                    variant="outline"
+                    onClick={() => setFilters(EMPTY_DIARY_FILTERS)}
                   >
-                    {tr("diary.expand_all")}
+                    {tr("diary.reset_filters")}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setExpandedIds([])}>
-                    {tr("diary.collapse_all")}
-                  </Button>
-                  {filtersActive && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setFilters(EMPTY_DIARY_FILTERS)}
-                    >
-                      {tr("diary.reset_filters")}
-                    </Button>
-                  )}
-                </div>
-                {filtersActive && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1182,8 +1317,8 @@ export function DiaryPage() {
                     <Download data-icon="inline-start" />
                     {tr("diary.pdf_filtered")}
                   </Button>
-                )}
-              </div>
+                </div>
+              )}
             </section>
           )}
           {ws.diary_entries.length === 0 ? (
@@ -1221,19 +1356,29 @@ export function DiaryPage() {
                   <h2 className="mb-4 text-lg font-semibold">{monthLabel(month)}</h2>
                   <ol className="grid gap-4">
                     {reports.map((entry) => {
-                      const weather = parseDiaryWeather(entry.weather_snapshot);
                       const taskIds = parseDiaryIds(entry.task_ids);
-                      const selectedSubtasks = linkedDiarySubtasks(entry, ws.tasks);
-                      const eventIds = parseDiaryIds(entry.event_ids);
-                      const tradeIds = parseDiaryIds(entry.trade_ids);
                       const offerIds = parseDiaryIds(entry.offer_ids);
                       const paymentIds = parseDiaryIds(entry.payment_ids);
                       const media = mediaForEntry(entry.id);
-                      const expanded = expandedIds.includes(entry.id);
                       const linkedTrades = diaryEntryTrades(entry, ws);
                       return (
                         <li key={entry.id} className="min-w-0">
-                          <article className="min-w-0 rounded-xl bg-card p-4 sm:p-5">
+                          <article
+                            className="min-w-0 cursor-pointer rounded-xl bg-card p-4 sm:p-5"
+                            onClick={(event) => {
+                              if (
+                                event.target instanceof Element &&
+                                event.target.closest("button, a, [role='button']")
+                              ) {
+                                return;
+                              }
+                              detailTrigger.current =
+                                event.currentTarget.querySelector<HTMLButtonElement>(
+                                  '[aria-haspopup="dialog"]',
+                                );
+                              setDetailEntryId(entry.id);
+                            }}
+                          >
                             <div className="mb-1 flex items-center justify-between gap-3">
                               <p className="text-xs font-medium tabular-nums text-muted-foreground">
                                 <time dateTime={entry.entry_date}>
@@ -1263,6 +1408,7 @@ export function DiaryPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
                                   align="end"
+                                  onClick={(event) => event.stopPropagation()}
                                   onCloseAutoFocus={(event) => {
                                     if (actionOpensDialog.current) event.preventDefault();
                                   }}
@@ -1301,26 +1447,17 @@ export function DiaryPage() {
                                 id={`diary-entry-${entry.id}`}
                                 type="button"
                                 className="flex w-full scroll-mt-28 items-start justify-between gap-3 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                aria-expanded={expanded}
-                                aria-controls={`diary-detail-${entry.id}`}
-                                onClick={() =>
-                                  setExpandedIds((current) =>
-                                    expanded
-                                      ? current.filter((id) => id !== entry.id)
-                                      : [...current, entry.id],
-                                  )
-                                }
+                                aria-haspopup="dialog"
+                                onClick={(event) => {
+                                  detailTrigger.current = event.currentTarget;
+                                  setDetailEntryId(entry.id);
+                                }}
                               >
                                 {entry.title}
-                                <ChevronDown
-                                  className={cn(
-                                    "mt-0.5 size-4 shrink-0 transition-transform motion-reduce:transition-none",
-                                    expanded && "rotate-180",
-                                  )}
-                                />
+                                <ChevronRight className="mt-0.5 size-4 shrink-0" />
                               </button>
                             </h3>
-                            {!expanded && (entry.work_done || entry.progress) && (
+                            {(entry.work_done || entry.progress) && (
                               <p className="mt-2 line-clamp-2 max-w-prose text-sm text-muted-foreground">
                                 {entry.work_done || entry.progress}
                               </p>
@@ -1355,133 +1492,6 @@ export function DiaryPage() {
                                 <Badge variant="outline">{tr("diary.has_issues")}</Badge>
                               )}
                             </div>
-                            {expanded && (
-                              <div
-                                id={`diary-detail-${entry.id}`}
-                                className="mt-4 grid gap-4 border-t pt-4"
-                              >
-                                <div className="grid gap-3 md:grid-cols-2">
-                                  {entry.work_done && (
-                                    <EntryText
-                                      label={tr("diary.work_done")}
-                                      text={entry.work_done}
-                                    />
-                                  )}
-                                  {entry.progress && (
-                                    <EntryText label={tr("diary.progress")} text={entry.progress} />
-                                  )}
-                                  {entry.issues && (
-                                    <EntryText label={tr("diary.issues")} text={entry.issues} />
-                                  )}
-                                  {weather && <WeatherSummary weather={weather} />}
-                                </div>
-                                {offerIds.length > 0 && (
-                                  <section className="grid gap-2">
-                                    <h4 className="text-sm font-medium">{tr("diary.offers")}</h4>
-                                    <ul className="grid gap-2 text-sm">
-                                      {ws.offers
-                                        .filter((offer) => offerIds.includes(offer.id))
-                                        .map((offer) => (
-                                          <li key={offer.id}>
-                                            <Link
-                                              to="/angebote"
-                                              search={{ eintrag: offer.id }}
-                                              className="font-medium underline underline-offset-4"
-                                            >
-                                              {offer.title || offer.contractor}
-                                            </Link>
-                                            <p className="mt-1 text-muted-foreground">
-                                              {tr("diary.offer_on", {
-                                                date: fmtDate(offer.offer_date),
-                                              })}{" "}
-                                              · {offer.contractor} · {eur(offer.amount, true)}
-                                            </p>
-                                          </li>
-                                        ))}
-                                    </ul>
-                                  </section>
-                                )}
-                                {paymentIds.length > 0 && (
-                                  <section className="grid gap-2">
-                                    <h4 className="text-sm font-medium">{tr("diary.payments")}</h4>
-                                    <ul className="grid gap-2 text-sm">
-                                      {ws.expenses
-                                        .filter((expense) => paymentIds.includes(expense.id))
-                                        .map((expense) => (
-                                          <li key={expense.id}>
-                                            <Link
-                                              to="/ausgaben"
-                                              search={{ eintrag: expense.id }}
-                                              className="font-medium underline underline-offset-4"
-                                            >
-                                              {expense.title}
-                                            </Link>
-                                            <p className="mt-1 text-muted-foreground">
-                                              {tr("diary.payment_on", {
-                                                date: fmtDate(expense.payment_date),
-                                              })}
-                                              {expense.vendor ? ` · ${expense.vendor}` : ""} ·{" "}
-                                              {eur(expense.amount, true)}
-                                            </p>
-                                          </li>
-                                        ))}
-                                    </ul>
-                                  </section>
-                                )}
-                                {(taskIds.length > 0 ||
-                                  selectedSubtasks.length > 0 ||
-                                  eventIds.length > 0 ||
-                                  tradeIds.length > 0) && (
-                                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                                    {taskIds.map((id) => {
-                                      const task = ws.tasks.find((item) => item.id === id);
-                                      return task ? (
-                                        <span key={id} className="rounded-full bg-muted px-2 py-1">
-                                          {task.title}
-                                        </span>
-                                      ) : null;
-                                    })}
-                                    {selectedSubtasks.map((item) => (
-                                      <span
-                                        key={item.id}
-                                        className="rounded-full bg-muted px-2 py-1"
-                                      >
-                                        {subtaskLabel(item)}
-                                      </span>
-                                    ))}
-                                    {eventIds.map((id) => {
-                                      const event = ws.events.find((item) => item.id === id);
-                                      return event ? (
-                                        <span key={id} className="rounded-full bg-muted px-2 py-1">
-                                          {event.title}
-                                        </span>
-                                      ) : null;
-                                    })}
-                                    {tradeIds.map((id) => {
-                                      const trade = ws.trades.find((item) => item.id === id);
-                                      return trade ? (
-                                        <span key={id} className="rounded-full bg-muted px-2 py-1">
-                                          {trade.name}
-                                        </span>
-                                      ) : null;
-                                    })}
-                                  </div>
-                                )}
-                                {media.length > 0 && (
-                                  <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {media.map((item) => (
-                                      <DiaryMediaItem
-                                        key={item.id}
-                                        media={item}
-                                        onOpen={() => openPhoto(item, entry.title)}
-                                        removing={busy}
-                                        onRemove={() => requestMediaDelete(item)}
-                                      />
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            )}
                           </article>
                         </li>
                       );

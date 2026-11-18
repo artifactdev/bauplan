@@ -172,6 +172,9 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   scrolling. A date picker jumps to the nearest matching report (newer wins ties), preserving filters.
   Month-grouped report cards use the full content width without a second decorative
   timeline or indentation on the left; only the right-hand rail provides time navigation.
+- Tapping a report title or its non-action card content opens the full text, weather, links
+  and media in a detail dialog. The dialog uses nearly the full mobile viewport and scrolls
+  its contents independently; edit and delete remain in the report's action menu.
 - The chronicle initially renders 40 matching reports and progressively adds older batches
   near the bottom, with an explicit load button as an alternative. Distant jumps start a new
   visible range; a newer-reports button restores preceding batches. Search, filters and PDF
@@ -197,8 +200,8 @@ All invoices and receipts, including contractor invoices, partial invoices, hard
   not suggested. Date changes preserve manual links; existing reports only add these
   suggestions when requested. Financial links open the corresponding offer/expense,
   and show supplier, date and amount. No receipt dates or payment dates are guessed.
-- A compact, newest-first timeline groups reports by month. Expand individual reports or
-  all matching reports. Search includes report text, linked tasks, events, trades,
+- A compact, newest-first timeline groups reports by month. Search includes report text,
+  linked tasks, events, trades,
   financial titles/suppliers and media
   filenames. Date-range and trade filters combine with the search; trade filtering also
   matches trades of linked tasks, events, offers or payments.

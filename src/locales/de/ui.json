@@ -399,8 +399,6 @@
   "diary.entry_count": "{{count}} von {{total}} Berichten",
   "diary.reset_filters": "Filter zurücksetzen",
   "diary.no_matches": "Keine passenden Berichte. Ändere die Suche oder setze die Filter zurück.",
-  "diary.expand_all": "Alle aufklappen",
-  "diary.collapse_all": "Alle zuklappen",
   "diary.jump_month": "Zum Monat springen",
   "diary.time_navigation": "Zeitnavigation",
   "diary.timeline_month_one": "{{month}} · {{count}} Bericht",

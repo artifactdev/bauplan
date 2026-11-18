@@ -64,6 +64,14 @@ async function visit(page, route, name) {
   await shot(page, name);
 }
 
+async function openReportFromSummary(page, title) {
+  const report = page.locator("article").filter({
+    has: page.getByRole("button", { name: title, exact: true }),
+  });
+  await report.locator("p.line-clamp-2").click();
+  await page.getByRole("dialog", { name: title, exact: true }).waitFor();
+}
+
 const browser = await chromium.launch();
 try {
   const desktop = await browser.newContext({
@@ -135,7 +143,7 @@ try {
   if (!only.length || only.includes("diary-details")) {
     await page.goto(`${BASE_URL}/tagebuch`);
     await settle(page);
-    await page.getByRole("button", { name: "Rohinstallation dokumentiert", exact: true }).click();
+    await openReportFromSummary(page, "Rohinstallation dokumentiert");
     await settle(page);
     await shot(page, "diary-details");
   }
@@ -160,7 +168,7 @@ try {
   if (!only.length || only.includes("diary-photos")) {
     await page.goto(`${BASE_URL}/tagebuch`);
     await settle(page);
-    await page.getByRole("button", { name: "Rohinstallation dokumentiert", exact: true }).click();
+    await openReportFromSummary(page, "Rohinstallation dokumentiert");
     await page
       .getByRole("button", { name: "Bild groß anzeigen: Dosenpositionen-Kueche.png" })
       .click();
@@ -268,6 +276,13 @@ try {
     await phone.goto(`${BASE_URL}/tagebuch`);
     await settle(phone);
     await shot(phone, "mobile-diary");
+  }
+  if (!only.length || only.includes("mobile-diary-details")) {
+    await phone.goto(`${BASE_URL}/tagebuch`);
+    await settle(phone);
+    await openReportFromSummary(phone, "Rohinstallation dokumentiert");
+    await settle(phone);
+    await shot(phone, "mobile-diary-details");
   }
 
   if (!only.length || only.includes("mobile-calendar")) {

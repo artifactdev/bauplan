@@ -576,6 +576,39 @@ describe("diary entry wizard", () => {
   });
 });
 
+describe("diary entry details", () => {
+  it("opens the report from its title or summary and restores focus on close", async () => {
+    mocks.entries = [
+      report("Existing report", "2026-11-17", {
+        work_done: "Installed wiring",
+        progress: "Drywall work can start next.",
+        issues: "One outlet still needs review.",
+      }),
+    ];
+    render(<DiaryPage />);
+
+    const trigger = screen.getByRole("button", { name: "Existing report" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "Existing report" });
+    expect(dialog).toHaveTextContent("Installed wiring");
+    expect(dialog).toHaveTextContent("Drywall work can start next.");
+    expect(dialog).toHaveTextContent("One outlet still needs review.");
+    expect(dialog.querySelector(".overflow-y-auto")).toHaveClass("overscroll-contain");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    fireEvent.click(screen.getByText("Installed wiring"));
+    expect(screen.getByRole("dialog", { name: "Existing report" })).toHaveTextContent(
+      "Installed wiring",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+});
+
 describe("diary delete confirmations", () => {
   it("does not delete an entry until confirmed and retains the confirmation on failure", async () => {
     mocks.entries = [report("Existing report", "2026-11-17")];
@@ -706,12 +739,9 @@ describe("diary timeline and exports", () => {
       report("Older", "2026-10-12", { work_done: "Kitchen painting" }),
     ];
     render(<DiaryPage />);
-    expect(screen.getByRole("button", { name: "Recent" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
     fireEvent.click(screen.getByRole("button", { name: "Recent" }));
-    expect(screen.getByRole("button", { name: "Recent" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("dialog", { name: "Recent" })).toHaveTextContent("Kitchen wiring");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.change(screen.getByLabelText("Search", { exact: true }), {
       target: { value: "Kitchen" },
     });

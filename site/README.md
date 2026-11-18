@@ -60,9 +60,10 @@ SHOTS=budget,expenses npm run site:screenshots
 
 The `diary` screenshot shows full-width month-grouped report cards without a decorative
 left timeline, the right-hand year/month rail, overflow action menus and filters;
-`diary-details` expands the fictional report with weather and local photo/video
-attachments. `mobile-diary` shows the responsive timeline. Refresh these when
-changing the diary page, demo reports, or media presentation.
+`diary-details` opens the fictional report from its summary in a detail dialog with weather
+and local photo/video attachments. `mobile-diary` shows the responsive timeline;
+`mobile-diary-details` shows the near-full-screen report dialog on a phone. Refresh these
+when changing the diary page, demo reports, or media presentation.
 The `diary-editor` screenshot shows report creation in the responsive modal, with
 a compact date field above the full-width title and day-based task, offer and payment suggestions. The explicitly fictional financial
 fixtures and their report roll forward to today when re-seeding, as do the daily task fixtures.
@@ -75,7 +76,7 @@ the date picker, demonstrating navigation across the multi-year archive.
 Its explicitly fictional open parent has subtasks completed today, yesterday, without a
 known legacy date, and still open; the daily fixtures roll forward when re-seeding.
 `diary-photos` opens the second of two locally generated illustrations in the report's
-image gallery. All eight diary
+image gallery. All nine diary
 screenshots are referenced on the website.
 
 The construction examples include mixed Work/task prerequisites, explicit Work
